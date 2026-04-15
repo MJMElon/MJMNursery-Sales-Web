@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MJM Nursery | Payment Status</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{--green-dark:#2D4A30;--green-mid:#3E6B42;--green-pale:#C8DFC9;--gold:#C9A84C;--cream:#F7F3EC;--text-dark:#1A2E1B;--text-mid:#4A6B4C;--text-light:#8AAB8C;}
+body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-dark);min-height:100vh;}
+.nav{background:var(--green-dark);padding:0 3rem;height:100px;display:flex;align-items:center;}
+.nav img{height:90px;cursor:pointer;transition:transform .3s ease;}
+.nav img:hover{transform:scale(2.5);z-index:100;position:relative;}
+.wrap{max-width:500px;margin:3rem auto;padding:0 1.5rem;text-align:center;}
+.card{background:#fff;border:1px solid var(--green-pale);border-radius:16px;padding:2rem;box-shadow:0 2px 8px rgba(0,0,0,.04);}
+.icon{font-size:3rem;margin-bottom:.5rem;}
+.title{font-family:'Cormorant Garamond',serif;font-size:1.8rem;color:var(--text-dark);margin-bottom:.3rem;}
+.meta{font-size:14px;color:var(--text-mid);margin-bottom:.5rem;}
+.msg{font-size:13px;color:var(--text-mid);line-height:1.6;margin-bottom:1.5rem;}
+.btn{display:inline-block;padding:.7rem 2rem;background:var(--green-dark);color:#fff;border-radius:10px;text-decoration:none;font-weight:600;font-size:13px;transition:background .2s;}
+.btn:hover{background:var(--green-mid);}
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <a href="index.html"><img src="https://cdn.store-assets.com/s/1408881/f/16655641.png" alt="MJM Nursery"></a>
+</div>
+
+<div class="wrap">
+  <div class="card" id="result">
+    <div class="icon">⏳</div>
+    <div class="title">Verifying Payment...</div>
+    <div class="msg">Please wait while we confirm your payment.</div>
+  </div>
+</div>
+
+<script>
+var SB_URL='https://kibqjztozokohqmhqqqf.supabase.co';
+var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpYnFqenRvem9rb2hxbWhxcXFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMzQzNjIsImV4cCI6MjA4OTgxMDM2Mn0.J7qJUZhWXYf5b9oey4wXJkjdi66jomEMw_NeV9NWF7M';
+var _sb=supabase.createClient(SB_URL,SB_KEY);
+
+function fmtRM(n){return'RM '+n.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});}
+
+// Parse Billplz redirect params
+var params=new URLSearchParams(window.location.search);
+var billplzId=params.get('billplz[id]')||'';
+var billplzPaid=params.get('billplz[paid]')==='true';
+var billplzPaidAt=params.get('billplz[paid_at]')||'';
+
+(async function(){
+  // Try to find the order by checking the Billplz bill ID in remarks
+  // The Edge Function webhook will update the order status,
+  // but we also check here for immediate feedback
+
+  var el=document.getElementById('result');
+
+  if(billplzPaid){
+    el.innerHTML=
+      '<div class="icon">✅</div>'+
+      '<div class="title">Payment Successful!</div>'+
+      '<div class="msg">Your payment has been received. Your order is now being processed.<br>You can view your order in My Account.</div>'+
+      '<a href="index.html" class="btn" onclick="sessionStorage.setItem(\'mjm_last_page\',\'portal\');return true;">View My Orders</a>';
+  } else {
+    el.innerHTML=
+      '<div class="icon">⚠️</div>'+
+      '<div class="title">Payment Not Completed</div>'+
+      '<div class="msg">Your payment was not completed or is still being processed.<br>You can try again from My Account, or choose offline payment.</div>'+
+      '<a href="index.html" class="btn" onclick="sessionStorage.setItem(\'mjm_last_page\',\'portal\');return true;">Go to My Account</a>';
+  }
+})();
+</script>
+</body>
+</html>

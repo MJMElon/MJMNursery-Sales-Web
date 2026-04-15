@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MJM Nursery | Payment</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{--green-dark:#2D4A30;--green-mid:#3E6B42;--green-light:#6A9B6E;--green-pale:#C8DFC9;--gold:#C9A84C;--gold-light:#E8D49A;--cream:#F7F3EC;--white:#FFFFFF;--text-dark:#1A2E1B;--text-mid:#4A6B4C;--text-light:#8AAB8C;}
+body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-dark);min-height:100vh;}
+
+.nav{background:var(--green-dark);padding:0 3rem;height:100px;display:flex;align-items:center;justify-content:space-between;}
+.nav img{height:90px;cursor:pointer;transition:transform .3s ease;}
+.nav img:hover{transform:scale(2.5);z-index:100;position:relative;}
+.nav a{color:rgba(255,255,255,.7);text-decoration:none;font-size:13px;font-weight:500;transition:color .2s;}
+.nav a:hover{color:#fff;}
+
+.page-title{text-align:center;padding:2rem 1rem .5rem;font-family:'Cormorant Garamond',serif;font-size:1.8rem;font-weight:400;color:var(--text-dark);}
+
+.wrap{max-width:640px;margin:1rem auto 3rem;padding:0 1.5rem;}
+.card{background:#fff;border:1px solid var(--green-pale);border-radius:16px;padding:1.5rem;margin-bottom:1rem;box-shadow:0 2px 8px rgba(0,0,0,.04);}
+.card-title{font-family:'Cormorant Garamond',serif;font-size:1.1rem;color:var(--text-dark);margin-bottom:1rem;padding-bottom:.5rem;border-bottom:1px solid var(--green-pale);}
+
+.info-row{display:flex;justify-content:space-between;padding:.4rem 0;font-size:13px;border-bottom:1px solid #f0f0ec;}
+.info-row:last-child{border-bottom:none;}
+.info-label{color:var(--text-light);font-weight:500;}
+.info-val{color:var(--text-dark);font-weight:600;}
+
+.qr-box{text-align:center;padding:1.2rem;background:var(--cream);border-radius:12px;margin-bottom:1rem;}
+.qr-box img{max-width:220px;border-radius:8px;margin-bottom:.5rem;}
+.qr-note{font-size:11px;color:var(--text-mid);}
+
+.bank-details{font-size:12px;color:var(--text-mid);line-height:1.7;padding:.8rem;background:var(--cream);border-radius:10px;}
+.bank-details strong{color:var(--text-dark);}
+
+.upload-area{border:2px dashed var(--green-pale);border-radius:12px;padding:1.5rem;text-align:center;cursor:pointer;transition:all .15s;background:var(--cream);margin-top:.5rem;}
+.upload-area:hover{border-color:var(--green-mid);background:rgba(62,107,66,.04);}
+.upload-area svg{width:32px;height:32px;stroke:var(--text-light);fill:none;stroke-width:1.5;margin-bottom:.4rem;}
+.upload-text{font-size:12px;color:var(--text-light);font-weight:500;}
+.upload-sub{font-size:10px;color:var(--text-light);margin-top:.2rem;opacity:.7;}
+.upload-preview{margin-top:.8rem;display:none;}
+.upload-preview img{max-width:100%;max-height:200px;border-radius:8px;border:1px solid var(--green-pale);}
+.upload-preview-name{font-size:11px;color:var(--text-mid);margin-top:.3rem;}
+
+.btn-submit{width:100%;padding:11px;background:var(--green-dark);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;font-family:'DM Sans',sans-serif;margin-top:.8rem;}
+.btn-submit:hover{background:var(--green-mid);}
+.btn-submit:disabled{opacity:.5;cursor:not-allowed;}
+
+.btn-back-shop{display:inline-block;padding:.7rem 2rem;background:var(--green-dark);color:#fff;border-radius:10px;text-decoration:none;font-weight:600;font-size:13px;transition:background .2s;}
+.btn-back-shop:hover{background:var(--green-mid);}
+
+.toast{position:fixed;bottom:2rem;left:50%;transform:translateX(-50%) translateY(80px);background:var(--green-dark);color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:600;z-index:999;opacity:0;transition:all .3s;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <a href="index.html"><img src="https://cdn.store-assets.com/s/1408881/f/16655641.png" alt="MJM Nursery"></a>
+</div>
+
+<h1 class="page-title">Complete Payment</h1>
+
+<div class="wrap">
+  <a href="index.html" onclick="sessionStorage.setItem('mjm_last_page','portal');return true;" style="display:inline-flex;align-items:center;gap:.3rem;color:var(--text-light);font-size:13px;font-weight:500;text-decoration:none;margin-bottom:1rem;transition:color .2s;">&larr; Back to My Account</a>
+  <!-- Order info -->
+  <div class="card">
+    <div class="card-title">Order Details</div>
+    <div class="info-row"><span class="info-label">Order ID</span><span class="info-val" id="pp-order-id">—</span></div>
+    <div class="info-row"><span class="info-label">Total Amount</span><span class="info-val" id="pp-total">—</span></div>
+    <div class="info-row"><span class="info-label">Status</span><span class="info-val" style="color:var(--gold);">Pending Payment</span></div>
+  </div>
+
+  <!-- DuitNow QR -->
+  <div class="card">
+    <div class="card-title">DuitNow QR Payment</div>
+    <div class="qr-box">
+      <img src="https://placehold.co/220x220/2D4A30/FFFFFF?text=DuitNow+QR" alt="DuitNow QR Code">
+      <div class="qr-note">Scan with your banking app to pay</div>
+    </div>
+    <div class="bank-details">
+      <strong>Bank Transfer Details:</strong><br>
+      Bank: Maybank<br>
+      Account: Mega Jutamas Sdn Bhd<br>
+      Account No: 5121-xxxx-xxxx<br>
+      Reference: Order <span id="pp-ref">—</span>
+    </div>
+  </div>
+
+  <!-- Upload proof -->
+  <div class="card">
+    <div class="card-title">Upload Payment Proof</div>
+    <p style="font-size:12px;color:var(--text-mid);margin-bottom:.8rem;">After making payment, upload your receipt or screenshot below for faster verification.</p>
+    <input type="file" id="proof-file" accept="image/*,.pdf" style="display:none;" onchange="previewFile(this)">
+    <div class="upload-area" onclick="document.getElementById('proof-file').click()">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <div class="upload-text">Click to upload payment proof</div>
+      <div class="upload-sub">JPG, PNG or PDF (max 5MB)</div>
+    </div>
+    <div class="upload-preview" id="proof-preview">
+      <img id="proof-img">
+      <div class="upload-preview-name" id="proof-name"></div>
+    </div>
+    <button class="btn-submit" id="btn-submit" onclick="submitProof()" disabled>Submit Payment Proof</button>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:1rem;margin:0 0 1rem;"><div style="flex:1;height:1px;background:var(--green-pale);"></div><span style="font-size:11px;font-weight:600;color:var(--text-light);letter-spacing:.08em;text-transform:uppercase;">or pay online</span><div style="flex:1;height:1px;background:var(--green-pale);"></div></div>
+
+  <!-- Switch to Online Payment -->
+  <div class="card">
+    <div class="card-title">Pay Online Instead (FPX / Card)</div>
+    <p style="font-size:12px;color:var(--text-mid);margin-bottom:.8rem;">Changed your mind? Pay instantly via FPX bank transfer or credit/debit card through our secure payment gateway.</p>
+    <button class="btn-submit" id="btn-online-pay" onclick="payOnline()" style="background:linear-gradient(135deg,var(--gold),#E8D49A);color:var(--green-dark);font-weight:700;">Pay with FPX / Card</button>
+    <div id="online-pay-status" style="font-size:12px;margin-top:.5rem;display:none;"></div>
+  </div>
+
+  <div style="text-align:center;margin-top:1rem;">
+    <a href="index.html" class="btn-back-shop" onclick="sessionStorage.setItem('mjm_last_page','portal');return true;">Back to My Account</a>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var SB_URL='https://kibqjztozokohqmhqqqf.supabase.co';
+var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpYnFqenRvem9rb2hxbWhxcXFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMzQzNjIsImV4cCI6MjA4OTgxMDM2Mn0.J7qJUZhWXYf5b9oey4wXJkjdi66jomEMw_NeV9NWF7M';
+var _sb=supabase.createClient(SB_URL,SB_KEY);
+
+function fmtRM(n){return'RM '+n.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function showToast(m){var t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},3000);}
+
+// Load order info from sessionStorage
+var orderId=sessionStorage.getItem('mjm_pay_order_id')||'';
+var orderTotal=parseFloat(sessionStorage.getItem('mjm_pay_order_total'))||0;
+var orderShort=sessionStorage.getItem('mjm_pay_order_number')||orderId.substring(0,8).toUpperCase()||'—';
+
+// Try to fetch order_number from DB if not in sessionStorage
+(async function(){
+  if(orderId&&orderShort===orderId.substring(0,8).toUpperCase()){
+    var{data:o}=await _sb.from('customer_orders').select('order_number').eq('id',orderId).single();
+    if(o&&o.order_number){
+      orderShort=o.order_number;
+      document.getElementById('pp-order-id').textContent='#'+orderShort;
+      document.getElementById('pp-ref').textContent='#'+orderShort;
+    }
+  }
+})();
+
+document.getElementById('pp-order-id').textContent='#'+orderShort;
+document.getElementById('pp-total').textContent=fmtRM(orderTotal);
+document.getElementById('pp-ref').textContent='#'+orderShort;
+
+// File preview
+var proofFile=null;
+function previewFile(input){
+  if(!input.files||!input.files[0])return;
+  proofFile=input.files[0];
+  if(proofFile.size>5*1024*1024){showToast('File too large (max 5MB)');proofFile=null;return;}
+  var preview=document.getElementById('proof-preview');
+  var img=document.getElementById('proof-img');
+  var nameEl=document.getElementById('proof-name');
+  nameEl.textContent=proofFile.name+' ('+Math.round(proofFile.size/1024)+'KB)';
+  if(proofFile.type.startsWith('image/')){
+    var reader=new FileReader();
+    reader.onload=function(e){img.src=e.target.result;img.style.display='block';};
+    reader.readAsDataURL(proofFile);
+  } else {
+    img.style.display='none';
+  }
+  preview.style.display='block';
+  document.getElementById('btn-submit').disabled=false;
+}
+
+// Pay online via Billplz (FPX/Card)
+async function payOnline(){
+  if(!orderId){showToast('No order found');return;}
+  var btn=document.getElementById('btn-online-pay');
+  var statusEl=document.getElementById('online-pay-status');
+  btn.disabled=true;btn.textContent='Connecting to payment gateway...';
+
+  // Get session for user info
+  var session=await _sb.auth.getSession();
+  var user=session?.data?.session?.user;
+  var email=user?.email||sessionStorage.getItem('mjm_user_email')||'';
+  var name=user?.user_metadata?.full_name||sessionStorage.getItem('mjm_user_name')||'Customer';
+  var phone=user?.phone||'';
+
+  // If no email, fetch from the order
+  if(!email){
+    var{data:orderData}=await _sb.from('customer_orders').select('customer_email,customer_name').eq('id',orderId).single();
+    if(orderData){
+      email=orderData.customer_email||'';
+      name=orderData.customer_name||name;
+    }
+  }
+
+  if(!email){
+    statusEl.style.display='block';
+    statusEl.style.color='#ef4444';
+    statusEl.textContent='Could not find your email. Please go back to My Account and try again.';
+    btn.disabled=false;btn.textContent='Pay with FPX / Card';
+    return;
+  }
+
+  var cbBase=window.location.href.substring(0,window.location.href.lastIndexOf('/')+1);
+  var callbackUrl=cbBase+'payment-callback.html';
+
+  try{
+    var{data:billResp,error:billErr}=await _sb.functions.invoke('create-billplz-bill',{
+      body:{
+        order_id:orderId,
+        amount:Math.round(orderTotal*100),
+        email:email,
+        name:name,
+        phone:phone||'',
+        description:'MJM Nursery Order #'+orderShort,
+        callback_url:callbackUrl
+      }
+    });
+
+    // Parse response
+    var billData=billResp;
+    if(typeof billData==='string'){try{billData=JSON.parse(billData);}catch(e){}}
+
+    if(billErr){
+      statusEl.style.display='block';
+      statusEl.style.color='#ef4444';
+      statusEl.textContent='Payment error: '+(billErr.message||'Unknown error');
+      btn.disabled=false;btn.textContent='Pay with FPX / Card';
+      return;
+    }
+
+    if(billData&&billData.url){
+      sessionStorage.removeItem('mjm_pay_order_id');
+      sessionStorage.removeItem('mjm_pay_order_total');
+      window.location.href=billData.url;
+      return;
+    }
+
+    if(billData&&billData.error){
+      statusEl.style.display='block';
+      statusEl.style.color='#ef4444';
+      statusEl.textContent='Payment error: '+billData.error;
+      btn.disabled=false;btn.textContent='Pay with FPX / Card';
+      return;
+    }
+
+    statusEl.style.display='block';
+    statusEl.style.color='#ef4444';
+    statusEl.textContent='Could not connect to payment gateway. Please try uploading payment proof instead.';
+    btn.disabled=false;btn.textContent='Pay with FPX / Card';
+  }catch(e){
+    statusEl.style.display='block';
+    statusEl.style.color='#ef4444';
+    statusEl.textContent='Payment gateway error. Please try uploading payment proof instead.';
+    btn.disabled=false;btn.textContent='Pay with FPX / Card';
+  }
+}
+
+// Submit proof
+async function submitProof(){
+  if(!proofFile){showToast('Please select a file');return;}
+  if(!orderId){showToast('No order found');return;}
+
+  var btn=document.getElementById('btn-submit');
+  btn.disabled=true;btn.textContent='Uploading...';
+
+  // Try upload to Supabase storage
+  var ext=proofFile.name.split('.').pop();
+  var path='payment-proofs/'+orderId+'/proof_'+Date.now()+'.'+ext;
+  var uploadUrl='';
+
+  var{error:upErr}=await _sb.storage.from('order-files').upload(path,proofFile);
+  if(!upErr){
+    var{data:urlData}=_sb.storage.from('order-files').getPublicUrl(path);
+    uploadUrl=urlData?.publicUrl||path;
+  }
+
+  // Add timeline entry
+  await _sb.from('order_timeline').insert([{
+    order_id:orderId,
+    status:'Payment Proof Submitted',
+    note:'Customer uploaded payment proof'+(uploadUrl?' — '+uploadUrl:' (file: '+proofFile.name+')'),
+    changed_by:sessionStorage.getItem('mjm_user_email')||'customer'
+  }]);
+
+  btn.textContent='Submitted!';
+  btn.style.background='#059669';
+  showToast('Payment proof submitted! We will verify shortly.');
+
+  // Clean up
+  sessionStorage.removeItem('mjm_pay_order_id');
+  sessionStorage.removeItem('mjm_pay_order_total');
+}
+</script>
+</body>
+</html>

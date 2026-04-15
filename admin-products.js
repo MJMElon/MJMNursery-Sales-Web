@@ -1,0 +1,496 @@
+/*
+═══════════════════════════════════════════════════
+  ADMIN — PRODUCTS MANAGEMENT (v5)
+  ⚠️ AI: Live stock ledger with FIFO, DO sold tracking, transfer visibility.
+
+  STOCK SOURCE COLUMNS:
+  Batch | Plot | Original Stock | Sold (from DO) | Transferred | Remaining
+
+  Original Stock = transplanted - 10% culling
+  Sold = sum of DO qty_1..qty_5 where plot matches
+  Transferred = qty moved to/from other products
+  Remaining = Original - Sold - TransferredOut + TransferredIn
+
+  TABLES: products, inventory_logs, do_records, stock_transfers
+═══════════════════════════════════════════════════
+*/
+
+var CULL_RATE = 0.10;
+
+// ═══════════════════════════════════════
+//  LOAD PRODUCTS TABLE
+// ═══════════════════════════════════════
+async function loadProducts(){
+  var q=(document.getElementById('prod-search').value||'').trim().toLowerCase();
+  var typeF=document.getElementById('prod-type-filter').value;
+  var collF=document.getElementById('prod-coll-filter').value;
+  var statusF=document.getElementById('prod-status-filter').value;
+  var query=sb.from('products').select('*').order('sort_order',{ascending:true,nullsFirst:false}).order('sell_year',{ascending:true}).order('sell_month',{ascending:true});
+  if(typeF)query=query.eq('product_type',typeF);
+  if(collF)query=query.eq('collection',collF);
+  if(statusF==='published')query=query.eq('is_published',true);
+  if(statusF==='unpublished')query=query.eq('is_published',false);
+  var{data,error}=await query;
+  // Fallback if sort_order column doesn't exist
+  if(error){
+    query=sb.from('products').select('*').order('sell_year',{ascending:true}).order('sell_month',{ascending:true});
+    if(typeF)query=query.eq('product_type',typeF);
+    if(collF)query=query.eq('collection',collF);
+    if(statusF==='published')query=query.eq('is_published',true);
+    if(statusF==='unpublished')query=query.eq('is_published',false);
+    var res=await query;data=res.data;error=res.error;
+  }
+  if(error){toast('Error: '+error.message,'error');return;}
+  var prods=data||[];
+  if(q)prods=prods.filter(function(p){return(p.name||'').toLowerCase().includes(q)||(p.sell_month||'').toLowerCase().includes(q);});
+  var all=data||[];
+  var totalStock=all.reduce(function(s,p){return s+(p.stock_qty||0);},0);
+  var published=all.filter(function(p){return p.is_published;}).length;
+  document.getElementById('prod-stats').innerHTML=
+    '<div class="stat-box"><div class="stat-label">Total Products</div><div class="stat-val">'+all.length+'</div></div>'+
+    '<div class="stat-box"><div class="stat-label">Published</div><div class="stat-val green">'+published+'</div></div>'+
+    '<div class="stat-box"><div class="stat-label">Unpublished</div><div class="stat-val" style="color:var(--ink3)">'+(all.length-published)+'</div></div>'+
+    '<div class="stat-box"><div class="stat-label">Total Stock</div><div class="stat-val">'+totalStock.toLocaleString()+'</div></div>';
+  if(!prods.length){document.getElementById('products-table').innerHTML='<div class="loading">No products found</div>';return;}
+  // Store for reorder
+  window._productsList=prods;
+  var html='<table class="data-table"><thead><tr><th style="width:30px;">#</th><th style="width:50px;">Order</th><th style="width:40px;"></th><th>Product</th><th>Collection</th><th>Sell Month</th><th>Price</th><th>Stock</th><th>Published</th><th>Actions</th></tr></thead><tbody>';
+  prods.forEach(function(p,idx){
+    var img=p.image_url?'<img src="'+esc(p.image_url)+'" style="width:36px;height:36px;object-fit:cover;border-radius:6px;">':'<div style="width:36px;height:36px;background:var(--bg);border-radius:6px;display:flex;align-items:center;justify-content:center;">🌱</div>';
+    var sell=p.sell_month?(p.sell_month+(p.sell_year?' '+p.sell_year:'')):'—';
+    var pr='RM '+(p.price||0).toFixed(2);
+    if(p.compare_price&&p.compare_price>p.price)pr='<span style="text-decoration:line-through;color:var(--ink4);font-size:11px;">RM '+p.compare_price.toFixed(2)+'</span> <span style="color:var(--red);font-weight:700;">RM '+(p.price||0).toFixed(2)+'</span>';
+    var pub='<label style="position:relative;display:inline-block;width:36px;height:20px;cursor:pointer;"><input type="checkbox" '+(p.is_published?'checked':'')+' onchange="togglePublish(\''+p.id+'\',this.checked)" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:'+(p.is_published?'var(--green)':'#ccc')+';border-radius:10px;transition:.2s;"></span><span style="position:absolute;left:'+(p.is_published?'18px':'2px')+';top:2px;width:16px;height:16px;background:#fff;border-radius:50%;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2);"></span></label>';
+    var upBtn=idx>0?'<button onclick="moveProduct('+idx+',-1)" style="background:none;border:1px solid var(--border);border-radius:4px;cursor:pointer;padding:2px 4px;font-size:10px;" title="Move up">▲</button>':'<span style="width:24px;display:inline-block;"></span>';
+    var dnBtn=idx<prods.length-1?'<button onclick="moveProduct('+idx+',1)" style="background:none;border:1px solid var(--border);border-radius:4px;cursor:pointer;padding:2px 4px;font-size:10px;" title="Move down">▼</button>':'<span style="width:24px;display:inline-block;"></span>';
+    html+='<tr><td style="font-size:11px;font-weight:700;color:var(--ink4);text-align:center;">'+(idx+1)+'</td><td style="white-space:nowrap;">'+upBtn+' '+dnBtn+'</td><td>'+img+'</td><td style="font-weight:600;">'+esc(p.name)+'</td><td><span class="badge '+(p.collection==='Promotion'?'badge-amber':'badge-grey')+'">'+esc(p.collection||'')+'</span></td><td>'+esc(sell)+'</td><td>'+pr+'</td><td style="font-weight:700;color:'+(p.stock_qty>0?'var(--green)':'var(--red)')+';">'+p.stock_qty+'</td><td>'+pub+'</td><td style="white-space:nowrap;"><button class="btn btn-outline btn-sm" onclick="editProduct(\''+p.id+'\')">Edit</button> <button class="btn btn-outline btn-sm" onclick="refreshProductStock(\''+p.id+'\')">🔄</button> <button class="btn btn-outline btn-sm" onclick="deleteProduct(\''+p.id+'\')" style="color:var(--red);">✕</button></td></tr>';
+  });
+  html+='</tbody></table>';
+  document.getElementById('products-table').innerHTML=html;
+}
+
+// ═══════════════════════════════════════
+//  COMPUTE STOCK — FULL LEDGER
+// ═══════════════════════════════════════
+async function computeProductStock(productId, sellMonth, sellYear){
+  // 1. Transplants to main plots for this sell month
+  var{data:transplants}=await sb.from('inventory_logs').select('batch_name, breed_name, plot_name, quantity_change, created_at, remark')
+    .eq('transaction_type','Transplanted').order('created_at',{ascending:true});
+  if(!transplants)transplants=[];
+
+  var sources=[];
+  transplants.forEach(function(t){
+    var pl=(t.plot_name||'').toLowerCase();
+    if(pl.includes('premium')||pl.includes('double')||pl.includes('tray'))return;
+    var tDate=null;
+    if(t.remark){var m=t.remark.match(/Date:\s*(\d{4}-\d{2}-\d{2})/);if(m)tDate=new Date(m[1]);}
+    if(!tDate)tDate=new Date(t.created_at);
+    var sd=new Date(tDate);sd.setMonth(sd.getMonth()+9);
+    if(sd.toLocaleDateString('en-MY',{month:'long'})===sellMonth&&sd.getFullYear()===sellYear){
+      var qty=t.quantity_change||0;
+      var culled=Math.round(qty*CULL_RATE);
+      sources.push({batch:t.batch_name,breed:t.breed_name,plot:t.plot_name,transplanted:qty,culled:culled,originalStock:qty-culled,sold:0,transferredOut:0,transferredIn:0,remaining:qty-culled,date:tDate.toISOString().split('T')[0]});
+    }
+  });
+
+  // 2. DO sold qty — match by plot
+  var{data:dos}=await sb.from('do_records').select('*').neq('status','Cancelled');
+  if(dos&&dos.length){
+    dos.forEach(function(d){
+      for(var i=1;i<=5;i++){
+        var doPlot=d['plot_'+i];var doQty=parseInt(d['qty_'+i])||0;
+        if(!doPlot||!doQty)continue;
+        // Find matching source by plot name
+        sources.forEach(function(src){
+          if(src.plot===doPlot&&src.sold<src.originalStock){
+            var deduct=Math.min(doQty,src.originalStock-src.sold);
+            src.sold+=deduct;
+            doQty-=deduct;
+          }
+        });
+      }
+    });
+  }
+
+  // 3. Transfers — show per source
+  var{data:tOut}=await sb.from('stock_transfers').select('quantity,reason,created_at,to_product').eq('from_product',productId).order('created_at',{ascending:true});
+  var{data:tIn}=await sb.from('stock_transfers').select('quantity,reason,created_at,from_product').eq('to_product',productId).order('created_at',{ascending:true});
+  tOut=tOut||[];tIn=tIn||[];
+
+  // Get product names for transfers
+  var tIds=[];
+  tOut.forEach(function(t){if(t.to_product&&tIds.indexOf(t.to_product)===-1)tIds.push(t.to_product);});
+  tIn.forEach(function(t){if(t.from_product&&tIds.indexOf(t.from_product)===-1)tIds.push(t.from_product);});
+  var tNames={};
+  if(tIds.length){var{data:ps}=await sb.from('products').select('id,name').in('id',tIds);(ps||[]).forEach(function(p){tNames[p.id]=p.name;});}
+
+  // FIFO deduct transfers out from sources
+  var totalTransferOut=0;
+  var transferOutDetails=[];
+  tOut.forEach(function(tr){
+    var remain=tr.quantity;totalTransferOut+=remain;
+    transferOutDetails.push({qty:tr.quantity,to:tNames[tr.to_product]||'—',reason:tr.reason||'',date:tr.created_at});
+    for(var i=0;i<sources.length&&remain>0;i++){
+      var avail=sources[i].originalStock-sources[i].sold-sources[i].transferredOut;
+      var deduct=Math.min(avail,remain);
+      sources[i].transferredOut+=deduct;remain-=deduct;
+    }
+  });
+
+  var totalTransferIn=0;
+  var transferInDetails=[];
+  tIn.forEach(function(tr){
+    totalTransferIn+=tr.quantity;
+    transferInDetails.push({qty:tr.quantity,from:tNames[tr.from_product]||'—',reason:tr.reason||'',date:tr.created_at});
+  });
+
+  // Calc remaining per source
+  sources.forEach(function(src){src.remaining=Math.max(0,src.originalStock-src.sold-src.transferredOut);});
+  var baseStock=sources.reduce(function(s,src){return s+src.remaining;},0);
+  var totalSold=sources.reduce(function(s,src){return s+src.sold;},0);
+  var finalStock=baseStock+totalTransferIn;
+
+  return {sources:sources,baseStock:baseStock,totalSold:totalSold,transferOut:totalTransferOut,transferOutDetails:transferOutDetails,transferIn:totalTransferIn,transferInDetails:transferInDetails,finalStock:finalStock};
+}
+
+// ═══════════════════════════════════════
+//  RENDER STOCK SOURCE (collapsible)
+// ═══════════════════════════════════════
+function renderStockSource(d){
+  if(!d||!d.sources.length)return '<div style="font-size:12px;color:var(--ink4);">No batch data</div>';
+  var html='<div style="margin-top:.6rem;">';
+
+  // ── Collapsible stock source table ──
+  html+='<div onclick="var n=this.nextElementSibling;n.style.display=n.style.display===\'none\'?\'block\':\'none\';this.querySelector(\'span\').textContent=n.style.display===\'none\'?\'▶\':\'▼\'" style="cursor:pointer;display:flex;align-items:center;gap:.4rem;padding:.5rem 0;font-size:13px;font-weight:600;color:var(--ink);user-select:none;"><span>▶</span> Stock Sources</div>';
+  html+='<div style="display:none;">';
+
+  // Table — only Batch, Plot, Original, Sold, Remaining (no Transferred column)
+  html+='<table style="width:100%;font-size:12px;border-collapse:collapse;"><thead><tr style="border-bottom:1.5px solid var(--border);"><th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink3);">Batch</th><th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink3);">Plot</th><th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--ink3);">Original</th><th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--ink3);">Sold</th><th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--ink3);">Remaining</th></tr></thead><tbody>';
+  d.sources.forEach(function(s){
+    html+='<tr style="border-bottom:1px solid #f0f2f0;">'+
+      '<td style="padding:6px 8px;font-weight:500;">'+esc(s.batch||'—')+'</td>'+
+      '<td style="padding:6px 8px;font-weight:400;">'+esc(s.plot||'—')+'</td>'+
+      '<td style="padding:6px 8px;text-align:right;font-weight:500;">'+s.originalStock+'</td>'+
+      '<td style="padding:6px 8px;text-align:right;color:'+(s.sold>0?'var(--amber)':'var(--ink4)')+';font-weight:500;">'+(s.sold>0?'-'+s.sold:'0')+'</td>'+
+      '<td style="padding:6px 8px;text-align:right;font-weight:600;color:'+(s.remaining>0?'var(--green)':'var(--red)')+';">'+s.remaining+'</td></tr>';
+  });
+  html+='</tbody></table>';
+
+  // Summary
+  html+='<div style="margin-top:.5rem;padding:.6rem .8rem;background:#f8faf8;border-radius:8px;font-size:12px;">';
+  html+='<div style="display:flex;justify-content:space-between;padding:.15rem 0;"><span style="color:var(--ink3);font-weight:400;">Original stock (after 10% culling)</span><span style="font-weight:600;">'+d.sources.reduce(function(s,x){return s+x.originalStock;},0)+'</span></div>';
+  if(d.totalSold>0)html+='<div style="display:flex;justify-content:space-between;padding:.15rem 0;"><span style="color:var(--amber);font-weight:400;">Sold (DO issued)</span><span style="font-weight:600;color:var(--amber);">-'+d.totalSold+'</span></div>';
+  if(d.transferOut>0)html+='<div style="display:flex;justify-content:space-between;padding:.15rem 0;"><span style="color:var(--red);font-weight:400;">Transferred out</span><span style="font-weight:600;color:var(--red);">-'+d.transferOut+'</span></div>';
+  if(d.transferIn>0)html+='<div style="display:flex;justify-content:space-between;padding:.15rem 0;"><span style="color:var(--green);font-weight:400;">Transferred in</span><span style="font-weight:600;color:var(--green);">+'+d.transferIn+'</span></div>';
+  html+='<div style="display:flex;justify-content:space-between;padding:.4rem 0;border-top:1px solid var(--border);margin-top:.3rem;"><span style="font-weight:600;color:var(--ink);">Available Stock</span><span style="font-weight:700;font-size:14px;color:var(--green);">'+d.finalStock+'</span></div>';
+  html+='</div>';
+  html+='</div>';
+
+  // ── Transfer Records (always visible) ──
+  if(!d.transferOutDetails.length&&!d.transferInDetails.length){
+    html+='<div style="margin-top:.6rem;padding:.5rem .8rem;background:#f8f8f8;border-radius:8px;font-size:12px;color:var(--ink4);">No stock transfers for this product</div>';
+  }
+  if(d.transferOutDetails.length){
+    html+='<div style="margin-top:.8rem;padding:.8rem;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;">';
+    html+='<div style="font-size:13px;font-weight:600;color:#b91c1c;margin-bottom:.5rem;">Stock Moved Out</div>';
+    d.transferOutDetails.forEach(function(t,idx){
+      var dt=new Date(t.date).toLocaleDateString('en-MY',{day:'2-digit',month:'short',year:'numeric'});
+      html+='<div style="padding:.5rem 0;'+(idx>0?'border-top:1px solid #fecaca;':'')+'">';
+      html+='<div style="display:flex;justify-content:space-between;align-items:center;">';
+      html+='<div><span style="font-size:14px;font-weight:600;color:#b91c1c;">−'+t.qty+' seedlings</span></div>';
+      html+='<span style="font-size:10px;color:var(--ink4);">'+dt+'</span></div>';
+      html+='<div style="font-size:12px;color:var(--ink2);margin-top:.2rem;">→ Moved to: <span style="font-weight:600;color:var(--ink);">'+esc(t.to)+'</span></div>';
+      if(t.reason)html+='<div style="font-size:11px;color:var(--ink4);margin-top:.1rem;">Reason: '+esc(t.reason)+'</div>';
+      html+='</div>';
+    });
+    html+='</div>';
+  }
+
+  // ── Transferred In section ──
+  if(d.transferInDetails.length){
+    html+='<div style="margin-top:.8rem;padding:.8rem;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;">';
+    html+='<div style="font-size:13px;font-weight:600;color:#15803d;margin-bottom:.5rem;">Stock Received</div>';
+    d.transferInDetails.forEach(function(t,idx){
+      var dt=new Date(t.date).toLocaleDateString('en-MY',{day:'2-digit',month:'short',year:'numeric'});
+      html+='<div style="padding:.5rem 0;'+(idx>0?'border-top:1px solid #bbf7d0;':'')+'">';
+      html+='<div style="display:flex;justify-content:space-between;align-items:center;">';
+      html+='<div><span style="font-size:14px;font-weight:600;color:#15803d;">+'+t.qty+' seedlings</span></div>';
+      html+='<span style="font-size:10px;color:var(--ink4);">'+dt+'</span></div>';
+      html+='<div style="font-size:12px;color:var(--ink2);margin-top:.2rem;">← Received from: <span style="font-weight:600;color:var(--ink);">'+esc(t.from)+'</span></div>';
+      if(t.reason)html+='<div style="font-size:11px;color:var(--ink4);margin-top:.1rem;">Reason: '+esc(t.reason)+'</div>';
+      html+='</div>';
+    });
+    html+='</div>';
+  }
+
+  html+='</div>';
+  return html;
+}
+
+// ═══════════════════════════════════════
+//  SYNC / REFRESH
+// ═══════════════════════════════════════
+async function syncProductsFromBatches(){
+  toast('Syncing...');
+  var{data:transplants}=await sb.from('inventory_logs').select('quantity_change, created_at, remark, plot_name')
+    .eq('transaction_type','Transplanted').order('created_at',{ascending:true});
+  if(!transplants||!transplants.length){toast('No transplant data','error');return;}
+  var mq={};
+  transplants.forEach(function(t){
+    var pl=(t.plot_name||'').toLowerCase();
+    if(pl.includes('premium')||pl.includes('double')||pl.includes('tray'))return;
+    var tDate=null;if(t.remark){var m=t.remark.match(/Date:\s*(\d{4}-\d{2}-\d{2})/);if(m)tDate=new Date(m[1]);}
+    if(!tDate)tDate=new Date(t.created_at);
+    var sd=new Date(tDate);sd.setMonth(sd.getMonth()+9);
+    var sm=sd.toLocaleDateString('en-MY',{month:'long'});var sy=sd.getFullYear();
+    var key=sm+'|'+sy;var qty=t.quantity_change||0;
+    mq[key]=(mq[key]||0)+Math.max(0,qty-Math.round(qty*CULL_RATE));
+  });
+  var created=0,updated=0;
+  for(var k of Object.keys(mq)){
+    var parts=k.split('|');var sm=parts[0];var sy=parseInt(parts[1]);
+    // Check by sell_month+year first, fallback to name match to avoid duplicates
+    var{data:ex}=await sb.from('products').select('id,stock_source').eq('sell_month',sm).eq('sell_year',sy).eq('product_type','Seedling').limit(1);
+    if(!ex||!ex.length){
+      // Fallback: check by name containing the month+year
+      var searchName=sm+' '+sy;
+      var{data:ex2}=await sb.from('products').select('id,stock_source').ilike('name','%'+searchName+'%').limit(1);
+      if(ex2&&ex2.length)ex=ex2;
+    }
+    if(ex&&ex.length){
+      if(ex[0].stock_source!=='manual'){var sd=await computeProductStock(ex[0].id,sm,sy);await sb.from('products').update({stock_qty:sd.finalStock,sell_month:sm,sell_year:sy,updated_at:new Date().toISOString()}).eq('id',ex[0].id);}
+      updated++;
+    } else {
+      await sb.from('products').insert([{name:'Oil Palm Seedling — '+sm+' '+sy,description:'Oil Palm Seedling — '+sm+' '+sy,product_type:'Seedling',collection:'Normal Sales',category:'Seedling',price:25.00,stock_qty:mq[k],sell_month:sm,sell_year:sy,is_active:false,is_published:false,stock_source:'auto'}]);
+      created++;
+    }
+  }
+  toast(created+' created, '+updated+' updated');loadProducts();
+}
+
+async function refreshProductStock(pid){
+  var{data:p}=await sb.from('products').select('*').eq('id',pid).single();
+  if(!p){toast('Not found','error');return;}
+  if(p.stock_source==='manual'){toast('Manual stock');return;}
+  var sd=await computeProductStock(pid,p.sell_month,p.sell_year);
+  await sb.from('products').update({stock_qty:sd.finalStock,updated_at:new Date().toISOString()}).eq('id',pid);
+  toast('Stock: '+sd.finalStock);loadProducts();
+}
+
+// ═══════════════════════════════════════
+//  PRODUCT FORM
+// ═══════════════════════════════════════
+var currentEditProductId=null;
+
+function openProductForm(p){
+  try{if(typeof updateProductFormDropdowns==='function')updateProductFormDropdowns();}catch(e){}
+  currentEditProductId=p?p.id:null;
+  document.getElementById('mp-title').textContent=p?'Edit Product':'Add Product';
+  document.getElementById('mp-id').value=p?p.id:'';
+  var typeEl=document.getElementById('mp-type');if(typeEl)typeEl.value=p?p.product_type||'Seedling':'Seedling';
+  var collEl=document.getElementById('mp-coll');if(collEl)collEl.value=p?p.collection||'Normal Sales':'Normal Sales';
+  document.getElementById('mp-name').value=p?p.name:'';
+  document.getElementById('mp-desc').value=p?p.description||'':'';
+  document.getElementById('mp-price').value=p?p.price:'25.00';
+  document.getElementById('mp-compare').value=(p&&p.compare_price)?p.compare_price:'';
+  var isManual=p&&p.stock_source==='manual';
+  var mc=document.getElementById('mp-manual-stock');if(mc)mc.checked=isManual;
+  var si=document.getElementById('mp-stock');
+  si.value=p?p.stock_qty:0;si.readOnly=!isManual;si.style.cursor=isManual?'text':'not-allowed';si.style.background=isManual?'#fff':'var(--bg)';
+  document.getElementById('mp-stock-hint').textContent=isManual?'Manually set':'Auto-calculated from batch maturity';
+
+  var tagEl=document.getElementById('mp-tags');
+  var savedTags=(p&&p.tags)?p.tags.split(',').map(function(t){return t.trim();}):[];
+  if(tagEl){for(var i=0;i<tagEl.options.length;i++){tagEl.options[i].selected=savedTags.includes(tagEl.options[i].value);}}
+
+  var pubEl=document.getElementById('mp-published');var unpubEl=document.getElementById('mp-unpublished');
+  if(p&&p.is_published){if(pubEl)pubEl.checked=true;}else{if(unpubEl)unpubEl.checked=true;}
+
+  var prev=document.getElementById('mp-img-preview');var ph=document.getElementById('mp-img-placeholder');
+  document.getElementById('mp-img-url').value=(p&&p.image_url)?p.image_url:'';
+  if(p&&p.image_url){document.getElementById('mp-img-thumb').src=p.image_url;prev.style.display='block';ph.style.display='none';}
+  else{prev.style.display='none';ph.style.display='block';}
+  document.getElementById('mp-img-file').value='';document.getElementById('mp-img-uploading').style.display='none';
+
+  // Stock source + transfers (async)
+  var srcEl=document.getElementById('mp-stock-source');srcEl.innerHTML='';
+  var histEl=document.getElementById('mp-transfer-history');histEl.innerHTML='';
+  if(p&&p.id){
+    loadTransferSourceDropdown(p.id);
+    // Always load stock data (sources + transfers)
+    srcEl.innerHTML='<div style="font-size:12px;color:var(--ink4);">Loading...</div>';
+    computeProductStock(p.id,p.sell_month||'',p.sell_year||0).then(function(d){
+      srcEl.innerHTML=renderStockSource(d);
+    }).catch(function(e){
+      srcEl.innerHTML='';console.error('stock load error:',e);
+      // Fallback: at least load transfers
+      loadTransfersOnly(p.id).then(function(html){histEl.innerHTML=html;});
+    });
+  } else {
+    loadTransferSourceDropdown(null);
+  }
+
+  openModal('modal-product');
+}
+
+function toggleManualStock(){
+  var m=document.getElementById('mp-manual-stock').checked;var si=document.getElementById('mp-stock');
+  si.readOnly=!m;si.style.cursor=m?'text':'not-allowed';si.style.background=m?'#fff':'var(--bg)';
+  document.getElementById('mp-stock-hint').textContent=m?'Manually set':'Auto-calculated from batch maturity';
+}
+
+// ═══════════════════════════════════════
+//  TRANSFERS
+// ═══════════════════════════════════════
+// Fallback: load only transfer records (no batch data needed)
+async function loadTransfersOnly(productId){
+  var{data:out}=await sb.from('stock_transfers').select('*').eq('from_product',productId).order('created_at',{ascending:false});
+  var{data:inT}=await sb.from('stock_transfers').select('*').eq('to_product',productId).order('created_at',{ascending:false});
+  out=out||[];inT=inT||[];
+  var ids=[];
+  out.forEach(function(t){if(t.to_product&&ids.indexOf(t.to_product)===-1)ids.push(t.to_product);});
+  inT.forEach(function(t){if(t.from_product&&ids.indexOf(t.from_product)===-1)ids.push(t.from_product);});
+  var names={};
+  if(ids.length){var{data:ps}=await sb.from('products').select('id,name').in('id',ids);(ps||[]).forEach(function(p){names[p.id]=p.name;});}
+
+  if(!out.length&&!inT.length)return '<div style="margin-top:.6rem;padding:.5rem .8rem;background:#f8f8f8;border-radius:8px;font-size:12px;color:var(--ink4);">No stock transfers</div>';
+
+  var html='';
+  if(out.length){
+    html+='<div style="margin-top:.6rem;padding:.8rem;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;">';
+    html+='<div style="font-size:13px;font-weight:600;color:#b91c1c;margin-bottom:.5rem;">Stock Moved Out</div>';
+    out.forEach(function(t,i){
+      var dt=new Date(t.created_at).toLocaleDateString('en-MY',{day:'2-digit',month:'short',year:'numeric'});
+      html+='<div style="padding:.5rem 0;'+(i>0?'border-top:1px solid #fecaca;':'')+'"><div style="display:flex;justify-content:space-between;"><span style="font-size:14px;font-weight:600;color:#b91c1c;">−'+t.quantity+'</span><span style="font-size:10px;color:var(--ink4);">'+dt+'</span></div><div style="font-size:12px;color:var(--ink2);margin-top:.2rem;">→ Moved to: <strong>'+esc(names[t.to_product]||'—')+'</strong></div>'+(t.reason?'<div style="font-size:11px;color:var(--ink4);">'+esc(t.reason)+'</div>':'')+'</div>';
+    });
+    html+='</div>';
+  }
+  if(inT.length){
+    html+='<div style="margin-top:.6rem;padding:.8rem;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;">';
+    html+='<div style="font-size:13px;font-weight:600;color:#15803d;margin-bottom:.5rem;">Stock Received</div>';
+    inT.forEach(function(t,i){
+      var dt=new Date(t.created_at).toLocaleDateString('en-MY',{day:'2-digit',month:'short',year:'numeric'});
+      html+='<div style="padding:.5rem 0;'+(i>0?'border-top:1px solid #bbf7d0;':'')+'"><div style="display:flex;justify-content:space-between;"><span style="font-size:14px;font-weight:600;color:#15803d;">+'+t.quantity+'</span><span style="font-size:10px;color:var(--ink4);">'+dt+'</span></div><div style="font-size:12px;color:var(--ink2);margin-top:.2rem;">← Received from: <strong>'+esc(names[t.from_product]||'—')+'</strong></div>'+(t.reason?'<div style="font-size:11px;color:var(--ink4);">'+esc(t.reason)+'</div>':'')+'</div>';
+    });
+    html+='</div>';
+  }
+  return html;
+}
+
+async function loadTransferSourceDropdown(excludeId){
+  var{data}=await sb.from('products').select('id,name,stock_qty').order('name');
+  var sel=document.getElementById('mp-transfer-from');if(!sel)return;
+  sel.innerHTML='<option value="">— Select source product —</option>';
+  (data||[]).forEach(function(p){if(p.id===excludeId)return;sel.innerHTML+='<option value="'+p.id+'">'+esc(p.name)+' ('+p.stock_qty+')</option>';});
+}
+
+async function executeTransfer(){
+  var fromId=document.getElementById('mp-transfer-from').value;
+  var qty=parseInt(document.getElementById('mp-transfer-qty').value)||0;
+  var reason=document.getElementById('mp-transfer-reason').value.trim();
+  var toId=currentEditProductId;
+  if(!fromId){toast('Select source','error');return;}
+  if(!toId){toast('Save product first','error');return;}
+  if(qty<=0){toast('Enter quantity','error');return;}
+  var{data:src}=await sb.from('products').select('stock_qty,name').eq('id',fromId).single();
+  if(!src||src.stock_qty<qty){toast('Source only has '+(src?src.stock_qty:0),'error');return;}
+  if(!confirm('Transfer '+qty+' from "'+src.name+'"?'))return;
+
+  var session=await sb.auth.getSession();var user=session?.data?.session?.user?.email||'admin';
+  await sb.from('stock_transfers').insert([{from_product:fromId,to_product:toId,quantity:qty,reason:reason||'Stock transfer',transferred_by:user}]);
+  await sb.from('products').update({stock_qty:src.stock_qty-qty,updated_at:new Date().toISOString()}).eq('id',fromId);
+  var{data:dest}=await sb.from('products').select('stock_qty').eq('id',toId).single();
+  var nq=(dest?dest.stock_qty:0)+qty;
+  await sb.from('products').update({stock_qty:nq,updated_at:new Date().toISOString()}).eq('id',toId);
+
+  document.getElementById('mp-stock').value=nq;
+  document.getElementById('mp-transfer-qty').value='';document.getElementById('mp-transfer-reason').value='';
+  toast('Transferred '+qty);
+  loadTransferSourceDropdown(toId);
+
+  // Refresh stock source view (includes transfer details)
+  var{data:prod}=await sb.from('products').select('sell_month,sell_year,stock_source').eq('id',toId).single();
+  if(prod&&prod.sell_month&&prod.stock_source!=='manual'){
+    computeProductStock(toId,prod.sell_month,prod.sell_year).then(function(d){
+      document.getElementById('mp-stock-source').innerHTML=renderStockSource(d);
+    }).catch(function(){});
+  }
+}
+
+// ═══════════════════════════════════════
+//  IMAGE
+// ═══════════════════════════════════════
+function previewProductImage(input){
+  if(!input.files||!input.files[0])return;
+  if(input.files[0].size>2*1024*1024){toast('Max 2MB','error');input.value='';return;}
+  var r=new FileReader();r.onload=function(e){document.getElementById('mp-img-thumb').src=e.target.result;document.getElementById('mp-img-preview').style.display='block';document.getElementById('mp-img-placeholder').style.display='none';};
+  r.readAsDataURL(input.files[0]);
+}
+async function uploadProductImage(){
+  var input=document.getElementById('mp-img-file');
+  if(!input.files||!input.files[0])return document.getElementById('mp-img-url').value;
+  var file=input.files[0];var fn='product_'+Date.now()+'.'+file.name.split('.').pop().toLowerCase();
+  document.getElementById('mp-img-uploading').style.display='block';
+  var{error}=await sb.storage.from('product-images').upload(fn,file,{contentType:file.type,upsert:true});
+  document.getElementById('mp-img-uploading').style.display='none';
+  if(error){toast('Upload failed','error');return null;}
+  var{data:u}=sb.storage.from('product-images').getPublicUrl(fn);return u?.publicUrl||'';
+}
+
+// ═══════════════════════════════════════
+//  SAVE
+// ═══════════════════════════════════════
+async function saveProduct(){
+  var btn=document.getElementById('mp-save-btn');btn.disabled=true;btn.textContent='Saving...';
+  var imgUrl=document.getElementById('mp-img-url').value;
+  var input=document.getElementById('mp-img-file');
+  if(input.files&&input.files[0]){var up=await uploadProductImage();if(up)imgUrl=up;}
+  var tagEl=document.getElementById('mp-tags');var tags=[];
+  if(tagEl){for(var i=0;i<tagEl.options.length;i++){if(tagEl.options[i].selected)tags.push(tagEl.options[i].value);}}
+  var isManual=document.getElementById('mp-manual-stock').checked;
+  var isPub=document.getElementById('mp-published').checked;
+  var id=document.getElementById('mp-id').value;
+  var row={name:document.getElementById('mp-name').value.trim(),description:document.getElementById('mp-desc').value.trim(),product_type:document.getElementById('mp-type').value,collection:document.getElementById('mp-coll').value,category:document.getElementById('mp-type').value,price:parseFloat(document.getElementById('mp-price').value)||0,compare_price:parseFloat(document.getElementById('mp-compare').value)||0,tags:tags.length?tags.join(','):null,image_url:imgUrl||null,is_active:isPub,is_published:isPub,stock_source:isManual?'manual':'auto',updated_at:new Date().toISOString()};
+  if(isManual)row.stock_qty=parseInt(document.getElementById('mp-stock').value)||0;
+  if(!row.name){toast('Name required','error');btn.disabled=false;btn.textContent='Save Product';return;}
+  var{error}=id?await sb.from('products').update(row).eq('id',id):await sb.from('products').insert([row]);
+  btn.disabled=false;btn.textContent='Save Product';
+  if(error){toast('Error: '+error.message,'error');return;}
+  toast(id?'Updated':'Added');closeModal('modal-product');loadProducts();
+}
+
+// ═══════════════════════════════════════
+//  EDIT / PUBLISH / DELETE
+// ═══════════════════════════════════════
+async function editProduct(id){try{var{data}=await sb.from('products').select('*').eq('id',id).single();if(data)openProductForm(data);}catch(e){toast('Error','error');}}
+async function togglePublish(id,pub){await sb.from('products').update({is_published:pub,is_active:pub,updated_at:new Date().toISOString()}).eq('id',id);toast(pub?'Published':'Unpublished');loadProducts();}
+async function deleteProduct(id){if(!confirm('Delete this product?'))return;await sb.from('products').delete().eq('id',id);toast('Deleted');loadProducts();}
+
+// ═══════════════════════════════════════
+//  REORDER PRODUCTS
+// ═══════════════════════════════════════
+async function moveProduct(idx,dir){
+  var list=window._productsList;
+  if(!list)return;
+  var newIdx=idx+dir;
+  if(newIdx<0||newIdx>=list.length)return;
+
+  // Swap in local array
+  var temp=list[idx];
+  list[idx]=list[newIdx];
+  list[newIdx]=temp;
+
+  // Save sort_order for ALL products (ensures consistency)
+  var promises=[];
+  for(var i=0;i<list.length;i++){
+    promises.push(sb.from('products').update({sort_order:i}).eq('id',list[i].id));
+  }
+  try{
+    await Promise.all(promises);
+    toast('Product order updated');
+  }catch(e){
+    // sort_order column might not exist - try to create it
+    toast('Please run SQL: ALTER TABLE products ADD COLUMN IF NOT EXISTS sort_order INTEGER;','error');
+  }
+  loadProducts();
+}

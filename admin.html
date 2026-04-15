@@ -1,0 +1,685 @@
+<!--
+═══════════════════════════════════════════════════════════════
+  MJM NURSERY — ADMIN PORTAL (shell + settings)
+  ⚠️ AI: This is the main shell. Module JS is in separate files.
+  Auth via auth.html → checks profiles.role = 'admin' on load.
+
+  📁 ADMIN FILE MAP:
+  ├── admin.html              ← THIS FILE (shell, CSS, auth, helpers, settings)
+  ├── admin-orders.js         ← Orders: loadOrders(), viewOrder(), updateOrder()
+  ├── admin-customers.js      ← Customers: loadCustomers(), viewCustomer()
+  ├── admin-products.js       ← Products: loadProducts(), openProductForm(), saveProduct(), toggleProduct()
+  ├── admin-promotions.js     ← Promotions: loadPromos(), openPromoForm(), savePromo()
+  └── admin-coupons.js        ← Coupons: loadCoupons(), openCouponForm(), saveCoupon(), toggleCoupon()
+
+  SHARED (defined in this file):
+  • sb                — Supabase client
+  • toast(msg,type)   — notification
+  • esc(s)            — HTML escape
+  • fmtDate(d)        — format date
+  • statusBadge(s)    — order status → CSS class
+  • openModal(id)     — show modal
+  • closeModal(id)    — hide modal
+  • switchTab(tab,el) — sidebar tab navigation
+
+  SUPABASE TABLES:
+  • profiles, customer_orders, order_items, products, promotions, coupons
+
+  THIS FILE LINE MAP:
+  38-170   CSS (all styles)
+  174      Loading screen
+  177-225  Dashboard: sidebar + tab content areas
+  228-340  Modals: order, product, promo, coupon, customer
+  343      Toast element
+  347-350  Supabase client
+  353-380  Auth: checkAdmin(), doLogout(), init
+  383-395  switchTab()
+  398-410  Helpers: openModal, closeModal, toast, esc, fmtDate, statusBadge
+  413-417  External JS file imports
+═══════════════════════════════════════════════════════════════
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MJM Nursery — Admin Portal</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#f8f6fc;--surface:#fff;--border:#e8e4f0;--border2:#d4cfe0;
+  --green:#7c5cbf;--green-dark:#5b3fa0;--green-light:#f3eeff;
+  --ink:#1a1428;--ink2:#3d3555;--ink3:#6b6280;--ink4:#9a93af;
+  --amber:#f59e0b;--amber-light:#fef3c7;
+  --red:#ef4444;--red-light:#fef2f2;
+  --blue:#6366f1;--blue-light:#eef2ff;
+  --sidebar-w:230px;--radius:12px;
+  --shadow:0 1px 3px rgba(100,60,150,.04),0 2px 8px rgba(100,60,150,.06);
+}
+body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;}
+input,select,textarea,button{font-family:inherit;}
+
+/* LAYOUT */
+.app{display:none;min-height:100vh;}
+.app.show{display:flex;}
+.sidebar{width:var(--sidebar-w);background:linear-gradient(180deg,#f0ecf8,#e8e4f2,#f0edf6);color:var(--ink);position:fixed;top:0;left:0;bottom:0;display:flex;flex-direction:column;z-index:50;border-right:1px solid var(--border);overflow:hidden;}
+.sb-watermark{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:8rem;font-weight:900;color:rgba(124,92,191,.06);letter-spacing:.05em;pointer-events:none;white-space:nowrap;user-select:none;}
+.sb-logo{padding:1.2rem 1.4rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.7rem;position:relative;z-index:2;}
+.sb-logo-text{font-size:1.5rem;font-weight:900;color:var(--green);letter-spacing:.03em;}
+.sb-logo-sub{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink4);}
+.sb-nav{flex:1;padding:.8rem 0;position:relative;z-index:2;}
+.sb-item{display:flex;align-items:center;gap:.7rem;padding:.65rem 1.4rem;font-size:13px;font-weight:600;color:var(--ink3);cursor:pointer;transition:all .15s;border-left:3px solid transparent;border-radius:0;}
+.sb-item:hover{color:var(--ink);background:rgba(124,92,191,.06);}
+.sb-item.active{color:var(--green-dark);background:rgba(124,92,191,.1);border-left-color:var(--green);}
+.sb-item .sb-icon{font-size:1.1rem;width:20px;text-align:center;}
+.sb-sub{padding:0;overflow:hidden;max-height:0;transition:max-height .25s ease;}
+.sb-sub.open{max-height:200px;}
+.sb-sub-item{display:flex;align-items:center;gap:.5rem;padding:.45rem 1.4rem .45rem 3rem;font-size:12px;font-weight:500;color:var(--ink4);cursor:pointer;transition:all .15s;}
+.sb-sub-item:hover{color:var(--green-dark);background:rgba(124,92,191,.05);}
+.sb-sub-item.active{color:var(--green-dark);font-weight:700;}
+.sb-footer{padding:1rem 1.4rem;border-top:1px solid var(--border);position:relative;z-index:2;}
+.sb-user{font-size:11px;color:var(--ink4);margin-bottom:.5rem;}
+.sb-user strong{color:var(--ink2);font-weight:600;display:block;}
+.sb-logout{background:none;border:1px solid var(--border);color:var(--ink3);font-size:11px;font-weight:600;padding:.4rem .8rem;border-radius:6px;cursor:pointer;transition:all .15s;width:100%;text-align:center;}
+.sb-logout:hover{border-color:var(--red);color:var(--red);}
+.main{margin-left:var(--sidebar-w);flex:1;padding:1.5rem 2rem;}
+.main-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;}
+.main-title{font-size:1.4rem;font-weight:800;color:var(--ink);}
+
+/* TABS */
+.tab-content{display:none;}.tab-content.active{display:block;animation:fadeIn .2s ease;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;}}
+
+/* CARDS & TABLE */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.2rem;box-shadow:var(--shadow);margin-bottom:1rem;}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.8rem;margin-bottom:1.5rem;}
+.stat-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.2rem;box-shadow:var(--shadow);}
+.stat-label{font-size:10px;font-weight:700;color:var(--ink4);letter-spacing:.1em;text-transform:uppercase;margin-bottom:.3rem;}
+.stat-val{font-size:1.6rem;font-weight:800;color:var(--ink);}
+.stat-val.green{color:var(--green);}
+.data-table{width:100%;border-collapse:collapse;font-size:13px;}
+.data-table th{background:var(--bg);padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border);}
+.data-table td{padding:10px 12px;border-bottom:1px solid var(--border);font-weight:500;}
+.data-table tr:hover td{background:var(--green-light);}
+.badge{font-size:10px;font-weight:700;padding:3px 8px;border-radius:12px;letter-spacing:.04em;text-transform:uppercase;}
+.badge-green{background:var(--green-light);color:var(--green-dark);}
+.badge-amber{background:var(--amber-light);color:#92400e;}
+.badge-red{background:var(--red-light);color:#b91c1c;}
+.badge-blue{background:var(--blue-light);color:#1d4ed8;}
+.badge-grey{background:#f3f4f6;color:#4b5563;}
+
+/* BUTTONS */
+.btn{padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;border:none;font-family:inherit;}
+.btn-primary{background:var(--green);color:#fff;}.btn-primary:hover{background:var(--green-dark);}
+.btn-outline{background:none;border:1.5px solid var(--border2);color:var(--ink2);}.btn-outline:hover{border-color:var(--green);color:var(--green);}
+.btn-sm{padding:5px 10px;font-size:11px;}
+
+/* FORMS */
+.form-group{margin-bottom:1rem;}
+.form-label{display:block;font-size:11px;font-weight:700;color:var(--ink3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:.3rem;}
+.form-input{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--ink);outline:none;transition:all .2s;}
+.form-input:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(29,185,84,.08);}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:1rem;}
+.form-toggle{display:flex;align-items:center;gap:.6rem;cursor:pointer;font-size:13px;font-weight:500;}
+.form-toggle input{width:18px;height:18px;accent-color:var(--green);}
+
+/* FILTER */
+.filter-bar{display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center;}
+.filter-input{background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:7px 12px;font-size:12px;outline:none;min-width:200px;}
+.filter-input:focus{border-color:var(--green);}
+.filter-select{background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:7px 12px;font-size:12px;outline:none;cursor:pointer;}
+
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center;padding:1rem;}
+.modal-overlay.open{display:flex;}
+.modal{background:#fff;border-radius:16px;width:100%;max-width:600px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2);animation:modalIn .2s ease;}
+@keyframes modalIn{from{opacity:0;transform:scale(.95) translateY(10px);}to{opacity:1;transform:none;}}
+.modal-head{display:flex;justify-content:space-between;align-items:center;padding:1.2rem 1.5rem;border-bottom:1px solid var(--border);}
+.modal-head h2{font-size:1rem;font-weight:800;}
+.modal-close{background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--ink3);}.modal-close:hover{color:var(--ink);}
+.modal-body{padding:1.5rem;}
+.modal-foot{padding:1rem 1.5rem;border-top:1px solid var(--border);display:flex;gap:.5rem;justify-content:flex-end;}
+
+/* TOAST */
+.toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--ink);color:#fff;padding:10px 18px;border-radius:10px;font-size:13px;font-weight:600;z-index:999;opacity:0;transform:translateY(10px);transition:all .3s;pointer-events:none;border-left:3px solid var(--green);}
+.toast.show{opacity:1;transform:translateY(0);}.toast.error{border-left-color:var(--red);}
+.loading{text-align:center;padding:2rem;color:var(--ink3);font-size:13px;}
+
+/* Product form sections — soft rounded style */
+.mp-section{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.3rem 1.5rem;margin-bottom:1rem;box-shadow:0 1px 4px rgba(0,0,0,.03);}
+.mp-section-title{font-size:15px;font-weight:600;color:var(--ink);margin-bottom:1rem;padding-bottom:.6rem;border-bottom:1.5px solid var(--border);}
+.mp-sidebar-block{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:.9rem;margin-bottom:.7rem;box-shadow:0 1px 3px rgba(0,0,0,.02);}
+.mp-sidebar-title{font-size:12px;font-weight:600;color:var(--ink2);margin-bottom:.5rem;}
+.mp-radio{display:flex;align-items:center;gap:.5rem;cursor:pointer;padding:.3rem 0;font-size:13px;font-weight:400;color:var(--ink2);}
+.mp-radio input{accent-color:var(--green);width:15px;height:15px;}
+.mp-sub-label{font-size:10px;color:var(--ink4);margin-top:.15rem;font-weight:400;}
+#modal-product .form-label{font-size:12px;margin-bottom:.4rem;font-weight:600;color:var(--ink3);}
+#modal-product .form-input{font-size:13px;padding:10px 14px;border-radius:10px;font-weight:400;}
+#modal-product .form-group{margin-bottom:.9rem;}
+#modal-product .modal-head h2{font-weight:600;}
+#modal-product .btn{font-weight:600;border-radius:10px;}
+
+@media(max-width:768px){
+  .sidebar{width:60px;}.sb-logo span,.sb-item span:not(.sb-icon),.sb-user{display:none;}
+  .sb-item{justify-content:center;padding:.7rem;}
+  .main{margin-left:60px;padding:1rem;}
+  .form-row{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+
+<!-- Loading while checking auth -->
+<div id="auth-loading" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);"><div style="text-align:center;"><div style="font-size:3rem;font-weight:900;color:rgba(124,92,191,.15);letter-spacing:.05em;margin-bottom:.5rem;">MJM</div><div style="font-size:13px;font-weight:600;color:var(--ink3);">Loading admin portal...</div></div></div>
+
+<!-- DASHBOARD -->
+<div id="app" class="app">
+  <aside class="sidebar">
+    <div class="sb-watermark">MJM</div>
+    <div class="sb-logo">
+      <div><div class="sb-logo-text">MJM</div><div class="sb-logo-sub">Admin Portal</div></div>
+    </div>
+    <div class="sb-nav">
+      <div class="sb-item active" onclick="switchTab('orders',this)"><span class="sb-icon">📦</span><span>Orders</span></div>
+      <div class="sb-item" id="sb-customers-parent" onclick="toggleSbSub('customers')"><span class="sb-icon">👥</span><span>Customers</span><svg style="margin-left:auto;width:12px;height:12px;transition:transform .2s;" id="sb-cust-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <div class="sb-sub" id="sb-sub-customers">
+        <div class="sb-sub-item active" onclick="switchTab('customers',document.getElementById('sb-customers-parent'));showCustSubTab('list')">Customer List</div>
+        <div class="sb-sub-item" onclick="switchTab('customers',document.getElementById('sb-customers-parent'));showCustSubTab('points')">Points & Membership</div>
+      </div>
+      <div class="sb-item" onclick="switchTab('products',this)"><span class="sb-icon">🌱</span><span>Products</span></div>
+      <div class="sb-item" onclick="switchTab('promos',this)"><span class="sb-icon">🎁</span><span>Promotions</span></div>
+      <div class="sb-item" onclick="switchTab('coupons',this)"><span class="sb-icon">🏷️</span><span>Coupons</span></div>
+      <div class="sb-item" onclick="switchTab('settings',this)"><span class="sb-icon">⚙️</span><span>Settings</span></div>
+    </div>
+    <div class="sb-footer">
+      <div class="sb-user"><strong id="admin-name">Admin</strong></div>
+      <button class="sb-logout" onclick="doLogout()">Sign Out</button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <!-- ORDERS -->
+    <div class="tab-content active" id="tab-orders">
+      <div class="main-header"><div class="main-title">Manage Orders</div></div>
+      <div class="stats-grid" id="order-stats"></div>
+      <div class="card">
+        <div class="filter-bar">
+          <input class="filter-input" id="order-search" placeholder="Search order ID or customer..." oninput="loadOrders()">
+          <select class="filter-select" id="order-filter" onchange="loadOrders()">
+            <option value="">All Status</option>
+            <option>Pending Payment</option><option>Paid</option>
+            <option>Ready for Collection</option><option>Completed</option><option>Cancelled</option><option>Refunded</option>
+          </select>
+        </div>
+        <div id="orders-table"><div class="loading">Loading orders...</div></div>
+      </div>
+    </div>
+
+    <!-- CUSTOMERS -->
+    <div class="tab-content" id="tab-customers">
+      <div class="main-header"><div class="main-title">Manage Customers</div></div>
+      <!-- Sub-tabs -->
+      <div style="display:flex;gap:.4rem;margin-bottom:1rem;">
+        <button class="btn btn-primary btn-sm" id="cust-subtab-list" onclick="showCustSubTab('list')" style="font-size:11px;">Customer List</button>
+        <button class="btn btn-outline btn-sm" id="cust-subtab-points" onclick="showCustSubTab('points')" style="font-size:11px;">Points & Membership</button>
+      </div>
+
+      <!-- Customer List sub-tab -->
+      <div id="cust-panel-list">
+        <div class="stats-grid" id="cust-stats"></div>
+        <div class="card">
+          <div class="filter-bar"><input class="filter-input" id="cust-search" placeholder="Search name or email..." oninput="loadCustomers()"></div>
+          <div id="customers-table"><div class="loading">Loading customers...</div></div>
+        </div>
+      </div>
+
+      <!-- Points & Membership sub-tab -->
+      <div id="cust-panel-points" style="display:none;">
+        <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap;">
+          <label style="font-size:11px;font-weight:700;color:var(--ink3);">Date Range:</label>
+          <input type="date" id="pts-date-from" class="form-input" style="width:auto;font-size:12px;padding:5px 10px;" onchange="loadPointsStats()">
+          <span style="font-size:12px;color:var(--ink4);">to</span>
+          <input type="date" id="pts-date-to" class="form-input" style="width:auto;font-size:12px;padding:5px 10px;" onchange="loadPointsStats()">
+          <button class="btn btn-outline btn-sm" onclick="setPtsDateRange('month')">This Month</button>
+          <button class="btn btn-outline btn-sm" onclick="setPtsDateRange('year')">This Year</button>
+          <button class="btn btn-outline btn-sm" onclick="setPtsDateRange('all')">All Time</button>
+        </div>
+        <div class="stats-grid" id="pts-stats"></div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+          <!-- Points Settings -->
+          <div class="card">
+            <div class="card-head" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+              <h3 style="font-size:1rem;font-weight:600;">Points Settings</h3>
+              <div>
+                <button class="btn btn-outline btn-sm" id="pts-edit-btn" onclick="togglePointsEdit(true)">Edit</button>
+                <button class="btn btn-primary btn-sm" id="pts-save-btn" onclick="savePointsSettings()" style="display:none;">Save Changes</button>
+                <button class="btn btn-outline btn-sm" id="pts-cancel-btn" onclick="togglePointsEdit(false)" style="display:none;">Cancel</button>
+              </div>
+            </div>
+            <div style="font-size:12px;color:var(--ink3);margin-bottom:1rem;">Configure how customers earn and redeem points.</div>
+
+            <div style="background:var(--bg);border-radius:10px;padding:1rem;margin-bottom:1rem;">
+              <div style="font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.8rem;">Earning</div>
+              <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
+                <span style="font-size:13px;font-weight:600;">Every RM</span>
+                <input class="form-input" id="pts-earn-rm" type="number" step="1" value="1" style="width:70px;font-size:13px;padding:6px 10px;text-align:center;" disabled>
+                <span style="font-size:13px;font-weight:600;">spent =</span>
+                <input class="form-input" id="pts-earn-pts" type="number" step="1" value="1" style="width:70px;font-size:13px;padding:6px 10px;text-align:center;" disabled>
+                <span style="font-size:13px;font-weight:600;">point(s)</span>
+              </div>
+              <div style="font-size:11px;color:var(--ink4);margin-top:.5rem;">Customers earn points on every purchase after payment is confirmed.</div>
+            </div>
+
+            <div style="background:var(--bg);border-radius:10px;padding:1rem;">
+              <div style="font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.8rem;">Redemption</div>
+              <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
+                <input class="form-input" id="pts-redeem-pts" type="number" step="1" value="100" style="width:70px;font-size:13px;padding:6px 10px;text-align:center;" disabled>
+                <span style="font-size:13px;font-weight:600;">points = RM</span>
+                <input class="form-input" id="pts-redeem-rm" type="number" step="0.01" value="1.00" style="width:70px;font-size:13px;padding:6px 10px;text-align:center;" disabled>
+                <span style="font-size:13px;font-weight:600;">discount</span>
+              </div>
+              <div style="font-size:11px;color:var(--ink4);margin-top:.5rem;">Customers can redeem points at checkout to offset their order total.</div>
+            </div>
+
+            <div style="background:var(--bg);border-radius:10px;padding:1rem;margin-top:1rem;">
+              <div style="font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem;">Summary</div>
+              <div id="pts-summary" style="font-size:13px;color:var(--ink2);line-height:1.8;"></div>
+            </div>
+
+            <!-- Change History -->
+            <div style="margin-top:1rem;border-top:1px solid var(--border);padding-top:1rem;">
+              <div style="font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem;">Change History</div>
+              <div id="pts-history" style="font-size:12px;color:var(--ink4);">Loading...</div>
+            </div>
+          </div>
+
+          <!-- Member Tiers -->
+          <div class="card">
+            <div class="card-head" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+              <h3 style="font-size:1rem;font-weight:600;">Member Tiers</h3>
+              <button class="btn btn-primary btn-sm" onclick="addTierRow()">+ Add Tier</button>
+            </div>
+            <div style="font-size:12px;color:var(--ink3);margin-bottom:1rem;">Define membership tiers based on total points earned. Customers are auto-upgraded.</div>
+            <div id="tiers-list"><div style="font-size:12px;color:var(--ink4);">Loading...</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PRODUCTS -->
+    <div class="tab-content" id="tab-products">
+      <div class="main-header">
+        <div class="main-title">Manage Products</div>
+        <div style="display:flex;gap:.5rem;">
+          <button class="btn btn-outline" onclick="syncProductsFromBatches()">🔄 Sync from Batches</button>
+          <button class="btn btn-primary" onclick="openProductForm()">+ Add Product</button>
+        </div>
+      </div>
+      <div class="stats-grid" id="prod-stats"></div>
+      <div class="card">
+        <div class="filter-bar">
+          <input class="filter-input" id="prod-search" placeholder="Search products..." oninput="loadProducts()">
+          <select class="filter-select" id="prod-type-filter" onchange="loadProducts()">
+            <option value="">All Types</option><option>Seedling</option><option>Merchandise</option>
+          </select>
+          <select class="filter-select" id="prod-coll-filter" onchange="loadProducts()">
+            <option value="">All Collections</option><option>Normal Sales</option><option>Promotion</option>
+          </select>
+          <select class="filter-select" id="prod-status-filter" onchange="loadProducts()">
+            <option value="">All Status</option><option value="published">Published</option><option value="unpublished">Unpublished</option>
+          </select>
+        </div>
+        <div id="products-table"><div class="loading">Loading products...</div></div>
+      </div>
+    </div>
+
+    <!-- PROMOTIONS -->
+    <div class="tab-content" id="tab-promos">
+      <div class="main-header"><div class="main-title">Manage Promotions</div><button class="btn btn-primary" onclick="openPromoForm()">+ New Promotion</button></div>
+      <div class="card"><div id="promos-table"><div class="loading">Loading promotions...</div></div></div>
+    </div>
+
+    <!-- COUPONS -->
+    <div class="tab-content" id="tab-coupons">
+      <div class="main-header"><div class="main-title">Manage Coupons</div><button class="btn btn-primary" onclick="openCouponForm()">+ New Coupon</button></div>
+      <div class="card">
+        <div class="filter-bar"><input class="filter-input" id="coupon-search" placeholder="Search coupon code..." oninput="loadCoupons()"></div>
+        <div id="coupons-table"><div class="loading">Loading coupons...</div></div>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="tab-content" id="tab-settings">
+      <div class="main-header"><div class="main-title">Settings</div></div>
+      <!-- Product Types -->
+      <div class="card">
+        <h3>Product Types</h3>
+        <div id="settings-product-types"></div>
+        <div style="display:flex;gap:.5rem;margin-top:.8rem;">
+          <input class="form-input" id="new-ptype" style="max-width:250px;" placeholder="New product type name">
+          <button class="btn btn-primary btn-sm" onclick="addProductType()">Add</button>
+        </div>
+      </div>
+      <!-- Collections -->
+      <div class="card">
+        <h3>Collections</h3>
+        <div id="settings-collections"></div>
+        <div style="display:flex;gap:.5rem;margin-top:.8rem;">
+          <input class="form-input" id="new-collection" style="max-width:250px;" placeholder="New collection name">
+          <button class="btn btn-primary btn-sm" onclick="addCollection()">Add</button>
+        </div>
+      </div>
+      <!-- Tags -->
+      <div class="card">
+        <h3>Product Tags</h3>
+        <div id="settings-tags"></div>
+        <div style="display:flex;gap:.5rem;margin-top:.8rem;">
+          <input class="form-input" id="new-tag" style="max-width:250px;" placeholder="New tag name">
+          <button class="btn btn-primary btn-sm" onclick="addTag()">Add</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ORDER DETAIL MODAL -->
+<div class="modal-overlay" id="modal-order" style="z-index:250;"><div class="modal" style="max-width:750px;"><div class="modal-head"><h2 id="mo-title">Order Details</h2><button class="modal-close" onclick="closeModal('modal-order');">✕</button></div><div class="modal-body" id="mo-body" style="max-height:75vh;overflow-y:auto;"></div><div class="modal-foot" id="mo-foot"></div></div></div>
+
+<!-- CANCEL STOCK RESTORE MODAL -->
+<div class="modal-overlay" id="modal-cancel-stock"><div class="modal" style="max-width:600px;"><div class="modal-head" style="background:#fef2f2;"><h2 style="font-size:1.1rem;color:#dc2626;">Cancel Order — Restore Stock</h2><button class="modal-close" onclick="closeModal('modal-cancel-stock')">✕</button></div><div class="modal-body" id="cancel-stock-body" style="max-height:65vh;overflow-y:auto;"></div><div class="modal-foot" id="cancel-stock-foot"></div></div></div>
+
+<!-- PRODUCT FORM MODAL -->
+<div class="modal-overlay" id="modal-product"><div class="modal" style="max-width:800px;">
+  <div class="modal-head" style="background:var(--bg);"><h2 id="mp-title" style="font-size:1.1rem;">Add Product</h2><button class="modal-close" onclick="closeModal('modal-product')">✕</button></div>
+  <div class="modal-body" style="display:grid;grid-template-columns:1fr 220px;gap:1.2rem;padding:1.2rem;">
+    <input type="hidden" id="mp-id">
+
+    <!-- ════ LEFT COLUMN ════ -->
+    <div>
+      <!-- §1 PRODUCT DETAILS + IMAGE + PRICING (combined) -->
+      <div class="mp-section">
+        <div class="mp-section-title">Product Details</div>
+        <div class="form-group"><label class="form-label">Product Name</label><input class="form-input" id="mp-name"></div>
+        <div class="form-group"><label class="form-label">Description</label><textarea class="form-input" id="mp-desc" rows="2" style="resize:vertical;"></textarea></div>
+
+        <!-- Image inline -->
+        <div class="form-group">
+          <label class="form-label">Product Image</label>
+          <div id="mp-img-area" style="border:2px dashed var(--border2);border-radius:8px;padding:1rem;text-align:center;cursor:pointer;background:var(--bg);transition:all .15s;" onclick="document.getElementById('mp-img-file').click()" onmouseover="this.style.borderColor='var(--green)'" onmouseout="this.style.borderColor='var(--border2)'">
+            <div id="mp-img-preview" style="display:none;"><img id="mp-img-thumb" src="" style="max-height:120px;border-radius:6px;"></div>
+            <div id="mp-img-placeholder"><div style="font-size:1.2rem;">📷</div><div style="font-size:12px;font-weight:600;color:var(--ink3);">Click to upload image</div></div>
+          </div>
+          <input type="file" id="mp-img-file" accept="image/*" style="display:none;" onchange="previewProductImage(this)">
+          <div id="mp-img-uploading" style="display:none;font-size:12px;color:var(--green);margin-top:.3rem;">Uploading...</div>
+          <input type="hidden" id="mp-img-url">
+        </div>
+
+        <!-- Pricing inline -->
+        <div style="border-top:1.5px solid var(--border);padding-top:.8rem;margin-top:.3rem;">
+          <div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:.6rem;">Pricing</div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Selling Price (RM)</label><input class="form-input" id="mp-price" type="number" step="0.01"></div>
+            <div class="form-group"><label class="form-label">Compare at Price (RM)</label><input class="form-input" id="mp-compare" type="number" step="0.01"><div class="mp-sub-label">Shown as strikethrough on website</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- §2 INVENTORY (separate section) -->
+      <div class="mp-section" style="background:#f8faf8;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div class="mp-section-title" style="margin-bottom:0;border:none;padding:0;">Inventory & Stock</div>
+          <label style="font-size:11px;display:flex;align-items:center;gap:.4rem;cursor:pointer;color:var(--ink3);font-weight:600;">
+            <input type="checkbox" id="mp-manual-stock" onchange="toggleManualStock()" style="accent-color:var(--green);width:15px;height:15px;">Manual
+          </label>
+        </div>
+        <div style="border-bottom:2px solid var(--border);margin:.6rem 0 .8rem;"></div>
+        <div class="form-group">
+          <label class="form-label">Current Stock</label>
+          <input class="form-input" id="mp-stock" type="number" readonly style="background:#fff;cursor:not-allowed;font-weight:800;font-size:1.4rem;color:var(--green);max-width:200px;border:2px solid var(--green-light);">
+          <div id="mp-stock-hint" class="mp-sub-label">Auto-calculated from batch maturity</div>
+        </div>
+        <!-- Stock sources -->
+        <div id="mp-stock-source"></div>
+
+        <!-- Transfer -->
+        <div style="border-top:2px solid var(--border);margin-top:.8rem;padding-top:.8rem;">
+          <div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:.3rem;">Stock Transfer</div>
+          <div class="mp-sub-label" style="margin-bottom:.6rem;">Move stock from another product. Both sides tracked.</div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">From Product</label>
+              <select class="form-input" id="mp-transfer-from"></select>
+            </div>
+            <div class="form-group"><label class="form-label">Quantity</label>
+              <input class="form-input" id="mp-transfer-qty" type="number" min="1">
+            </div>
+          </div>
+          <div class="form-group"><label class="form-label">Reason</label><input class="form-input" id="mp-transfer-reason"></div>
+          <button class="btn btn-primary" onclick="executeTransfer()" style="width:100%;padding:10px;">Transfer Stock →</button>
+        </div>
+        <div id="mp-transfer-history"></div>
+      </div>
+    </div>
+
+    <!-- ════ RIGHT SIDEBAR ════ -->
+    <div>
+      <!-- Visibility -->
+      <div class="mp-sidebar-block">
+        <div class="mp-sidebar-title">Visibility</div>
+        <label class="mp-radio"><input type="radio" name="mp-vis" value="published" id="mp-published"> Publish</label>
+        <label class="mp-radio"><input type="radio" name="mp-vis" value="unpublished" id="mp-unpublished" checked> Unpublish</label>
+      </div>
+
+      <!-- Product Type -->
+      <div class="mp-sidebar-block">
+        <div class="mp-sidebar-title">Product Type</div>
+        <select class="form-input" id="mp-type" style="font-size:11px;padding:8px 10px;"><option value="Seedling">Seedling</option><option value="Merchandise">Merchandise</option></select>
+      </div>
+
+      <!-- Collection -->
+      <div class="mp-sidebar-block">
+        <div class="mp-sidebar-title">Collection</div>
+        <select class="form-input" id="mp-coll" style="font-size:11px;padding:8px 10px;"><option value="Normal Sales">Normal Sales</option><option value="Promotion">Promotion</option></select>
+      </div>
+
+      <!-- Tags -->
+      <div class="mp-sidebar-block">
+        <div class="mp-sidebar-title">Tags</div>
+        <select class="form-input" id="mp-tags" style="font-size:11px;padding:6px 10px;" multiple size="3"></select>
+        <div style="font-size:8px;color:var(--ink4);margin-top:.15rem;">Ctrl/Cmd + click to multi-select</div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-foot"><button class="btn btn-outline" onclick="closeModal('modal-product')">Cancel</button><button class="btn btn-primary" id="mp-save-btn" onclick="saveProduct()">Save Product</button></div>
+</div></div>
+
+<!-- PROMO FORM MODAL -->
+<div class="modal-overlay" id="modal-promo"><div class="modal"><div class="modal-head"><h2 id="mpr-title">New Promotion</h2><button class="modal-close" onclick="closeModal('modal-promo')">✕</button></div><div class="modal-body">
+  <input type="hidden" id="mpr-id">
+  <div class="form-group"><label class="form-label">Title</label><input class="form-input" id="mpr-name"></div>
+  <div class="form-group"><label class="form-label">Description</label><textarea class="form-input" id="mpr-desc" rows="2"></textarea></div>
+  <div class="form-row"><div class="form-group"><label class="form-label">Discount Type</label><select class="form-input" id="mpr-dtype"><option value="percentage">Percentage (%)</option><option value="fixed">Fixed Amount (RM)</option></select></div><div class="form-group"><label class="form-label">Discount Value</label><input class="form-input" id="mpr-dval" type="number" step="0.01"></div></div>
+  <div class="form-row"><div class="form-group"><label class="form-label">Target</label><select class="form-input" id="mpr-target"><option value="all">All Products</option><option value="category">Category</option><option value="specific">Specific Product</option></select></div><div class="form-group"><label class="form-label">Target Detail</label><input class="form-input" id="mpr-tdetail"></div></div>
+  <div class="form-row"><div class="form-group"><label class="form-label">Start Date</label><input class="form-input" id="mpr-start" type="date"></div><div class="form-group"><label class="form-label">End Date</label><input class="form-input" id="mpr-end" type="date"></div></div>
+  <label class="form-toggle"><input type="checkbox" id="mpr-active" checked><span>Active</span></label>
+</div><div class="modal-foot"><button class="btn btn-outline" onclick="closeModal('modal-promo')">Cancel</button><button class="btn btn-primary" onclick="savePromo()">Save Promotion</button></div></div></div>
+
+<!-- COUPON FORM MODAL -->
+<div class="modal-overlay" id="modal-coupon"><div class="modal"><div class="modal-head"><h2 id="mc-title">New Coupon</h2><button class="modal-close" onclick="closeModal('modal-coupon')">✕</button></div><div class="modal-body">
+  <input type="hidden" id="mc-id">
+  <div class="form-row"><div class="form-group"><label class="form-label">Coupon Code</label><input class="form-input" id="mc-code" style="text-transform:uppercase;"></div><div class="form-group"><label class="form-label">Discount Type</label><select class="form-input" id="mc-dtype"><option value="percentage">Percentage (%)</option><option value="fixed">Fixed Amount (RM)</option></select></div></div>
+  <div class="form-row"><div class="form-group"><label class="form-label">Discount Value</label><input class="form-input" id="mc-dval" type="number" step="0.01"></div><div class="form-group"><label class="form-label">Min Order Value (RM)</label><input class="form-input" id="mc-min" type="number" step="0.01" value="0"></div></div>
+  <div class="form-row"><div class="form-group"><label class="form-label">Usage Limit (0 = unlimited)</label><input class="form-input" id="mc-limit" type="number" value="0"></div><div class="form-group"><label class="form-label">Expiry Date</label><input class="form-input" id="mc-expiry" type="date"></div></div>
+  <label class="form-toggle"><input type="checkbox" id="mc-active" checked><span>Active</span></label>
+</div><div class="modal-foot"><button class="btn btn-outline" onclick="closeModal('modal-coupon')">Cancel</button><button class="btn btn-primary" onclick="saveCoupon()">Save Coupon</button></div></div></div>
+
+<!-- CUSTOMER DETAIL MODAL -->
+<div class="modal-overlay" id="modal-customer"><div class="modal" style="max-width:900px;"><div class="modal-head"><h2 id="mcu-title">Customer Profile</h2><button class="modal-close" onclick="closeModal('modal-customer')">✕</button></div><div class="modal-body" id="mcu-body" style="max-height:80vh;overflow-y:auto;"></div></div></div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- ═══════════════════════════ JS: CORE ═══════════════════════════ -->
+<script>
+// Supabase
+var SB_URL='https://kibqjztozokohqmhqqqf.supabase.co';
+var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpYnFqenRvem9rb2hxbWhxcXFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMzQzNjIsImV4cCI6MjA4OTgxMDM2Mn0.J7qJUZhWXYf5b9oey4wXJkjdi66jomEMw_NeV9NWF7M';
+var sb=supabase.createClient(SB_URL,SB_KEY);
+
+// Auth
+async function checkAdmin(){
+  var{data:{session}}=await sb.auth.getSession();
+  if(!session){window.location.href='auth.html';return;}
+  var{data:profile}=await sb.from('profiles').select('role').eq('id',session.user.id).single();
+  if(!profile||profile.role!=='admin'){window.location.href='index.html';return;}
+  document.getElementById('auth-loading').style.display='none';
+  document.getElementById('app').classList.add('show');
+  document.getElementById('admin-name').textContent=session.user.user_metadata?.full_name||session.user.email;
+  loadOrders();
+}
+async function doLogout(){await sb.auth.signOut();sessionStorage.clear();window.location.href='auth.html';}
+
+// Tab switching
+function switchTab(tab,el){
+  document.querySelectorAll('.tab-content').forEach(function(t){t.classList.remove('active');});
+  document.querySelectorAll('.sb-item').forEach(function(s){s.classList.remove('active');});
+  document.querySelectorAll('.sb-sub-item').forEach(function(s){s.classList.remove('active');});
+  document.getElementById('tab-'+tab).classList.add('active');
+  if(el)el.classList.add('active');
+  if(tab==='orders')loadOrders();
+  if(tab==='customers')loadCustomers();
+  if(tab==='products')loadProducts();
+  if(tab==='promos')loadPromos();
+  if(tab==='coupons')loadCoupons();
+  if(tab==='settings')loadSettings();
+}
+
+function toggleSbSub(name){
+  var sub=document.getElementById('sb-sub-'+name);
+  var arrow=document.getElementById('sb-cust-arrow');
+  if(sub.classList.contains('open')){
+    sub.classList.remove('open');
+    if(arrow)arrow.style.transform='';
+  } else {
+    sub.classList.add('open');
+    if(arrow)arrow.style.transform='rotate(180deg)';
+  }
+}
+
+// Helpers
+function openModal(id){document.getElementById(id).classList.add('open');}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+function toast(msg,type){var t=document.getElementById('toast');t.textContent=msg;t.className='toast show'+(type==='error'?' error':'');setTimeout(function(){t.className='toast';},3000);}
+function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+function fmtDate(d){if(!d)return'—';return new Date(d).toLocaleDateString('en-MY',{day:'2-digit',month:'short',year:'numeric'});}
+function statusBadge(s){return{'Pending':'badge-amber','Confirmed':'badge-blue','Processing':'badge-blue','Shipped':'badge-blue','Completed':'badge-green','Cancelled':'badge-red'}[s]||'badge-grey';}
+
+// ═══════════════════════════════════════
+//  SETTINGS — Product Types & Collections
+// ═══════════════════════════════════════
+var adminSettings={productTypes:['Seedling','Merchandise'],collections:['Normal Sales','Promotion'],tags:['Best Seller','New Arrival','Limited']};
+
+async function loadSettings(){
+  // Load from localStorage (or DB in future)
+  try{var s=localStorage.getItem('mjm_admin_settings');if(s)adminSettings=JSON.parse(s);}catch(e){}
+  renderSettingsList('settings-product-types',adminSettings.productTypes,'ptype');
+  renderSettingsList('settings-collections',adminSettings.collections,'coll');
+  renderSettingsList('settings-tags',adminSettings.tags,'tag');
+}
+
+function saveSettings(){
+  try{localStorage.setItem('mjm_admin_settings',JSON.stringify(adminSettings));}catch(e){}
+}
+
+function renderSettingsList(containerId,list,prefix){
+  var el=document.getElementById(containerId);
+  if(!list.length){el.innerHTML='<div style="font-size:12px;color:var(--ink4);padding:.5rem 0;">No items</div>';return;}
+  el.innerHTML=list.map(function(item,i){
+    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem .6rem;background:var(--bg);border-radius:6px;margin-bottom:.4rem;font-size:13px;font-weight:500;">'+
+      '<span>'+esc(item)+'</span>'+
+      '<button class="btn btn-outline btn-sm" onclick="removeSettingsItem(\''+prefix+'\','+i+')" style="color:var(--red);font-size:10px;padding:2px 8px;">Remove</button>'+
+    '</div>';
+  }).join('');
+}
+
+function addProductType(){
+  var val=document.getElementById('new-ptype').value.trim();
+  if(!val){toast('Enter a product type name','error');return;}
+  if(adminSettings.productTypes.includes(val)){toast('Already exists','error');return;}
+  adminSettings.productTypes.push(val);
+  saveSettings();document.getElementById('new-ptype').value='';
+  loadSettings();updateProductFormDropdowns();
+  toast('Product type added');
+}
+
+function addCollection(){
+  var val=document.getElementById('new-collection').value.trim();
+  if(!val){toast('Enter a collection name','error');return;}
+  if(adminSettings.collections.includes(val)){toast('Already exists','error');return;}
+  adminSettings.collections.push(val);
+  saveSettings();document.getElementById('new-collection').value='';
+  loadSettings();updateProductFormDropdowns();
+  toast('Collection added');
+}
+
+function addTag(){
+  var val=document.getElementById('new-tag').value.trim();
+  if(!val){toast('Enter a tag name','error');return;}
+  if(adminSettings.tags.includes(val)){toast('Already exists','error');return;}
+  adminSettings.tags.push(val);
+  saveSettings();document.getElementById('new-tag').value='';
+  loadSettings();updateProductFormDropdowns();
+  toast('Tag added');
+}
+
+function removeSettingsItem(prefix,index){
+  if(prefix==='ptype'){
+    if(adminSettings.productTypes.length<=1){toast('Need at least one type','error');return;}
+    adminSettings.productTypes.splice(index,1);
+  } else if(prefix==='coll'){
+    if(adminSettings.collections.length<=1){toast('Need at least one collection','error');return;}
+    adminSettings.collections.splice(index,1);
+  } else if(prefix==='tag'){
+    adminSettings.tags.splice(index,1);
+  }
+  saveSettings();loadSettings();updateProductFormDropdowns();
+  toast('Removed');
+}
+
+function updateProductFormDropdowns(){
+  var typeEl=document.getElementById('mp-type');
+  var collEl=document.getElementById('mp-coll');
+  if(typeEl)typeEl.innerHTML=adminSettings.productTypes.map(function(t){return '<option value="'+esc(t)+'">'+esc(t)+'</option>';}).join('');
+  if(collEl)collEl.innerHTML=adminSettings.collections.map(function(c){return '<option value="'+esc(c)+'">'+esc(c)+'</option>';}).join('');
+  // Also update filter dropdowns
+  var tf=document.getElementById('prod-type-filter');
+  var cf=document.getElementById('prod-coll-filter');
+  if(tf)tf.innerHTML='<option value="">All Types</option>'+adminSettings.productTypes.map(function(t){return '<option>'+esc(t)+'</option>';}).join('');
+  if(cf)cf.innerHTML='<option value="">All Collections</option>'+adminSettings.collections.map(function(c){return '<option>'+esc(c)+'</option>';}).join('');
+  // Tags multi-select
+  var tagEl=document.getElementById('mp-tags');
+  if(tagEl)tagEl.innerHTML=adminSettings.tags.map(function(t){return '<option value="'+esc(t)+'">'+esc(t)+'</option>';}).join('');
+}
+
+// Load settings on init
+try{var s=localStorage.getItem('mjm_admin_settings');if(s)adminSettings=JSON.parse(s);}catch(e){}
+
+
+// Init
+document.addEventListener('DOMContentLoaded',function(){
+  checkAdmin();
+  document.querySelectorAll('.modal-overlay').forEach(function(m){m.addEventListener('click',function(e){if(e.target===m)m.classList.remove('open');});});
+});
+</script>
+
+<!-- ═══════════════════════════ JS: MODULES ═══════════════════════════ -->
+<script src="admin-orders.js"></script>
+<script src="admin-customers.js"></script>
+<script src="admin-products.js"></script>
+<script src="admin-promotions.js"></script>
+<script src="admin-coupons.js"></script>
+
+</body>
+</html>

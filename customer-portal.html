@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>MJM Nursery — Customer Portal</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="customer-portal-styles.css"/>
+</head>
+<body class="dot-bg">
+
+<!-- PORTAL PAGE (no login page — auth.html handles login) -->
+<div id="page-portal" class="page active dot-bg">
+  <!-- NAV -->
+  <nav class="portal-nav">
+    <div class="pn-left">
+      <div class="pn-brand-chip">🌿 MJM Nursery</div>
+      <div class="pn-title">Customer Portal</div>
+    </div>
+    <div class="pn-right">
+      <div class="pn-welcome">Welcome, <strong id="pn-user-name">Customer</strong></div>
+      <a href="index.html" style="font-size:.8rem;font-weight:600;color:var(--green);text-decoration:none;padding:.38rem 1rem;border:1.5px solid var(--green);border-radius:20px;transition:all .15s;">Shop</a>
+      <button class="btn-signout" onclick="doLogout()">Sign Out</button>
+    </div>
+  </nav>
+
+  <div class="portal-body">
+    <!-- STATS -->
+    <div class="section-label">Overview</div>
+    <div class="stats-row" id="stats-row"></div>
+
+    <!-- TABS -->
+    <div class="section-label">Modules</div>
+    <div class="portal-tabs">
+      <button class="ptab active" onclick="switchTab('orders',this)">📦 My Orders</button>
+      <button class="ptab" onclick="switchTab('collection',this)">📅 Collection</button>
+      <button class="ptab" onclick="switchTab('points',this)">⭐ My Points</button>
+      <button class="ptab" onclick="switchTab('vouchers',this)">🏷️ Vouchers</button>
+      <button class="ptab" onclick="switchTab('profile',this)">👤 Profile</button>
+    </div>
+
+    <!-- ORDERS -->
+    <div class="ptab-panel active" id="ptab-orders"><div id="orders-list"></div></div>
+    <!-- COLLECTION -->
+    <div class="ptab-panel" id="ptab-collection"><div id="coll-view"></div></div>
+    <!-- POINTS -->
+    <div class="ptab-panel" id="ptab-points"><div id="points-view"></div></div>
+    <!-- VOUCHERS -->
+    <div class="ptab-panel" id="ptab-vouchers"><div id="vouchers-view"></div></div>
+    <!-- PROFILE -->
+    <div class="ptab-panel" id="ptab-profile">
+      <div class="card"><h3>Account Details</h3>
+        <div class="profile-grid">
+          <div class="pg-item"><label>Full Name</label><input type="text" id="pf-name"/></div>
+          <div class="pg-item"><label>Company / Estate</label><input type="text" id="pf-company"/></div>
+          <div class="pg-item"><label>Email</label><input type="email" id="pf-email" readonly/></div>
+          <div class="pg-item"><label>Phone</label><input type="tel" id="pf-phone"/></div>
+          <div class="pg-item"><label>State</label><input type="text" id="pf-state"/></div>
+          <div class="pg-item"><label>Member Since</label><input type="text" id="pf-since" readonly/></div>
+        </div>
+      </div>
+      <div class="card"><h3>Billing Address</h3>
+        <div class="profile-grid">
+          <div class="pg-item" style="grid-column:1/-1"><label>Address Line 1</label><input type="text" id="pf-addr1"/></div>
+          <div class="pg-item" style="grid-column:1/-1"><label>Address Line 2</label><input type="text" id="pf-addr2"/></div>
+          <div class="pg-item"><label>City</label><input type="text" id="pf-city"/></div>
+          <div class="pg-item"><label>Postcode</label><input type="text" id="pf-post"/></div>
+          <div class="pg-item"><label>State</label><input type="text" id="pf-bstate"/></div>
+          <div class="pg-item"><label>Country</label><input type="text" id="pf-country" value="Malaysia"/></div>
+        </div>
+      </div>
+      <div class="card"><h3>Change Password</h3>
+        <div class="profile-grid">
+          <div class="pg-item"><label>Current Password</label><input type="password" placeholder="Current password"/></div>
+          <div class="pg-item"><label>New Password</label><input type="password" placeholder="New password"/></div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:.5rem;">
+        <button class="btn-primary" onclick="saveProfile()">💾 Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CONSENT MODAL -->
+<div class="modal-overlay" id="consent-modal">
+  <div class="modal-box" style="max-width:560px">
+    <div class="modal-header">
+      <h3>📋 Collection Consent Form</h3>
+      <button class="modal-close" onclick="closeConsentModal()">✕</button>
+    </div>
+    <p style="font-size:.82rem;color:var(--ink2);margin-bottom:1rem;line-height:1.6;">Please read and sign the consent form below before proceeding to book your collection date.</p>
+    <div class="consent-body">
+      <h4>MJM Nursery — Collection Terms & Conditions</h4>
+      <p><strong>1. Collection Responsibility.</strong> The customer is solely responsible for arranging adequate transportation to collect the seedlings from MJM Nursery on the booked date and time.</p>
+      <p><strong>2. Seedling Condition.</strong> MJM Nursery guarantees seedlings are in healthy condition at time of collection.</p>
+      <p><strong>3. Quantity Verification.</strong> The customer must verify the quantity received at the time of collection and sign the delivery order (DO).</p>
+      <p><strong>4. Changes & Cancellations.</strong> Booking date changes require a minimum of 48 hours' notice.</p>
+      <p><strong>5. Access & Safety.</strong> The customer's driver and staff must adhere to nursery safety guidelines while on premises.</p>
+      <p><strong>6. Force Majeure.</strong> MJM Nursery reserves the right to reschedule collections in the event of extreme weather or other circumstances beyond our control.</p>
+    </div>
+    <label class="consent-check">
+      <input type="checkbox" id="consent-chk" onchange="checkConsentReady()"/>
+      <span class="consent-check-label">I have read and agree to the MJM Nursery Collection Terms & Conditions stated above.</span>
+    </label>
+    <div class="consent-sign-area">
+      <label>Your Signature</label>
+      <div class="sign-canvas-wrap">
+        <canvas id="sign-canvas"></canvas>
+        <button class="sign-clear" onclick="clearSignature()">Clear</button>
+      </div>
+      <p style="font-size:.7rem;color:var(--ink4);margin-top:.35rem;">Draw your signature above using mouse or touch.</p>
+    </div>
+    <button class="btn-primary" id="consent-submit-btn" onclick="submitConsent()" disabled style="width:100%">✍️ Sign & Proceed to Booking</button>
+  </div>
+</div>
+
+<!-- ATTACHMENT MODAL -->
+<div class="modal-overlay" id="att-modal">
+  <div class="modal-box" style="max-width:460px">
+    <div class="modal-header">
+      <h3 id="att-modal-title">Attachments</h3>
+      <button class="modal-close" onclick="closeModal('att-modal')">✕</button>
+    </div>
+    <div id="att-modal-body"></div>
+  </div>
+</div>
+
+<!-- RATING MODAL -->
+<div class="modal-overlay" id="rating-modal">
+  <div class="modal-box" style="max-width:460px;text-align:center;">
+    <div class="modal-header" style="justify-content:center;position:relative;">
+      <h3>🌟 Rate Your Experience</h3>
+      <button class="modal-close" onclick="closeModal('rating-modal')" style="position:absolute;right:0;top:0;">✕</button>
+    </div>
+    <div id="rating-order-info" style="font-size:.82rem;color:var(--ink3);margin-bottom:1.2rem;"></div>
+    <p style="font-size:.88rem;color:var(--ink2);margin-bottom:1.4rem;line-height:1.6;">How would you rate our <strong>products & services</strong> for this order?</p>
+    <div class="star-row" id="star-row">
+      <span class="star" data-val="1" onclick="setRating(1)">☆</span>
+      <span class="star" data-val="2" onclick="setRating(2)">☆</span>
+      <span class="star" data-val="3" onclick="setRating(3)">☆</span>
+      <span class="star" data-val="4" onclick="setRating(4)">☆</span>
+      <span class="star" data-val="5" onclick="setRating(5)">☆</span>
+    </div>
+    <div class="star-label" id="star-label">Tap a star to rate</div>
+    <textarea id="rating-comment" class="rating-textarea" placeholder="Leave a comment (optional)…"></textarea>
+    <button class="btn-primary" id="rating-submit-btn" onclick="submitRating()" disabled style="width:100%;margin-top:.8rem;">Submit Review</button>
+    <button onclick="closeModal('rating-modal')" style="background:none;border:none;color:var(--ink3);font-size:.8rem;cursor:pointer;margin-top:.6rem;display:block;width:100%;">Skip for now</button>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script src="customer-portal-script.js"></script>
+</body>
+</html>

@@ -2,7 +2,7 @@
 ═══════════════════════════════════════════════════
   MJM NURSERY — CHECKOUT / PAYMENT PAGE
   Cart data loaded from sessionStorage (mjm_cart)
-  After payment: creates order in customer_orders + order_items
+  After payment: creates order in salesweb_customer_orders + salesweb_order_items
 ═══════════════════════════════════════════════════
 -->
 <!DOCTYPE html>
@@ -400,7 +400,7 @@ var selectedPayMethod='';
     if(user.phone)document.getElementById('ck-phone').value=user.phone;
     if(!name||!user.phone){
       try{
-        var{data:prof}=await _sb.from('profiles').select('full_name,phone').eq('id',user.id).single();
+        var{data:prof}=await _sb.from('shared_profiles').select('full_name,phone').eq('id',user.id).single();
         if(prof){
           if(prof.full_name&&!document.getElementById('ck-contact-name').value)document.getElementById('ck-contact-name').value=prof.full_name;
           if(prof.phone&&!document.getElementById('ck-phone').value)document.getElementById('ck-phone').value=prof.phone;
@@ -417,7 +417,7 @@ async function loadPointsBalance(){
   if(!userId)return;
   // Try to get points from a points/rewards table (fallback to 0)
   try{
-    var{data}=await _sb.from('customer_points').select('balance').eq('user_id',userId).single();
+    var{data}=await _sb.from('salesweb_customer_points').select('balance').eq('user_id',userId).single();
     if(data&&data.balance>0){
       pointsBalance=data.balance;
       document.getElementById('points-section').style.display='block';
@@ -479,7 +479,7 @@ async function applyVoucher(){
   var btn=document.getElementById('btn-voucher');
   btn.disabled=true;btn.textContent='Checking...';
   // Look up voucher in coupons table
-  var{data,error}=await _sb.from('coupons').select('*').eq('code',code).single();
+  var{data,error}=await _sb.from('salesweb_coupons').select('*').eq('code',code).single();
   btn.disabled=false;btn.textContent='Apply';
   if(error||!data){msg.className='promo-msg err';msg.textContent='Invalid voucher code';voucherDiscount=0;voucherCode='';updateSummary();return;}
   // Check if active and not expired
@@ -540,7 +540,7 @@ async function loadSavedBilling(){
   var session=await _sb.auth.getSession();
   var userId=session?.data?.session?.user?.id;
   if(!userId)return;
-  var{data}=await _sb.from('billing_info').select('*').eq('user_id',userId).order('created_at',{ascending:true});
+  var{data}=await _sb.from('salesweb_billing_info').select('*').eq('user_id',userId).order('created_at',{ascending:true});
   if(!data||!data.length)return;
   savedBilling=data;
   renderSavedBilling();
@@ -635,7 +635,7 @@ async function saveNewBilling(){
     row.mpob_license=document.getElementById('ck-co-mpob').value.trim()||null;
   }
 
-  var{data,error}=await _sb.from('billing_info').insert([row]).select();
+  var{data,error}=await _sb.from('salesweb_billing_info').insert([row]).select();
   btn.disabled=false;btn.textContent='Save Billing Info';
   if(error){showToast('Error saving: '+error.message);return;}
   if(data&&data[0]){
@@ -738,7 +738,7 @@ async function placeOrder(){
 
   // Save phone to profile for future use
   if(userId&&phone){
-    _sb.from('profiles').update({phone:phone}).eq('id',userId).then(function(res){
+    _sb.from('shared_profiles').update({phone:phone}).eq('id',userId).then(function(res){
       if(res.error)console.error('Phone save error:',res.error.message);
     });
   }
@@ -769,7 +769,7 @@ async function placeOrder(){
   var order=null,error=null,orderNum='';
   for(var attempt=0;attempt<5;attempt++){
     orderNum=genOrderNumber();
-    var result=await _sb.from('customer_orders').insert([{
+    var result=await _sb.from('salesweb_customer_orders').insert([{
       order_number:orderNum,
       customer_id:userId,
       customer_name:contactName,
@@ -792,7 +792,7 @@ async function placeOrder(){
   var items=cart.map(function(c){
     return{order_id:order.id,product_id:c.id,product_name:c.name+(c.month?' — '+c.month:''),quantity:c.qty,unit_price:c.price,subtotal:c.price*c.qty};
   });
-  await _sb.from('order_items').insert(items);
+  await _sb.from('salesweb_order_items').insert(items);
 
   // Deduct stock for each item (hold stock)
   for(var i=0;i<cart.length;i++){
@@ -800,18 +800,18 @@ async function placeOrder(){
       var{error:rpcErr}=await _sb.rpc('hold_product_stock',{p_product_id:cart[i].id,p_qty:cart[i].qty});
       if(rpcErr){
         // Fallback: direct stock_qty deduction
-        var{data:prod}=await _sb.from('products').select('stock_qty').eq('id',cart[i].id).single();
-        if(prod){await _sb.from('products').update({stock_qty:Math.max(0,(prod.stock_qty||0)-cart[i].qty),updated_at:new Date().toISOString()}).eq('id',cart[i].id);}
+        var{data:prod}=await _sb.from('salesweb_products').select('stock_qty').eq('id',cart[i].id).single();
+        if(prod){await _sb.from('salesweb_products').update({stock_qty:Math.max(0,(prod.stock_qty||0)-cart[i].qty),updated_at:new Date().toISOString()}).eq('id',cart[i].id);}
       }
     }catch(e){
       // Fallback: direct stock_qty deduction
-      var{data:prod}=await _sb.from('products').select('stock_qty').eq('id',cart[i].id).single();
-      if(prod){await _sb.from('products').update({stock_qty:Math.max(0,(prod.stock_qty||0)-cart[i].qty),updated_at:new Date().toISOString()}).eq('id',cart[i].id);}
+      var{data:prod}=await _sb.from('salesweb_products').select('stock_qty').eq('id',cart[i].id).single();
+      if(prod){await _sb.from('salesweb_products').update({stock_qty:Math.max(0,(prod.stock_qty||0)-cart[i].qty),updated_at:new Date().toISOString()}).eq('id',cart[i].id);}
     }
   }
 
   // Create timeline entry
-  await _sb.from('order_timeline').insert([{order_id:order.id,status:'Order Placed',note:'Order placed by customer',changed_by:email}]);
+  await _sb.from('salesweb_order_timeline').insert([{order_id:order.id,status:'Order Placed',note:'Order placed by customer',changed_by:email}]);
 
   // Clear cart
   sessionStorage.removeItem('mjm_cart');

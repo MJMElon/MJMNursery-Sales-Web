@@ -12,7 +12,7 @@
 
 async function loadCustomers(){
   var q=(document.getElementById('cust-search').value||'').trim().toLowerCase();
-  var{data,error}=await sb.from('profiles').select('*').order('created_at',{ascending:false});
+  var{data,error}=await sb.from('shared_profiles').select('*').order('created_at',{ascending:false});
   if(error){toast('Error: '+error.message,'error');return;}
   var custs=data||[];
   if(q)custs=custs.filter(function(c){return(c.full_name||'').toLowerCase().includes(q)||(c.email||'').toLowerCase().includes(q);});
@@ -50,7 +50,7 @@ var pointsConfig={earn_rm:1,earn_pts:1,redeem_pts:100,redeem_rm:1};
 
 async function loadPointsSettings(){
   // Load from Supabase (settings table or use a simple key-value approach)
-  var{data}=await sb.from('app_settings').select('*').eq('key','points_config').single();
+  var{data}=await sb.from('salesweb_app_settings').select('*').eq('key','points_config').single();
   if(data&&data.value){
     try{pointsConfig=JSON.parse(data.value);}catch(e){}
   }
@@ -100,7 +100,7 @@ async function savePointsSettings(){
     redeem_pts:parseInt(document.getElementById('pts-redeem-pts').value)||100,
     redeem_rm:parseFloat(document.getElementById('pts-redeem-rm').value)||1
   };
-  var{error}=await sb.from('app_settings').upsert({key:'points_config',value:JSON.stringify(config),updated_at:new Date().toISOString()},{onConflict:'key'});
+  var{error}=await sb.from('salesweb_app_settings').upsert({key:'points_config',value:JSON.stringify(config),updated_at:new Date().toISOString()},{onConflict:'key'});
   if(error){toast('Error: '+error.message,'error');return;}
 
   // Log change to history
@@ -112,12 +112,12 @@ async function savePointsSettings(){
   if(config.redeem_pts!==oldConfig.redeem_pts||config.redeem_rm!==oldConfig.redeem_rm)changes.push('Redemption: '+config.redeem_pts+'pts=RM'+config.redeem_rm+' (was '+oldConfig.redeem_pts+'pts=RM'+oldConfig.redeem_rm+')');
   if(changes.length){
     // Load existing history and append
-    var{data:histData}=await sb.from('app_settings').select('value').eq('key','points_history').single();
+    var{data:histData}=await sb.from('salesweb_app_settings').select('value').eq('key','points_history').single();
     var history=[];
     if(histData&&histData.value){try{history=JSON.parse(histData.value);}catch(e){}}
     history.unshift({date:new Date().toISOString(),by:user,changes:changes.join('; ')});
     if(history.length>20)history=history.slice(0,20); // Keep last 20
-    await sb.from('app_settings').upsert({key:'points_history',value:JSON.stringify(history)},{onConflict:'key'});
+    await sb.from('salesweb_app_settings').upsert({key:'points_history',value:JSON.stringify(history)},{onConflict:'key'});
   }
 
   pointsConfig=config;
@@ -128,7 +128,7 @@ async function savePointsSettings(){
 }
 
 async function loadPointsHistory(){
-  var{data}=await sb.from('app_settings').select('value').eq('key','points_history').single();
+  var{data}=await sb.from('salesweb_app_settings').select('value').eq('key','points_history').single();
   var el=document.getElementById('pts-history');
   var history=[];
   if(data&&data.value){try{history=JSON.parse(data.value);}catch(e){}}
@@ -171,7 +171,7 @@ async function loadPointsStats(){
     document.getElementById('pts-date-to').value=to;
   }
 
-  var query=sb.from('customer_orders').select('points_issued,total,status,created_at').not('status','eq','Cancelled');
+  var query=sb.from('salesweb_customer_orders').select('points_issued,total,status,created_at').not('status','eq','Cancelled');
   if(from)query=query.gte('created_at',from+'T00:00:00');
   if(to)query=query.lte('created_at',to+'T23:59:59');
   var{data:orders}=await query;
@@ -199,7 +199,7 @@ async function loadPointsStats(){
 var tiersData=[];
 
 async function loadTiers(){
-  var{data}=await sb.from('app_settings').select('*').eq('key','member_tiers').single();
+  var{data}=await sb.from('salesweb_app_settings').select('*').eq('key','member_tiers').single();
   if(data&&data.value){
     try{tiersData=JSON.parse(data.value);}catch(e){tiersData=[];}
   }
@@ -238,7 +238,7 @@ function addTierRow(){
 async function saveTiers(){
   // Sort by min_points ascending
   tiersData.sort(function(a,b){return a.min_points-b.min_points;});
-  var{error}=await sb.from('app_settings').upsert({key:'member_tiers',value:JSON.stringify(tiersData)},{onConflict:'key'});
+  var{error}=await sb.from('salesweb_app_settings').upsert({key:'member_tiers',value:JSON.stringify(tiersData)},{onConflict:'key'});
   if(error){toast('Error: '+error.message,'error');return;}
   renderTiers();
   toast('Member tiers saved');
@@ -253,9 +253,9 @@ document.addEventListener('DOMContentLoaded',function(){
 });
 
 async function viewCustomer(id){
-  var{data:c}=await sb.from('profiles').select('*').eq('id',id).single();
+  var{data:c}=await sb.from('shared_profiles').select('*').eq('id',id).single();
   if(!c){toast('Customer not found','error');return;}
-  var{data:orders}=await sb.from('customer_orders').select('*').eq('customer_id',id).order('created_at',{ascending:false});
+  var{data:orders}=await sb.from('salesweb_customer_orders').select('*').eq('customer_id',id).order('created_at',{ascending:false});
   orders=orders||[];
 
   // Calculate stats
@@ -268,7 +268,7 @@ async function viewCustomer(id){
   // Determine tier
   var tiers=[{name:'Bronze',min_points:0,color:'#CD7F32'}];
   try{
-    var{data:tiersData}=await sb.from('app_settings').select('value').eq('key','member_tiers').single();
+    var{data:tiersData}=await sb.from('salesweb_app_settings').select('value').eq('key','member_tiers').single();
     if(tiersData&&tiersData.value)tiers=JSON.parse(tiersData.value);
   }catch(e){}
   tiers.sort(function(a,b){return b.min_points-a.min_points;});
@@ -379,7 +379,7 @@ async function resetCustomerPassword(email){
 
 async function deleteCustomer(id){
   if(!confirm('Are you sure you want to delete this customer? This cannot be undone.'))return;
-  await sb.from('profiles').delete().eq('id',id);
+  await sb.from('shared_profiles').delete().eq('id',id);
   toast('Customer deleted');
   closeModal('modal-customer');
   loadCustomers();

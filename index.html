@@ -1494,13 +1494,13 @@ let cartCount = 0;
 
 // Fetch published products from Supabase
 async function fetchProducts() {
-  var { data, error } = await _sb.from('products').select('*')
+  var { data, error } = await _sb.from('salesweb_products').select('*')
     .eq('is_published', true).eq('is_active', true)
     .order('sort_order', { ascending: true, nullsFirst: false }).order('sell_year', { ascending: true }).order('sell_month', { ascending: true });
 
   // Fallback if sort_order column doesn't exist yet
   if (error) {
-    var res = await _sb.from('products').select('*')
+    var res = await _sb.from('salesweb_products').select('*')
       .eq('is_published', true).eq('is_active', true)
       .order('sell_year', { ascending: true }).order('sell_month', { ascending: true });
     data = res.data; error = res.error;
@@ -1806,7 +1806,7 @@ async function saveProfileDetails(){
     if(name)updates.full_name=name;
     if(phone)updates.phone=phone;
     if(Object.keys(updates).length){
-      await _sb.from('profiles').update(updates).eq('id',uid);
+      await _sb.from('shared_profiles').update(updates).eq('id',uid);
       // Also update auth metadata for name
       if(name)await _sb.auth.updateUser({data:{full_name:name}});
       sessionStorage.setItem('mjm_user_name',name);
@@ -1824,7 +1824,7 @@ async function initPortal(){
     var sess=await _sb.auth.getSession();
     var uid=sess?.data?.session?.user?.id;
     if(uid){
-      var{data:prof}=await _sb.from('profiles').select('phone').eq('id',uid).single();
+      var{data:prof}=await _sb.from('shared_profiles').select('phone').eq('id',uid).single();
       if(prof&&prof.phone){document.getElementById('pf-phone2').value=prof.phone;}
     }
   }catch(e){console.error('Phone load:',e);}
@@ -1847,12 +1847,12 @@ async function loadCustomerOrders(){
   var session=await _sb.auth.getSession();
   var userId=session?.data?.session?.user?.id;
   if(!userId)return;
-  var{data:orders,error:ordErr}=await _sb.from('customer_orders').select('*').eq('customer_id',userId).order('created_at',{ascending:false});
+  var{data:orders,error:ordErr}=await _sb.from('salesweb_customer_orders').select('*').eq('customer_id',userId).order('created_at',{ascending:false});
   if(ordErr){console.error('Orders load error:',ordErr);}
   if(!orders||!orders.length){P_ORDERS=[];return;}
   // Load order items for each order
   var orderIds=orders.map(function(o){return o.id;});
-  var{data:items}=await _sb.from('order_items').select('*').in('order_id',orderIds);
+  var{data:items}=await _sb.from('salesweb_order_items').select('*').in('order_id',orderIds);
   var itemsByOrder={};
   if(items)items.forEach(function(it){if(!itemsByOrder[it.order_id])itemsByOrder[it.order_id]=[];itemsByOrder[it.order_id].push(it);});
   // Map to P_ORDERS format
@@ -1862,14 +1862,14 @@ async function loadCustomerOrders(){
   var attachmentsByOrder={};
   try{
     if(orderNumbers.length){
-      var{data:dos}=await _sb.from('do_records').select('*').in('al_number',orderNumbers).order('created_at',{ascending:false});
+      var{data:dos}=await _sb.from('shared_do_records').select('*').in('al_number',orderNumbers).order('created_at',{ascending:false});
       if(dos)dos.forEach(function(d){if(!dosByAL[d.al_number])dosByAL[d.al_number]=[];dosByAL[d.al_number].push(d);});
     }
   }catch(e){console.error('DO load error:',e);}
   // Load order attachments
   try{
     if(orderIds.length){
-      var{data:atts}=await _sb.from('order_attachments').select('*').in('order_id',orderIds).order('created_at',{ascending:false});
+      var{data:atts}=await _sb.from('salesweb_order_attachments').select('*').in('order_id',orderIds).order('created_at',{ascending:false});
       if(atts)atts.forEach(function(a){if(!attachmentsByOrder[a.order_id])attachmentsByOrder[a.order_id]=[];attachmentsByOrder[a.order_id].push(a);});
     }
   }catch(e){console.error('Attachments load error:',e);}
@@ -1877,7 +1877,7 @@ async function loadCustomerOrders(){
   var timelinesByOrder={};
   try{
     if(orderIds.length){
-      var{data:tl}=await _sb.from('order_timeline').select('*').in('order_id',orderIds).order('created_at',{ascending:true});
+      var{data:tl}=await _sb.from('salesweb_order_timeline').select('*').in('order_id',orderIds).order('created_at',{ascending:true});
       if(tl)tl.forEach(function(t){if(!timelinesByOrder[t.order_id])timelinesByOrder[t.order_id]=[];timelinesByOrder[t.order_id].push(t);});
     }
   }catch(e){console.error('Timeline load error:',e);}
@@ -2211,12 +2211,12 @@ async function loadCustomerPoints(){
   // Load points config from app_settings
   var tiers=[{name:'Bronze',min_points:0,color:'#CD7F32'}];
   try{
-    var{data:tiersData}=await _sb.from('app_settings').select('value').eq('key','member_tiers').single();
+    var{data:tiersData}=await _sb.from('salesweb_app_settings').select('value').eq('key','member_tiers').single();
     if(tiersData&&tiersData.value)tiers=JSON.parse(tiersData.value);
   }catch(e){}
 
   // Calculate total earned from customer_orders.points_issued
-  var{data:orders}=await _sb.from('customer_orders').select('points_issued').eq('customer_id',uid);
+  var{data:orders}=await _sb.from('salesweb_customer_orders').select('points_issued').eq('customer_id',uid);
   var totalEarned=0;
   if(orders)orders.forEach(function(o){totalEarned+=(o.points_issued||0);});
 
@@ -2321,7 +2321,7 @@ async function clPostLogin(session) {
   document.getElementById('nav-myaccount').textContent = 'Hi, ' + name.split(' ')[0];
   document.getElementById('nav-signout').style.display = 'inline';
   // Check role
-  var { data: profile } = await _sb.from('profiles').select('role').eq('id', session.user.id).single();
+  var { data: profile } = await _sb.from('shared_profiles').select('role').eq('id', session.user.id).single();
   var role = (profile && profile.role) || 'customer';
   if (role === 'admin') {
     setTimeout(function() { window.location.href = 'admin.html'; }, 800);
@@ -2347,14 +2347,14 @@ async function clLoginPassword() {
         if (retryErr) { clShowStatus(retryErr.message, 'error'); return; }
         // Manually create profile row
         if (retryData && retryData.user) {
-          await _sb.from('profiles').upsert({ id: retryData.user.id, email: identity, full_name: name, role: 'customer' }, { onConflict: 'id' });
+          await _sb.from('shared_profiles').upsert({ id: retryData.user.id, email: identity, full_name: name, role: 'customer' }, { onConflict: 'id' });
         }
       } else {
         clShowStatus(error.message, 'error'); return;
       }
     } else if (signUpData && signUpData.user) {
       // Ensure profile exists (trigger may or may not have created it)
-      await _sb.from('profiles').upsert({ id: signUpData.user.id, email: identity, full_name: name, role: 'customer' }, { onConflict: 'id' });
+      await _sb.from('shared_profiles').upsert({ id: signUpData.user.id, email: identity, full_name: name, role: 'customer' }, { onConflict: 'id' });
     }
     clShowStatus('Account created! You can now sign in.', 'success');
     clToggleSignup();
@@ -2512,22 +2512,22 @@ async function saveBillingToDb(entry){
     company_reg:entry.reg||null, contact_name:entry.contact||null, contact_phone:entry.contactPhone||null
   };
   if(entry.dbId){
-    await _sb.from('billing_info').update(row).eq('id',entry.dbId);
+    await _sb.from('salesweb_billing_info').update(row).eq('id',entry.dbId);
   } else {
-    var{data}=await _sb.from('billing_info').insert([row]).select();
+    var{data}=await _sb.from('salesweb_billing_info').insert([row]).select();
     if(data&&data[0])entry.dbId=data[0].id;
   }
 }
 
 async function deleteBillingFromDb(dbId){
-  if(dbId)await _sb.from('billing_info').delete().eq('id',dbId);
+  if(dbId)await _sb.from('salesweb_billing_info').delete().eq('id',dbId);
 }
 
 async function loadBillingFromDb(){
   var session=await _sb.auth.getSession();
   var userId=session?.data?.session?.user?.id;
   if(!userId){loadBillingFromStorage();return;}
-  var{data}=await _sb.from('billing_info').select('*').eq('user_id',userId).order('created_at',{ascending:true});
+  var{data}=await _sb.from('salesweb_billing_info').select('*').eq('user_id',userId).order('created_at',{ascending:true});
   if(data&&data.length){
     billingEntries=data.map(function(r,i){
       var e={id:Date.now()+i,dbId:r.id,type:r.type,name:r.name,tin:r.tin||'',mpob:r.mpob_license||''};

@@ -1,0 +1,92 @@
+--- a/index.html
++++ b/index.html
+@@ -1494,13 +1494,13 @@
+
+ // Fetch published products from Supabase
+ async function fetchProducts() {
+-  var { data, error } = await _sb.from('products').select('*')
++  var { data, error } = await _sb.from('salesweb_products').select('*')
+     .eq('is_published', true).eq('is_active', true)
+     .order('sort_order', { ascending: true, nullsFirst: false }).order('sell_year', { ascending: true }).order('sell_month', { ascending: true });
+
+   // Fallback if sort_order column doesn't exist yet
+   if (error) {
+-    var res = await _sb.from('products').select('*')
++    var res = await _sb.from('salesweb_products').select('*')
+       .eq('is_published', true).eq('is_active', true)
+       .order('sell_year', { ascending: true }).order('sell_month', { ascending: true });
+     data = res.data; error = res.error;
+@@ -1806,7 +1806,7 @@
+     if(name)updates.full_name=name;
+     if(phone)updates.phone=phone;
+     if(Object.keys(updates).length){
+-      await _sb.from('profiles').update(updates).eq('id',uid);
++      await _sb.from('shared_profiles').update(updates).eq('id',uid);
+       // Also update auth metadata for name
+       if(name)await _sb.auth.updateUser({data:{full_name:name}});
+       sessionStorage.setItem('mjm_user_name',name);
+@@ -1824,7 +1824,7 @@
+     var sess=await _sb.auth.getSession();
+     var uid=sess?.data?.session?.user?.id;
+     if(uid){
+-      var{data:prof}=await _sb.from('profiles').select('phone').eq('id',uid).single();
++      var{data:prof}=await _sb.from('shared_profiles').select('phone').eq('id',uid).single();
+       if(prof&&prof.phone){document.getElementById('pf-phone2').value=prof.phone;}
+     }
+   }catch(e){console.error('Phone load:',e);}
+@@ -1847,12 +1847,12 @@
+   var session=await _sb.auth.getSession();
+   var userId=session?.data?.session?.user?.id;
+   if(!userId)return;
+-  var{data:orders,error:ordErr}=await _sb.from('customer_orders').select('*').eq('customer_id',userId).order('created_at',{ascending:false});
++  var{data:orders,error:ordErr}=await _sb.from('salesweb_customer_orders').select('*').eq('customer_id',userId).order('created_at',{ascending:false});
+   if(ordErr){console.error('Orders load error:',ordErr);}
+   if(!orders||!orders.length){P_ORDERS=[];return;}
+   // Load order items for each order
+   var orderIds=orders.map(function(o){return o.id;});
+-  var{data:items}=await _sb.from('order_items').select('*').in('order_id',orderIds);
++  var{data:items}=await _sb.from('salesweb_order_items').select('*').in('order_id',orderIds);
+   var itemsByOrder={};
+   if(items)items.forEach(function(it){if(!itemsByOrder[it.order_id])itemsByOrder[it.order_id]=[];itemsByOrder[it.order_id].push(it);});
+   // Map to P_ORDERS format
+@@ -1862,14 +1862,14 @@
+   var attachmentsByOrder={};
+   try{
+     if(orderIds.length){
+-      var{data:dos}=await _sb.from('do_records').select('*').in('al_number',orderNumbers).order('created_at',{ascending:false});
++      var{data:dos}=await _sb.from('shared_do_records').select('*').in('al_number',orderNumbers).order('created_at',{ascending:false});
+       if(dos)dos.forEach(function(d){if(!dosByAL[d.al_number])dosByAL[d.al_number]=[];dosByAL[d.al_number].push(d);});
+     }
+   }catch(e){console.error('DO load error:',e);}
+   // Load order attachments
+   try{
+     if(orderIds.length){
+-      var{data:atts}=await _sb.from('order_attachments').select('*').in('order_id',orderIds).order('created_at',{ascending:false});
++      var{data:atts}=await _sb.from('salesweb_order_attachments').select('*').in('order_id',orderIds).order('created_at',{ascending:false});
+       if(atts)atts.forEach(function(a){if(!attachmentsByOrder[a.order_id])attachmentsByOrder[a.order_id]=[];attachmentsByOrder[a.order_id].push(a);});
+     }
+   }catch(e){console.error('Attachments load error:',e);}
+@@ -1877,7 +1877,7 @@
+   var timelinesByOrder={};
+   try{
+     if(orderIds.length){
+-      var{data:tl}=await _sb.from('order_timeline').select('*').in('order_id',orderIds).order('created_at',{ascending:true});
++      var{data:tl}=await _sb.from('salesweb_order_timeline').select('*').in('order_id',orderIds).order('created_at',{ascending:true});
+       if(tl)tl.forEach(function(t){if(!timelinesByOrder[t.order_id])timelinesByOrder[t.order_id]=[];timelinesByOrder[t.order_id].push(t);});
+     }
+   }catch(e){console.error('Timeline load error:',e);}
+@@ -2211,12 +2211,12 @@
+   // Load points config from app_settings
+   var tiers=[{name:'Bronze',min_points:0,color:'#CD7F32'}];
+   try{
+-    var{data:tiersData}=await _sb.from('app_settings').select('value').eq('key','member_tiers').single();
++    var{data:tiersData}=await _sb.from('salesweb_app_settings').select('value').eq('key','member_tiers').single();
+     if(tiersData&&tiersData.value)tiers=JSON.parse(tiersData.value);
+   }catch(e){}
+
+   // Calculate total earned from customer_orders.points_issued
+-  var{data:orders}=await _sb.from('customer_orders').select('points_issued').eq('customer_id',uid);
++  var{data:orders}=await _sb.from('salesweb_customer_orders').select('points_issued').eq('customer_id',uid);
+   var totalEarned=0;
+   var totalRedeemed=0;
+   var pointsUsedByOrder={};

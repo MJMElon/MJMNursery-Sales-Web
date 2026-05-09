@@ -434,16 +434,16 @@ async function handlePostLogin(session){
   var role=(profile&&profile.role)||'customer';
 
   if(role==='admin'){
-    setTimeout(function(){window.location.href='admin.html';},800);
+    window.location.href='admin.html';
   } else {
     sessionStorage.setItem('mjm_last_page','portal');
-    setTimeout(function(){window.location.href='index.html';},800);
+    window.location.href='index.html';
   }
 }
 
 // ── Auth state ──
 var pageLoaded=false;
-setTimeout(function(){pageLoaded=true;},2000); // ignore auth events for first 2 seconds (existing session)
+setTimeout(function(){pageLoaded=true;},300); // ignore auth events for first 300ms only
 
 _supabase.auth.onAuthStateChange(async function(event,session){
   if(event==='PASSWORD_RECOVERY'){

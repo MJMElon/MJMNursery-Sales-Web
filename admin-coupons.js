@@ -15,7 +15,7 @@
 
 async function loadCoupons(){
   var q=(document.getElementById('coupon-search').value||'').trim().toLowerCase();
-  var{data,error}=await sb.from('coupons').select('*').order('created_at',{ascending:false});
+  var{data,error}=await sb.from('salesweb_coupons').select('*').order('created_at',{ascending:false});
   if(error){toast('Error: '+error.message,'error');return;}
   var coupons=data||[];
   if(q)coupons=coupons.filter(function(c){return(c.code||'').toLowerCase().includes(q);});
@@ -45,18 +45,18 @@ function openCouponForm(c){
   openModal('modal-coupon');
 }
 
-async function editCoupon(id){var{data}=await sb.from('coupons').select('*').eq('id',id).single();if(data)openCouponForm(data);}
+async function editCoupon(id){var{data}=await sb.from('salesweb_coupons').select('*').eq('id',id).single();if(data)openCouponForm(data);}
 
 async function saveCoupon(){
   var id=document.getElementById('mc-id').value;
   var row={code:document.getElementById('mc-code').value.trim().toUpperCase(),discount_type:document.getElementById('mc-dtype').value,discount_value:parseFloat(document.getElementById('mc-dval').value)||0,min_order_value:parseFloat(document.getElementById('mc-min').value)||0,usage_limit:parseInt(document.getElementById('mc-limit').value)||0,expiry_date:document.getElementById('mc-expiry').value||null,is_active:document.getElementById('mc-active').checked};
   if(!row.code){toast('Coupon code required','error');return;}
-  var{error}=id?await sb.from('coupons').update(row).eq('id',id):await sb.from('coupons').insert([row]);
+  var{error}=id?await sb.from('salesweb_coupons').update(row).eq('id',id):await sb.from('salesweb_coupons').insert([row]);
   if(error){toast('Error: '+error.message,'error');return;}
   toast(id?'Coupon updated':'Coupon created');closeModal('modal-coupon');loadCoupons();
 }
 
 async function toggleCoupon(id,active){
-  await sb.from('coupons').update({is_active:active}).eq('id',id);
+  await sb.from('salesweb_coupons').update({is_active:active}).eq('id',id);
   toast(active?'Coupon activated':'Coupon deactivated');loadCoupons();
 }

@@ -13,7 +13,7 @@
 */
 
 async function loadPromos(){
-  var{data,error}=await sb.from('promotions').select('*').order('created_at',{ascending:false});
+  var{data,error}=await sb.from('salesweb_promotions').select('*').order('created_at',{ascending:false});
   if(error){toast('Error: '+error.message,'error');return;}
   var promos=data||[];
   if(!promos.length){document.getElementById('promos-table').innerHTML='<div class="loading">No promotions</div>';return;}
@@ -44,13 +44,13 @@ function openPromoForm(p){
   openModal('modal-promo');
 }
 
-async function editPromo(id){var{data}=await sb.from('promotions').select('*').eq('id',id).single();if(data)openPromoForm(data);}
+async function editPromo(id){var{data}=await sb.from('salesweb_promotions').select('*').eq('id',id).single();if(data)openPromoForm(data);}
 
 async function savePromo(){
   var id=document.getElementById('mpr-id').value;
   var row={title:document.getElementById('mpr-name').value.trim(),description:document.getElementById('mpr-desc').value.trim(),discount_type:document.getElementById('mpr-dtype').value,discount_value:parseFloat(document.getElementById('mpr-dval').value)||0,target:document.getElementById('mpr-target').value,target_detail:document.getElementById('mpr-tdetail').value.trim(),start_date:document.getElementById('mpr-start').value||null,end_date:document.getElementById('mpr-end').value||null,is_active:document.getElementById('mpr-active').checked};
   if(!row.title){toast('Title required','error');return;}
-  var{error}=id?await sb.from('promotions').update(row).eq('id',id):await sb.from('promotions').insert([row]);
+  var{error}=id?await sb.from('salesweb_promotions').update(row).eq('id',id):await sb.from('salesweb_promotions').insert([row]);
   if(error){toast('Error: '+error.message,'error');return;}
   toast(id?'Promotion updated':'Promotion created');closeModal('modal-promo');loadPromos();
 }

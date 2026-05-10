@@ -2,7 +2,8 @@
 ═══════════════════════════════════════════════════════════════
   MJM NURSERY — ADMIN PORTAL (shell + settings)
   ⚠️ AI: This is the main shell. Module JS is in separate files.
-  Auth via auth.html → checks profiles.role = 'admin' on load.
+  Auth via auth.html → admits users with shared_profiles.permissions
+  .modules.salesweb in ('admin','normal'), or legacy role='admin'.
 
   📁 ADMIN FILE MAP:
   ├── admin.html              ← THIS FILE (shell, CSS, auth, helpers, settings)
@@ -23,7 +24,7 @@
   • switchTab(tab,el) — sidebar tab navigation
 
   SUPABASE TABLES:
-  • profiles, customer_orders, order_items, products, promotions, coupons
+  • shared_profiles, salesweb_customer_orders, salesweb_order_items, salesweb_products, salesweb_promotions, salesweb_coupons
 
   THIS FILE LINE MAP:
   38-170   CSS (all styles)
@@ -532,8 +533,10 @@ var sb=supabase.createClient(SB_URL,SB_KEY);
 async function checkAdmin(){
   var{data:{session}}=await sb.auth.getSession();
   if(!session){window.location.href='auth.html';return;}
-  var{data:profile}=await sb.from('profiles').select('role').eq('id',session.user.id).single();
-  if(!profile||profile.role!=='admin'){window.location.href='index.html';return;}
+  var{data:profile}=await sb.from('shared_profiles').select('role, permissions').eq('id',session.user.id).single();
+  var swLevel=(profile&&profile.permissions&&profile.permissions.modules&&profile.permissions.modules.salesweb)||'none';
+  var legacyAdmin=profile&&profile.role==='admin';
+  if(!profile||(swLevel!=='admin'&&swLevel!=='normal'&&!legacyAdmin)){window.location.href='index.html';return;}
   document.getElementById('auth-loading').style.display='none';
   document.getElementById('app').classList.add('show');
   document.getElementById('admin-name').textContent=session.user.user_metadata?.full_name||session.user.email;

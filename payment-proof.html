@@ -139,7 +139,7 @@ var orderShort=sessionStorage.getItem('mjm_pay_order_number')||orderId.substring
 // Try to fetch order_number from DB if not in sessionStorage
 (async function(){
   if(orderId&&orderShort===orderId.substring(0,8).toUpperCase()){
-    var{data:o}=await _sb.from('customer_orders').select('order_number').eq('id',orderId).single();
+    var{data:o}=await _sb.from('salesweb_customer_orders').select('order_number').eq('id',orderId).single();
     if(o&&o.order_number){
       orderShort=o.order_number;
       document.getElementById('pp-order-id').textContent='#'+orderShort;
@@ -189,7 +189,7 @@ async function payOnline(){
 
   // If no email, fetch from the order
   if(!email){
-    var{data:orderData}=await _sb.from('customer_orders').select('customer_email,customer_name').eq('id',orderId).single();
+    var{data:orderData}=await _sb.from('salesweb_customer_orders').select('customer_email,customer_name').eq('id',orderId).single();
     if(orderData){
       email=orderData.customer_email||'';
       name=orderData.customer_name||name;
@@ -279,7 +279,7 @@ async function submitProof(){
   }
 
   // Add timeline entry
-  await _sb.from('order_timeline').insert([{
+  await _sb.from('salesweb_order_timeline').insert([{
     order_id:orderId,
     status:'Payment Proof Submitted',
     note:'Customer uploaded payment proof'+(uploadUrl?' — '+uploadUrl:' (file: '+proofFile.name+')'),

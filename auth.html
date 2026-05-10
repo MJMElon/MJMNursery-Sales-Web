@@ -253,17 +253,17 @@ function detectInputType(){
 
   if(val.startsWith('+')||/^\d{8,}$/.test(val)){
     inputType='phone';
-    hint.innerHTML='\u260e Phone detected \u2014 OTP will be sent via SMS';
+    hint.innerHTML='☎ Phone detected — OTP will be sent via SMS';
     hint.style.color='';
     otpBtn.textContent='Send SMS OTP';
   } else if(val.includes('@')){
     inputType='email';
     var suggestion=checkEmailTypo(val);
     if(suggestion){
-      hint.innerHTML='\u26a0\ufe0f Did you mean <strong style="color:#E8D49A;cursor:pointer;text-decoration:underline;" onclick="applyEmailSuggestion(\''+suggestion+'\')">' + suggestion + '</strong>? <span style="opacity:.6;cursor:pointer;" onclick="dismissEmailSuggestion()">No, it\'s correct</span>';
+      hint.innerHTML='⚠️ Did you mean <strong style="color:#E8D49A;cursor:pointer;text-decoration:underline;" onclick="applyEmailSuggestion(\''+suggestion+'\')">' + suggestion + '</strong>? <span style="opacity:.6;cursor:pointer;" onclick="dismissEmailSuggestion()">No, it\'s correct</span>';
       hint.style.color='#fca5a5';
     } else {
-      hint.innerHTML='\u2709 Email detected \u2014 OTP will be sent to your inbox';
+      hint.innerHTML='✉ Email detected — OTP will be sent to your inbox';
       hint.style.color='';
     }
     otpBtn.textContent='Send Email OTP';
@@ -278,15 +278,15 @@ function detectInputType(){
 function applyEmailSuggestion(corrected){
   document.getElementById('identity-input').value=corrected;
   var hint=document.getElementById('input-hint');
-  hint.innerHTML='\u2705 Email corrected!';
+  hint.innerHTML='✅ Email corrected!';
   hint.style.color='#86efac';
   emailTypoAccepted=true;
-  setTimeout(function(){hint.innerHTML='\u2709 Email detected \u2014 OTP will be sent to your inbox';hint.style.color='';},2000);
+  setTimeout(function(){hint.innerHTML='✉ Email detected — OTP will be sent to your inbox';hint.style.color='';},2000);
 }
 
 function dismissEmailSuggestion(){
   var hint=document.getElementById('input-hint');
-  hint.innerHTML='\u2709 Email detected \u2014 OTP will be sent to your inbox';
+  hint.innerHTML='✉ Email detected — OTP will be sent to your inbox';
   hint.style.color='';
   emailTypoAccepted=true;
 }
@@ -328,11 +328,11 @@ async function loginWithPassword(){
         var{data:retryData,error:retryErr}=await _supabase.auth.signUp({email:identity,password:pw});
         if(retryErr){showStatus(retryErr.message,'error');return;}
         if(retryData&&retryData.user){
-          await _supabase.from('profiles').upsert({id:retryData.user.id,email:identity,full_name:name,role:'customer'},{onConflict:'id'});
+          await _supabase.from('shared_profiles').upsert({id:retryData.user.id,email:identity,full_name:name,role:'customer'},{onConflict:'id'});
         }
       } else {showStatus(error.message,'error');return;}
     } else if(signUpData&&signUpData.user){
-      await _supabase.from('profiles').upsert({id:signUpData.user.id,email:identity,full_name:name,role:'customer'},{onConflict:'id'});
+      await _supabase.from('shared_profiles').upsert({id:signUpData.user.id,email:identity,full_name:name,role:'customer'},{onConflict:'id'});
     }
     showStatus('Account created! You can now sign in.','success');toggleSignup();return;
   }
@@ -429,21 +429,24 @@ async function handlePostLogin(session){
   sessionStorage.setItem('mjm_user_email',session.user.email||'');
   sessionStorage.setItem('mjm_user_name',session.user.user_metadata?.full_name||session.user.email||session.user.phone||'');
 
-  // Check role for routing
-  var{data:profile}=await _supabase.from('profiles').select('role').eq('id',session.user.id).single();
-  var role=(profile&&profile.role)||'customer';
+  // Routing: read per-module access from shared_profiles.permissions JSONB
+  // (set via the User Access page). Fall back to legacy role='admin' column
+  // for users provisioned before the permissions migration.
+  var{data:profile}=await _supabase.from('shared_profiles').select('role, permissions').eq('id',session.user.id).single();
+  var swLevel=(profile&&profile.permissions&&profile.permissions.modules&&profile.permissions.modules.salesweb)||'none';
+  var legacyAdmin=profile&&profile.role==='admin';
 
-  if(role==='admin'){
-    setTimeout(function(){window.location.href='admin.html';},800);
+  if(swLevel==='admin'||swLevel==='normal'||legacyAdmin){
+    window.location.href='admin.html';
   } else {
     sessionStorage.setItem('mjm_last_page','portal');
-    setTimeout(function(){window.location.href='index.html';},800);
+    window.location.href='index.html';
   }
 }
 
 // ── Auth state ──
 var pageLoaded=false;
-setTimeout(function(){pageLoaded=true;},2000); // ignore auth events for first 2 seconds (existing session)
+setTimeout(function(){pageLoaded=true;},300); // ignore auth events for first 300ms only
 
 _supabase.auth.onAuthStateChange(async function(event,session){
   if(event==='PASSWORD_RECOVERY'){

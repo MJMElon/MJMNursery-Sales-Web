@@ -447,17 +447,18 @@ input,select,textarea,button{font-family:inherit;}
 
         <!-- Transfer -->
         <div style="border-top:2px solid var(--border);margin-top:.8rem;padding-top:.8rem;">
-          <div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:.3rem;">Stock Transfer</div>
-          <div class="mp-sub-label" style="margin-bottom:.6rem;">Move stock from another product. Both sides tracked.</div>
+          <div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:.3rem;">Stock Transfer (b/f from another month)</div>
+          <div class="mp-sub-label" style="margin-bottom:.6rem;">Pick a source product — its sell month and per-batch plot balance / premium-plot moves are shown so you know which leftover you're carrying forward.</div>
           <div class="form-row">
-            <div class="form-group"><label class="form-label">From Product</label>
+            <div class="form-group"><label class="form-label">From Product (sell month — name)</label>
               <select class="form-input" id="mp-transfer-from"></select>
             </div>
             <div class="form-group"><label class="form-label">Quantity</label>
               <input class="form-input" id="mp-transfer-qty" type="number" min="1">
             </div>
           </div>
-          <div class="form-group"><label class="form-label">Reason</label><input class="form-input" id="mp-transfer-reason"></div>
+          <div id="mp-transfer-source-detail"></div>
+          <div class="form-group" style="margin-top:.6rem;"><label class="form-label">Reason</label><input class="form-input" id="mp-transfer-reason" placeholder="e.g. April leftover b/f to May"></div>
           <button class="btn btn-primary" onclick="executeTransfer()" style="width:100%;padding:10px;">Transfer Stock →</button>
         </div>
         <div id="mp-transfer-history"></div>

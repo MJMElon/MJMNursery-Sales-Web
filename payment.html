@@ -137,15 +137,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-d
 .btn-map{display:inline-flex;align-items:center;gap:.4rem;padding:9px 16px;background:var(--green-dark);color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;text-decoration:none;transition:all .2s;font-family:'DM Sans',sans-serif;}
 .btn-map:hover{background:var(--green-mid);}
 .btn-map svg{width:14px;height:14px;fill:none;stroke:#fff;stroke-width:2;}
-.collection-grid{display:grid;grid-template-columns:1fr 180px;gap:1rem;align-items:start;}
-@media(max-width:600px){.collection-grid{grid-template-columns:1fr;}}
-.collection-map-side{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.5rem;background:#fff;border:1px dashed var(--green-pale);border-radius:12px;padding:1rem;text-align:center;height:100%;}
-.collection-map-side .map-emoji{font-size:28px;line-height:1;}
-.collection-map-side .map-label{font-size:11px;font-weight:600;color:var(--text-mid);line-height:1.4;}
-.collection-info-list{margin-top:.9rem;display:flex;flex-direction:column;gap:.5rem;}
-.collection-info-pill{display:flex;align-items:flex-start;gap:.55rem;padding:.65rem .85rem;background:rgba(201,168,76,.10);border:1px solid rgba(201,168,76,.28);border-radius:10px;font-size:12px;color:var(--text-dark);line-height:1.5;}
-.collection-info-pill .ci-icon{flex-shrink:0;width:18px;height:18px;border-radius:50%;background:var(--gold);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;margin-top:1px;}
-.collection-info-pill strong{font-weight:700;color:var(--green-dark);}
 
 /* Buttons */
 .btn-pay{width:100%;padding:.8rem;background:var(--green-dark);color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;font-family:'DM Sans',sans-serif;margin-top:.8rem;}
@@ -278,53 +269,37 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-d
 
     <!-- Section 3: Collection Address -->
     <div class="section">
-      <div class="section-title">3. Collection Address — Self Collection Only</div>
+      <div class="section-title">3. Collection Address</div>
       <div class="collection-card">
-        <div class="collection-grid">
-          <div>
-            <div class="collection-title">
-              <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3" fill="#fff"/></svg>
-              MJM Nursery Office
-            </div>
-            <div class="collection-addr">
-              Lot 141 Block 0 & Lot 71, 100, 101, 103, 261 & 267 Block 20,<br>
-              Niah Land District, Miri, 98000, Sarawak, Malaysia
-            </div>
-            <div class="collection-note">
-              Please WhatsApp or call 011-2933 7889 for seedling collection appointment.
-            </div>
-            <div class="collection-hours">
-              <div class="collection-hours-title">Business hour:</div>
-              <table>
-                <tr><td>Monday</td><td>08:00 - 16:30</td></tr>
-                <tr><td>Tuesday</td><td>08:00 - 16:30</td></tr>
-                <tr><td>Wednesday</td><td>08:00 - 16:30</td></tr>
-                <tr><td>Thursday</td><td>08:00 - 16:30</td></tr>
-                <tr><td>Friday</td><td>08:00 - 16:30</td></tr>
-                <tr><td>Saturday</td><td>08:00 - 12:00</td></tr>
-                <tr><td>Sunday</td><td>Closed</td></tr>
-              </table>
-            </div>
-          </div>
-          <div class="collection-map-side">
-            <div class="map-emoji">📍</div>
-            <div class="map-label">Find us on the map</div>
-            <a class="btn-map" href="https://maps.app.goo.gl/5619wt1roayXzvb5A" target="_blank">
-              <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-              View on Google Maps
-            </a>
-          </div>
+        <div style="font-size:11px;font-weight:500;color:var(--text-light);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem;">Self Collection Only</div>
+        <div class="collection-title">
+          <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3" fill="#fff"/></svg>
+          MJM Nursery Office
         </div>
-        <div class="collection-info-list">
-          <div class="collection-info-pill">
-            <span class="ci-icon">i</span>
-            <span><strong>Collection booking</strong> can be made online after your order is confirmed — you will receive a booking link in the order confirmation email and customer portal.</span>
-          </div>
-          <div class="collection-info-pill">
-            <span class="ci-icon">i</span>
-            <span><strong>Collection month</strong> is based on the maturity month of the purchased product. The expected ready-for-collection date is shown on each order line in your customer portal.</span>
-          </div>
+        <div class="collection-addr">
+          Lot 141 Block 0 &amp; Lot 71, 100, 101, 103, 261 &amp; 267 Block 20,<br>
+          Niah Land District, Miri, 98000, Sarawak, Malaysia
         </div>
+        <div class="collection-note">
+          Collection booking can be made online via your My Account page after your order is confirmed.
+          <div id="ck-collection-months" style="margin-top:.5rem;font-size:11px;font-weight:600;color:var(--green-dark);"></div>
+        </div>
+        <div class="collection-hours">
+          <div class="collection-hours-title">Business hour:</div>
+          <table>
+            <tr><td>Monday</td><td>08:00 - 16:30</td></tr>
+            <tr><td>Tuesday</td><td>08:00 - 16:30</td></tr>
+            <tr><td>Wednesday</td><td>08:00 - 16:30</td></tr>
+            <tr><td>Thursday</td><td>08:00 - 16:30</td></tr>
+            <tr><td>Friday</td><td>08:00 - 16:30</td></tr>
+            <tr><td>Saturday</td><td>08:00 - 12:00</td></tr>
+            <tr><td>Sunday</td><td>Closed</td></tr>
+          </table>
+        </div>
+        <a class="btn-map" href="https://maps.app.goo.gl/5619wt1roayXzvb5A" target="_blank">
+          <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          View Location on Google Maps
+        </a>
       </div>
     </div>
 
@@ -353,14 +328,16 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-d
         </div>
       </div>
 
-      <!-- Points -->
-      <div class="promo-section" id="points-section" style="display:none;">
-        <div class="promo-label">Use Points</div>
-        <div class="points-row">
-          <input class="points-input" type="number" id="ck-points" value="0" min="0" onchange="applyPoints()">
-          <span class="points-bal" id="points-bal">Balance: 0 pts</span>
+      <!-- Points toggle -->
+      <div style="margin-top:.6rem;">
+        <button class="btn-apply-voucher" id="btn-toggle-points" onclick="togglePointsBox()">Apply Points</button>
+        <div id="points-box" style="display:none;margin-top:.5rem;">
+          <div class="points-row">
+            <input class="points-input" type="number" id="ck-points" value="0" min="0" onchange="applyPoints()">
+            <span class="points-bal" id="points-bal">Balance: 0 pts</span>
+          </div>
+          <div class="promo-msg" id="points-msg"></div>
         </div>
-        <div class="promo-msg" id="points-msg"></div>
       </div>
 
       <!-- Summary totals -->
@@ -413,9 +390,8 @@ var voucherCode='';
 var pointsUsed=0;
 var pointsBalance=0;
 var selectedPayMethod='';
-var customerPaymentTerms='cash';   // 'cash' or 'credit' — populated below
 
-// ── Pre-fill contact info from session/profile + read payment terms ──
+// ── Pre-fill contact info from session/profile ──
 (async function(){
   var name=sessionStorage.getItem('mjm_user_name')||'';
   var email=sessionStorage.getItem('mjm_user_email')||'';
@@ -425,57 +401,46 @@ var customerPaymentTerms='cash';   // 'cash' or 'credit' — populated below
   var user=session?.data?.session?.user;
   if(user){
     if(user.phone)document.getElementById('ck-phone').value=user.phone;
-    try{
-      var{data:prof}=await _sb.from('shared_profiles').select('full_name,phone,payment_terms').eq('id',user.id).single();
-      if(prof){
-        if(prof.full_name&&!document.getElementById('ck-contact-name').value)document.getElementById('ck-contact-name').value=prof.full_name;
-        if(prof.phone&&!document.getElementById('ck-phone').value)document.getElementById('ck-phone').value=prof.phone;
-        if(prof.payment_terms==='credit'){
-          customerPaymentTerms='credit';
-          renderCreditPaymentMethod();
+    if(!name||!user.phone){
+      try{
+        var{data:prof}=await _sb.from('shared_profiles').select('full_name,phone').eq('id',user.id).single();
+        if(prof){
+          if(prof.full_name&&!document.getElementById('ck-contact-name').value)document.getElementById('ck-contact-name').value=prof.full_name;
+          if(prof.phone&&!document.getElementById('ck-phone').value)document.getElementById('ck-phone').value=prof.phone;
         }
-      }
-    }catch(e){}
+      }catch(e){}
+    }
   }
 })();
-
-// Replace the regular payment-method picker with a single "Credit Account" tile.
-// Stock is reserved on order create (hold_product_stock) — no upfront payment.
-function renderCreditPaymentMethod(){
-  var grp=document.getElementById('pay-methods');
-  if(!grp)return;
-  grp.innerHTML=
-    '<div class="pay-method-opt selected" onclick="selectPayMethod(this,\'credit\')" style="border-color:#a16207;background:#fffbeb;">'+
-      '<div class="pay-method-dot" style="border-color:#a16207;"></div>'+
-      '<div class="pay-method-info">'+
-        '<div>💳 Charge to Credit Account</div>'+
-        '<div class="pay-method-sub">No upfront payment — reserved now and added to your monthly bill.</div>'+
-      '</div>'+
-      '<span class="pay-method-tag" style="background:#fde68a;color:#92400e;">Credit</span>'+
-    '</div>';
-  selectedPayMethod='credit';
-  // Update label
-  var lbl=document.querySelector('.pay-method-label');
-  if(lbl)lbl.textContent='Payment Method · Credit Account';
-}
 
 // ── Load points balance ──
 async function loadPointsBalance(){
   var session=await _sb.auth.getSession();
   var userId=session?.data?.session?.user?.id;
   if(!userId)return;
-  // Try to get points from a points/rewards table (fallback to 0)
   try{
-    var{data}=await _sb.from('salesweb_customer_points').select('balance').eq('user_id',userId).single();
-    if(data&&data.balance>0){
-      pointsBalance=data.balance;
-      document.getElementById('points-section').style.display='block';
-      document.getElementById('points-bal').textContent='Balance: '+pointsBalance.toLocaleString()+' pts';
-      document.getElementById('ck-points').max=pointsBalance;
-    }
-  }catch(e){}
+    var{data}=await _sb.from('salesweb_customer_points').select('balance').eq('user_id',userId).maybeSingle();
+    pointsBalance=(data&&data.balance)||0;
+  }catch(e){pointsBalance=0;}
+  document.getElementById('points-bal').textContent='Balance: '+pointsBalance.toLocaleString()+' pts';
+  document.getElementById('ck-points').max=pointsBalance;
 }
 loadPointsBalance();
+
+function togglePointsBox(){
+  var box=document.getElementById('points-box');
+  var btn=document.getElementById('btn-toggle-points');
+  if(box.style.display==='none'){
+    box.style.display='block';
+    btn.classList.add('active');
+    btn.textContent='Hide Points';
+    if(pointsBalance>0)document.getElementById('ck-points').focus();
+  } else {
+    box.style.display='none';
+    btn.classList.remove('active');
+    btn.textContent='Apply Points';
+  }
+}
 
 // ── Render cart summary ──
 function renderCheckout(){
@@ -485,6 +450,14 @@ function renderCheckout(){
     var img=c.image_url?'<img src="'+c.image_url+'" class="cart-line-img">':'<div class="cart-line-img" style="display:flex;align-items:center;justify-content:center;font-size:1.2rem;">🌱</div>';
     return '<div class="cart-line">'+img+'<div class="cart-line-info"><div class="cart-line-name">'+c.name+(c.month?' — '+c.month:'')+'</div><div class="cart-line-meta">'+c.qty.toLocaleString()+' x '+fmtRM(c.price)+'</div></div><div class="cart-line-total">'+fmtRM(c.price*c.qty)+'</div></div>';
   }).join('');
+
+  // Show collection month(s) under the booking note
+  var monthsEl=document.getElementById('ck-collection-months');
+  if(monthsEl){
+    var months=Array.from(new Set(cart.map(function(c){return c.month;}).filter(Boolean)));
+    monthsEl.textContent=months.length?'Collection month'+(months.length>1?'s':'')+': '+months.join(', '):''
+  }
+
   updateSummary();
 }
 
@@ -617,14 +590,7 @@ function renderSavedBilling(){
       detail=[b.company_reg?'Reg: '+b.company_reg:null,b.tin?'TIN: '+b.tin:null,b.mpob_license?'MPOB: '+b.mpob_license:null].filter(Boolean).join(' · ');
     }
     var sel=selectedBillingId===b.id?'selected':'';
-    html+='<div class="billing-saved-card '+sel+'" onclick="selectBilling(\''+b.id+'\')">'+
-      '<div class="billing-saved-radio"></div>'+
-      '<div class="billing-saved-info">'+
-        '<div class="billing-saved-type">'+icon+' '+typeLabel+'</div>'+
-        '<div class="billing-saved-name">'+b.name+'</div>'+
-        (detail?'<div class="billing-saved-detail">'+detail+'</div>':'')+
-      '</div>'+
-    '</div>';
+    html+='<div class="billing-saved-card '+sel+'" onclick="selectBilling(\''+b.id+'\')">'+'<div class="billing-saved-radio"></div>'+'<div class="billing-saved-info">'+'<div class="billing-saved-type">'+icon+' '+typeLabel+'</div>'+'<div class="billing-saved-name">'+b.name+'</div>'+(detail?'<div class="billing-saved-detail">'+detail+'</div>':'')+'</div>'+'</div>';
   });
   document.getElementById('billing-saved-list').innerHTML=html;
   // Auto-select first if none selected
@@ -816,14 +782,6 @@ async function placeOrder(){
 
   // Try up to 5 times in case of duplicate
   var order=null,error=null,orderNum='';
-  var isCredit=(customerPaymentTerms==='credit'&&selectedPayMethod==='credit');
-  // Credit orders go straight to "Order Confirmed" (admin will mark Paid when bill is settled).
-  // Cash orders stay 'Pending Payment' until Billplz webhook or admin approval.
-  var initialStatus=isCredit?'Order Confirmed':'Pending Payment';
-  // Monthly bill bucket — used by admin "Outstanding Credit" report
-  var now=new Date();
-  var creditPeriod=isCredit?(now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')):null;
-
   for(var attempt=0;attempt<5;attempt++){
     orderNum=genOrderNumber();
     var result=await _sb.from('salesweb_customer_orders').insert([{
@@ -831,14 +789,12 @@ async function placeOrder(){
       customer_id:userId,
       customer_name:contactName,
       customer_email:email,
-      status:initialStatus,
+      status:'Pending Payment',
       total:finalTotal,
       shipping_address:'Self Collection — MJM Nursery Office, Niah Land District, Miri, 98000, Sarawak',
       customer_remark:remarkParts.join(' | '),
       billing_name:billingName,
-      billing_tax_id:billingTin||null,
-      payment_terms:isCredit?'credit':'cash',
-      credit_billing_period:creditPeriod
+      billing_tax_id:billingTin||null
     }]).select().single();
     order=result.data;error=result.error;
     if(!error)break;
@@ -875,23 +831,6 @@ async function placeOrder(){
   // Clear cart
   sessionStorage.removeItem('mjm_cart');
 
-  if(selectedPayMethod==='credit'){
-    // Credit account — order already 'Order Confirmed', skip payment flow.
-    await _sb.from('salesweb_order_timeline').insert([{
-      order_id:order.id,
-      status:'Order Confirmed (On Credit)',
-      note:'Order placed on credit terms · billing period '+creditPeriod+' · stock reserved · admin will mark Paid when bill settled',
-      changed_by:email
-    }]);
-    sessionStorage.setItem('mjm_pay_order_id',order.id);
-    sessionStorage.setItem('mjm_pay_order_total',finalTotal);
-    sessionStorage.setItem('mjm_pay_order_number',orderNum);
-    sessionStorage.setItem('mjm_pay_email',email);
-    sessionStorage.setItem('mjm_pay_credit','1');
-    window.location.href='payment-callback.html?credit=1';
-    return;
-  }
-
   if(selectedPayMethod==='offline'){
     // Redirect to payment proof page
     sessionStorage.setItem('mjm_pay_order_id',order.id);
@@ -905,12 +844,6 @@ async function placeOrder(){
     // Build callback URL
     var cbBase=window.location.href.substring(0,window.location.href.lastIndexOf('/')+1);
     var callbackUrl=cbBase+'payment-callback.html';
-
-    // Persist order context so payment-callback.html can show details + auto-redirect
-    sessionStorage.setItem('mjm_pay_order_id',order.id);
-    sessionStorage.setItem('mjm_pay_order_total',finalTotal);
-    sessionStorage.setItem('mjm_pay_order_number',orderNum);
-    sessionStorage.setItem('mjm_pay_email',email);
 
     try{
       console.log('Creating Billplz bill...',{order_id:order.id,amount:Math.round(finalTotal*100),callback:callbackUrl});

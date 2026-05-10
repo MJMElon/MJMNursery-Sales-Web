@@ -1542,14 +1542,14 @@ async function fetchProducts() {
 
 function renderProductCard(p) {
   var bc = p.status === 'sold-out' ? 'sold-out' : p.status === 'coming-soon' ? 'coming-soon' : '';
-  var badge = p.badge ? '<div class="product-badge ' + bc + '">' + p.badge + '</div>' : '';
+  var badge = p.badge ? '<div class="product-badge ' + bc + '">' + esc(p.badge) + '</div>' : '';
   var canAdd = p.status === 'available' || p.status === 'promo';
   var btnLabel = p.status === 'sold-out' ? 'Sold Out' : p.status === 'coming-soon' ? 'Coming Soon' : 'Add';
   var imgHtml = p.image_url
-    ? '<img src="' + p.image_url + '" style="width:100%;height:100%;object-fit:cover;" alt="' + p.name + '">'
+    ? '<img src="' + esc(p.image_url) + '" style="width:100%;height:100%;object-fit:cover;" alt="' + esc(p.name) + '">'
     : '<svg viewBox="0 0 80 100" fill="none"><path d="M40 85 Q25 65 25 50 Q25 30 40 15 Q55 30 55 50 Q55 65 40 85Z" fill="#6A9B6E" opacity=".4"/><path d="M40 85 Q20 70 18 55 Q16 38 30 25" stroke="#3E6B42" stroke-width="1.5" fill="none" opacity=".5"/><path d="M40 85 Q60 70 62 55 Q64 38 50 25" stroke="#3E6B42" stroke-width="1.5" fill="none" opacity=".5"/><rect x="32" y="85" width="16" height="12" rx="2" fill="#2D4A30" opacity=".6"/></svg>';
   var idx = products.indexOf(p);
-  return '<div class="product-card"><div class="product-img">' + badge + imgHtml + '</div><div class="product-info"><div class="product-name">' + p.name + '</div><div class="product-month">' + p.month + '</div><div class="product-footer"><div><div class="product-price">' + p.price + '</div><div class="product-stock">' + (p.stock > 0 ? p.stock.toLocaleString() + ' left' : 'Out of stock') + '</div></div><button class="btn-add" ' + (!canAdd ? 'disabled' : '') + ' onclick="openProductPopup(' + idx + ')">' + (canAdd ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>' : '') + btnLabel + '</button></div></div></div>';
+  return '<div class="product-card"><div class="product-img">' + badge + imgHtml + '</div><div class="product-info"><div class="product-name">' + esc(p.name) + '</div><div class="product-month">' + esc(p.month) + '</div><div class="product-footer"><div><div class="product-price">' + esc(p.price) + '</div><div class="product-stock">' + (p.stock > 0 ? p.stock.toLocaleString() + ' left' : 'Out of stock') + '</div></div><button class="btn-add" ' + (!canAdd ? 'disabled' : '') + ' onclick="openProductPopup(' + idx + ')">' + (canAdd ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>' : '') + btnLabel + '</button></div></div></div>';
 }
 
 function renderProducts() {
@@ -1596,7 +1596,7 @@ function openProductPopup(idx) {
 
   // Image
   var imgEl = document.getElementById('ppImg');
-  if (p.image_url) imgEl.innerHTML = '<img src="' + p.image_url + '">';
+  if (p.image_url) imgEl.innerHTML = '<img src="' + esc(p.image_url) + '">';
   else imgEl.innerHTML = '<div style="font-size:3rem;">🌱</div>';
 
   document.getElementById('ppName').textContent = p.name + (p.month ? ' — ' + p.month : '');
@@ -1987,31 +1987,34 @@ function pOrderCard(o){
   if(o.items&&o.items.length){
     o.items.forEach(function(it){
       itemsHtml+='<div style="display:flex;justify-content:space-between;align-items:center;padding:.25rem 0;font-size:12px;border-bottom:1px solid #f5f5f0;">'+
-        '<span style="color:var(--text-dark);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+it.product_name+'</span>'+
+        '<span style="color:var(--text-dark);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(it.product_name)+'</span>'+
         '<span style="color:var(--text-mid);white-space:nowrap;margin-left:.5rem;">x '+it.quantity.toLocaleString()+'</span>'+
       '</div>';
     });
   } else {
-    itemsHtml='<div style="font-size:12px;color:var(--text-mid);">'+o.variety+'</div>';
+    itemsHtml='<div style="font-size:12px;color:var(--text-mid);">'+esc(o.variety)+'</div>';
   }
 
-  // Action button
+  // Action button — fullId / id are UUIDs but escape defensively for the JS
+  // string literals (single-quote injection would break out of the onclick).
+  var fullIdJs = String(o.fullId || '').replace(/[\\'"<>]/g, '');
+  var idJs     = String(o.id     || '').replace(/[\\'"<>]/g, '');
   var actionHtml='';
   if(isPending){
-    actionHtml='<button class="p-btn" style="background:var(--gold);color:var(--green-dark);font-size:11px;padding:.4rem .8rem;" onclick="event.stopPropagation();goPayOrder(\''+o.fullId+'\','+o.total+')">Pay Now / Upload Payment</button>';
+    actionHtml='<button class="p-btn" style="background:var(--gold);color:var(--green-dark);font-size:11px;padding:.4rem .8rem;" onclick="event.stopPropagation();goPayOrder(\''+fullIdJs+'\','+o.total+')">Pay Now / Upload Payment</button>';
   } else if(isComp){
-    actionHtml=pRatings[o.id]?'<span style="font-size:11px;color:var(--gold);">'+('⭐'.repeat(pRatings[o.id]))+' Reviewed</span>':'<button class="p-btn" onclick="event.stopPropagation();pOpenRating(\''+o.id+'\')">⭐ Review</button>';
+    actionHtml=pRatings[o.id]?'<span style="font-size:11px;color:var(--gold);">'+('⭐'.repeat(pRatings[o.id]))+' Reviewed</span>':'<button class="p-btn" onclick="event.stopPropagation();pOpenRating(\''+idJs+'\')">⭐ Review</button>';
   }
 
-  return '<div class="p-order" style="cursor:pointer;" onclick="openOrderDetail(\''+o.id+'\')">'+
+  return '<div class="p-order" style="cursor:pointer;" onclick="openOrderDetail(\''+idJs+'\')">'+
     '<div class="p-order-head">'+
-      '<div><div class="p-order-id">#'+o.id+'</div><div class="p-order-date">Ordered '+o.orderDate+'</div></div>'+
-      '<span class="p-badge '+pBadge(o.status)+'">'+o.status+'</span>'+
+      '<div><div class="p-order-id">#'+esc(o.id)+'</div><div class="p-order-date">Ordered '+esc(o.orderDate)+'</div></div>'+
+      '<span class="p-badge '+pBadge(o.status)+'">'+esc(o.status)+'</span>'+
     '</div>'+
     '<div class="p-order-body">'+
-      '<div class="p-order-row"><span class="p-order-row-l">Bill To</span><span class="p-order-row-v">'+o.billingName+'</span></div>'+
+      '<div class="p-order-row"><span class="p-order-row-l">Bill To</span><span class="p-order-row-v">'+esc(o.billingName)+'</span></div>'+
       '<div style="padding:.4rem 0;"><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.3rem;">Items</div>'+itemsHtml+'</div>'+
-      '<div class="p-order-row"><span class="p-order-row-l">Collection</span><span class="p-order-row-v">'+o.collectionStatus+'</span></div>'+
+      '<div class="p-order-row"><span class="p-order-row-l">Collection</span><span class="p-order-row-v">'+esc(o.collectionStatus)+'</span></div>'+
     '</div>'+
     // DOs section
     (o.dos&&o.dos.length?
@@ -2021,8 +2024,8 @@ function pOrderCard(o){
           var doDate=d.delivery_date?new Date(d.delivery_date).toLocaleDateString('en-MY',{day:'2-digit',month:'short',year:'numeric'}):'—';
           var doStatusCls=d.status==='Delivered'?'color:#15803d;':'color:var(--gold);';
           return '<div style="display:flex;justify-content:space-between;align-items:center;padding:.25rem 0;font-size:12px;border-bottom:1px solid #f0f5ec;">'+
-            '<div><span style="font-weight:600;">DO #'+(d.do_number||'—')+'</span><span style="color:var(--text-light);margin-left:.5rem;">'+doDate+'</span></div>'+
-            '<div><span style="margin-right:.5rem;">Qty: '+d.total_qty+'</span><span style="font-weight:600;'+doStatusCls+'">'+d.status+'</span></div>'+
+            '<div><span style="font-weight:600;">DO #'+esc(d.do_number||'—')+'</span><span style="color:var(--text-light);margin-left:.5rem;">'+doDate+'</span></div>'+
+            '<div><span style="margin-right:.5rem;">Qty: '+(parseInt(d.total_qty)||0)+'</span><span style="font-weight:600;'+doStatusCls+'">'+esc(d.status)+'</span></div>'+
           '</div>';
         }).join('')+
       '</div>':'')+
@@ -2032,7 +2035,7 @@ function pOrderCard(o){
         '<div style="font-size:10px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.4rem;">Documents</div>'+
         o.attachments.map(function(a){
           return '<div style="padding:.2rem 0;font-size:12px;">'+
-            '<a href="'+a.file_url+'" target="_blank" style="color:var(--green-mid);text-decoration:none;font-weight:500;">📎 '+esc(a.file_name)+'</a>'+
+            '<a href="'+esc(a.file_url)+'" target="_blank" rel="noopener noreferrer" style="color:var(--green-mid);text-decoration:none;font-weight:500;">📎 '+esc(a.file_name)+'</a>'+
           '</div>';
         }).join('')+
       '</div>':'')+
@@ -2540,11 +2543,17 @@ async function loadBillingFromDb(){
   }
 }
 
+// SECURITY: previously persisted full billing PII (names, phones, addresses,
+// TIN/MPOB/registration numbers) into localStorage where they were readable
+// by any XSS payload. We now keep them in-memory only — they are re-fetched
+// from the DB by loadBillingForUser() when a logged-in customer opens the
+// page, and forgotten when the tab closes. We also proactively clear any
+// stale entries left by older versions of the page.
 function saveBillingToStorage(){
-  try{localStorage.setItem('mjm_billing',JSON.stringify(billingEntries));}catch(e){}
+  try{localStorage.removeItem('mjm_billing');}catch(e){}
 }
 function loadBillingFromStorage(){
-  try{var d=localStorage.getItem('mjm_billing');if(d)billingEntries=JSON.parse(d);}catch(e){}
+  try{localStorage.removeItem('mjm_billing');}catch(e){}
 }
 function closeAddBilling(){document.getElementById('billing-add-form').style.display='none';editingBillingId=null;}
 

@@ -55,14 +55,15 @@ async function loadOrders(){
   orders.forEach(function(o){
     var statusCls=orderBadgeCls(o.status);
     var shortId=o.order_number||o.id.substring(0,8).toUpperCase();
-    html+='<tr onclick="viewOrder(\''+o.id+'\')" style="cursor:pointer;">'+
-      '<td style="font-weight:600;">#'+shortId+'</td>'+
+    var idJs=String(o.id||'').replace(/[\\'"<>]/g,'');
+    html+='<tr onclick="viewOrder(\''+idJs+'\')" style="cursor:pointer;">'+
+      '<td style="font-weight:600;">#'+esc(shortId)+'</td>'+
       '<td>'+esc(o.customer_name||'—')+'<div style="font-size:11px;color:var(--ink4);">'+esc(o.customer_email||'')+'</div></td>'+
       '<td style="font-size:12px;">'+fmtDate(o.created_at)+'</td>'+
       '<td style="text-align:center;">—</td>'+
       '<td style="font-weight:600;">RM '+(o.total||0).toFixed(2)+'</td>'+
-      '<td><span class="badge '+statusCls+'">'+o.status+'</span></td>'+
-      '<td><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();viewOrder(\''+o.id+'\')">View</button></td>'+
+      '<td><span class="badge '+statusCls+'">'+esc(o.status)+'</span></td>'+
+      '<td><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();viewOrder(\''+idJs+'\')">View</button></td>'+
     '</tr>';
   });
   html+='</tbody></table>';

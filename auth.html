@@ -429,11 +429,14 @@ async function handlePostLogin(session){
   sessionStorage.setItem('mjm_user_email',session.user.email||'');
   sessionStorage.setItem('mjm_user_name',session.user.user_metadata?.full_name||session.user.email||session.user.phone||'');
 
-  // Check role for routing
-  var{data:profile}=await _supabase.from('shared_profiles').select('role').eq('id',session.user.id).single();
-  var role=(profile&&profile.role)||'customer';
+  // Routing: read per-module access from shared_profiles.permissions JSONB
+  // (set via the User Access page). Fall back to legacy role='admin' column
+  // for users provisioned before the permissions migration.
+  var{data:profile}=await _supabase.from('shared_profiles').select('role, permissions').eq('id',session.user.id).single();
+  var swLevel=(profile&&profile.permissions&&profile.permissions.modules&&profile.permissions.modules.salesweb)||'none';
+  var legacyAdmin=profile&&profile.role==='admin';
 
-  if(role==='admin'){
+  if(swLevel==='admin'||swLevel==='normal'||legacyAdmin){
     window.location.href='admin.html';
   } else {
     sessionStorage.setItem('mjm_last_page','portal');

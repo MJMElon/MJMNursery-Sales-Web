@@ -17,14 +17,20 @@ async function loadCustomers(){
   var custs=data||[];
   if(q)custs=custs.filter(function(c){return(c.full_name||'').toLowerCase().includes(q)||(c.email||'').toLowerCase().includes(q);});
 
+  var creditCount=(data||[]).filter(function(c){return c.payment_terms==='credit';}).length;
   document.getElementById('cust-stats').innerHTML=
     '<div class="stat-box"><div class="stat-label">Total Customers</div><div class="stat-val">'+(data||[]).length+'</div></div>'+
-    '<div class="stat-box"><div class="stat-label">Admins</div><div class="stat-val green">'+(data||[]).filter(function(c){return c.role==='admin';}).length+'</div></div>';
+    '<div class="stat-box"><div class="stat-label">Admins</div><div class="stat-val green">'+(data||[]).filter(function(c){return c.role==='admin';}).length+'</div></div>'+
+    '<div class="stat-box"><div class="stat-label">Credit Customers</div><div class="stat-val" style="color:#a16207;">'+creditCount+'</div></div>';
 
   if(!custs.length){document.getElementById('customers-table').innerHTML='<div class="loading">No customers found</div>';return;}
-  var html='<table class="data-table"><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Joined</th><th>Action</th></tr></thead><tbody>';
+  var html='<table class="data-table"><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Terms</th><th>Joined</th><th>Action</th></tr></thead><tbody>';
   custs.forEach(function(c){
-    html+='<tr><td style="font-weight:600;">'+esc(c.full_name||'—')+'</td><td>'+esc(c.email||'—')+'</td><td>'+esc(c.phone||'—')+'</td><td><span class="badge '+(c.role==='admin'?'badge-green':'badge-grey')+'">'+esc(c.role||'customer')+'</span></td><td>'+fmtDate(c.created_at)+'</td><td><button class="btn btn-outline btn-sm" onclick="viewCustomer(\''+c.id+'\')">View</button></td></tr>';
+    var terms=c.payment_terms==='credit'?'credit':'cash';
+    var termsBadge=terms==='credit'
+      ? '<span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;">💳 Credit</span>'
+      : '<span class="badge badge-grey">💵 Cash</span>';
+    html+='<tr><td style="font-weight:600;">'+esc(c.full_name||'—')+'</td><td>'+esc(c.email||'—')+'</td><td>'+esc(c.phone||'—')+'</td><td><span class="badge '+(c.role==='admin'?'badge-green':'badge-grey')+'">'+esc(c.role||'customer')+'</span></td><td>'+termsBadge+'</td><td>'+fmtDate(c.created_at)+'</td><td><button class="btn btn-outline btn-sm" onclick="viewCustomer(\''+c.id+'\')">View</button></td></tr>';
   });
   html+='</tbody></table>';
   document.getElementById('customers-table').innerHTML=html;
@@ -305,6 +311,27 @@ async function viewCustomer(id){
   html+='<div style="color:var(--ink4);">Role</div><div><span class="badge '+(c.role==='admin'?'badge-green':'badge-grey')+'">'+esc(c.role||'customer')+'</span></div>';
   html+='</div></div>';
 
+  // Payment terms — admin-toggleable
+  var terms=c.payment_terms==='credit'?'credit':'cash';
+  var creditLimit=c.credit_limit==null?'':String(c.credit_limit);
+  html+='<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:1rem;margin-bottom:1.2rem;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem;">';
+  html+='<div style="font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;">Payment Terms</div>';
+  html+='<div style="font-size:10px;color:var(--ink4);">Default · Cash &nbsp;|&nbsp; Credit = monthly billed</div>';
+  html+='</div>';
+  html+='<div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">';
+  html+='<button class="btn btn-sm '+(terms==='cash'?'btn-primary':'btn-outline')+'" onclick="setCustomerTerms(\''+id+'\',\'cash\')" style="font-size:11px;">💵 Cash (pay before collect)</button>';
+  html+='<button class="btn btn-sm '+(terms==='credit'?'btn-primary':'btn-outline')+'" onclick="setCustomerTerms(\''+id+'\',\'credit\')" style="font-size:11px;">💳 Credit (monthly bill)</button>';
+  html+='</div>';
+  if(terms==='credit'){
+    html+='<div style="margin-top:.8rem;display:flex;gap:.4rem;align-items:center;font-size:12px;">';
+    html+='<label style="color:var(--ink4);">Monthly credit limit (RM):</label>';
+    html+='<input type="number" id="cust-credit-limit" value="'+esc(creditLimit)+'" placeholder="No limit" style="width:120px;padding:.3rem .5rem;border:1px solid var(--border);border-radius:6px;font-size:12px;">';
+    html+='<button class="btn btn-outline btn-sm" onclick="setCustomerCreditLimit(\''+id+'\')" style="font-size:11px;">Save</button>';
+    html+='</div>';
+  }
+  html+='</div>';
+
   // Active Orders
   html+='<div style="margin-bottom:1.2rem;"><div style="font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem;">Active Orders ('+activeOrders.length+')</div>';
   if(activeOrders.length){
@@ -383,4 +410,29 @@ async function deleteCustomer(id){
   toast('Customer deleted');
   closeModal('modal-customer');
   loadCustomers();
+}
+
+// ═══════════════════════════════════════
+//  PAYMENT TERMS (cash / credit)
+// ═══════════════════════════════════════
+async function setCustomerTerms(id,terms){
+  if(terms!=='cash'&&terms!=='credit')return;
+  if(terms==='credit'){
+    if(!confirm('Switch this customer to CREDIT terms?\n\nCredit customers can place orders without paying upfront. Their orders are reserved immediately and billed monthly. Make sure you trust this customer before enabling credit.'))return;
+  }
+  var{error}=await sb.from('shared_profiles').update({payment_terms:terms}).eq('id',id);
+  if(error){toast('Error: '+error.message,'error');return;}
+  toast('Customer set to '+terms.toUpperCase()+' terms');
+  viewCustomer(id);
+  loadCustomers();
+}
+
+async function setCustomerCreditLimit(id){
+  var v=document.getElementById('cust-credit-limit').value;
+  var limit=v===''||v==null?null:Number(v);
+  if(limit!=null&&(isNaN(limit)||limit<0)){toast('Invalid credit limit','error');return;}
+  var{error}=await sb.from('shared_profiles').update({credit_limit:limit}).eq('id',id);
+  if(error){toast('Error: '+error.message,'error');return;}
+  toast(limit==null?'Credit limit cleared (no cap)':'Credit limit set to RM '+limit.toFixed(2));
+  viewCustomer(id);
 }

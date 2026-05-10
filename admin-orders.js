@@ -43,26 +43,37 @@ async function loadOrders(){
   var paid=all.filter(function(o){return o.status==='Paid';}).length;
   var completed=all.filter(function(o){return o.status==='Completed';}).length;
   var revenue=all.filter(function(o){return o.status!=='Cancelled';}).reduce(function(s,o){return s+(o.total||0);},0);
+  var creditOutstanding=all.filter(function(o){return o.payment_terms==='credit'&&!o.credit_billed_at&&o.status!=='Cancelled';}).reduce(function(s,o){return s+(o.total||0);},0);
   document.getElementById('order-stats').innerHTML=
     '<div class="stat-box"><div class="stat-label">Total Orders</div><div class="stat-val">'+all.length+'</div></div>'+
     '<div class="stat-box"><div class="stat-label">Pending Payment</div><div class="stat-val" style="color:var(--amber)">'+pending+'</div></div>'+
     '<div class="stat-box"><div class="stat-label">Paid</div><div class="stat-val" style="color:var(--blue)">'+paid+'</div></div>'+
     '<div class="stat-box"><div class="stat-label">Completed</div><div class="stat-val green">'+completed+'</div></div>'+
+    '<div class="stat-box"><div class="stat-label">Credit Outstanding</div><div class="stat-val" style="color:#a16207;">RM '+creditOutstanding.toLocaleString('en-MY',{minimumFractionDigits:2})+'</div></div>'+
     '<div class="stat-box"><div class="stat-label">Revenue</div><div class="stat-val">RM '+revenue.toLocaleString('en-MY',{minimumFractionDigits:2})+'</div></div>';
 
   if(!orders.length){document.getElementById('orders-table').innerHTML='<div class="loading">No orders found</div>';return;}
-  var html='<table class="data-table"><thead><tr><th>Order</th><th>Customer</th><th>Date</th><th>Items</th><th>Total</th><th>Status</th><th>Action</th></tr></thead><tbody>';
+  var html='<table class="data-table"><thead><tr><th>Order</th><th>Customer</th><th>Date</th><th>Terms</th><th>Items</th><th>Total</th><th>Status</th><th>Action</th></tr></thead><tbody>';
   orders.forEach(function(o){
     var statusCls=orderBadgeCls(o.status);
     var shortId=o.order_number||o.id.substring(0,8).toUpperCase();
-    html+='<tr onclick="viewOrder(\''+o.id+'\')" style="cursor:pointer;">'+
-      '<td style="font-weight:600;">#'+shortId+'</td>'+
+    var idJs=String(o.id||'').replace(/[\\'"<>]/g,'');
+    var termsBadge;
+    if(o.payment_terms==='credit'){
+      var billed=o.credit_billed_at?' · billed':' · unbilled';
+      termsBadge='<span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;" title="'+esc(o.credit_billing_period||'')+billed+'">💳 Credit</span>';
+    } else {
+      termsBadge='<span class="badge badge-grey">💵 Cash</span>';
+    }
+    html+='<tr onclick="viewOrder(\''+idJs+'\')" style="cursor:pointer;">'+
+      '<td style="font-weight:600;">#'+esc(shortId)+'</td>'+
       '<td>'+esc(o.customer_name||'—')+'<div style="font-size:11px;color:var(--ink4);">'+esc(o.customer_email||'')+'</div></td>'+
       '<td style="font-size:12px;">'+fmtDate(o.created_at)+'</td>'+
+      '<td>'+termsBadge+'</td>'+
       '<td style="text-align:center;">—</td>'+
       '<td style="font-weight:600;">RM '+(o.total||0).toFixed(2)+'</td>'+
-      '<td><span class="badge '+statusCls+'">'+o.status+'</span></td>'+
-      '<td><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();viewOrder(\''+o.id+'\')">View</button></td>'+
+      '<td><span class="badge '+statusCls+'">'+esc(o.status)+'</span></td>'+
+      '<td><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();viewOrder(\''+idJs+'\')">View</button></td>'+
     '</tr>';
   });
   html+='</tbody></table>';

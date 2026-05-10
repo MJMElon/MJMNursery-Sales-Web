@@ -1,4 +1,11 @@
 // ══════════════════════════════════════════════
+// XSS-safe escape helper — apply to every user-controlled value before
+// concatenating into innerHTML. The demo data below is hardcoded and safe,
+// but once Supabase data is wired in, every interpolation MUST use esc().
+// ══════════════════════════════════════════════
+function esc(s){if(s===undefined||s===null)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+
+// ══════════════════════════════════════════════
 // DATA (demo — replace with Supabase in production)
 // ══════════════════════════════════════════════
 const MJM_BANK = {
@@ -218,7 +225,8 @@ function renderTimeWheel(orderId){
   var dateInput=document.getElementById('book-date-'+orderId);var date=dateInput?dateInput.value:'';
   var container=document.getElementById('time-wheel-'+orderId);if(!date||!container)return;
   var hourInput=document.getElementById('book-hour-'+orderId);if(hourInput)hourInput.value='';
-  container.innerHTML=HOURS.map(function(h){var count=getSlotCount(date,h);var full=count>=MAX_PER_SLOT;var f=fmtHour(h);var rem=MAX_PER_SLOT-count;return '<div class="time-slot '+(full?'full':'')+'" id="ts-'+orderId+'-'+h+'" onclick="selectHour(\''+orderId+'\','+h+',\''+date+'\')"><div class="ts-time">'+f.main+'</div><div class="ts-ampm">'+f.ampm+'</div><div class="ts-slots '+(full?'full-label':'')+'">'+(full?'FULL':rem+' left')+'</div></div>';}).join('');
+  var oid=String(orderId||'').replace(/[\\'"<>]/g,'');var dt=String(date||'').replace(/[\\'"<>]/g,'');
+  container.innerHTML=HOURS.map(function(h){var count=getSlotCount(date,h);var full=count>=MAX_PER_SLOT;var f=fmtHour(h);var rem=MAX_PER_SLOT-count;return '<div class="time-slot '+(full?'full':'')+'" id="ts-'+esc(oid)+'-'+h+'" onclick="selectHour(\''+oid+'\','+h+',\''+dt+'\')"><div class="ts-time">'+esc(f.main)+'</div><div class="ts-ampm">'+esc(f.ampm)+'</div><div class="ts-slots '+(full?'full-label':'')+'">'+(full?'FULL':rem+' left')+'</div></div>';}).join('');
 }
 
 function selectHour(orderId,h,date){
@@ -255,7 +263,8 @@ function openAttModal(orderId,stepKey,e){
   var files=(o.attachments&&o.attachments[stepKey])||[];
   var label=STEP_LABELS[stepKey]||stepKey;
   document.getElementById('att-modal-title').textContent=label+' — Documents';
-  document.getElementById('att-modal-body').innerHTML=files.length?files.map(function(f){return '<div class="att-file" onclick="downloadFile('+JSON.stringify(f).replace(/"/g,'&quot;')+',\''+orderId+'\')"><div class="att-file-icon">'+f.icon+'</div><div class="att-file-info"><strong>'+f.name+'</strong><span>'+f.type+' · '+f.size+'</span></div><div class="att-file-dl">⬇ Download</div></div>';}).join(''):'<p style="font-size:.84rem;color:var(--ink3);text-align:center;padding:1.5rem 0">No documents for this stage.</p>';
+  var oid=String(orderId||'').replace(/[\\'"<>]/g,'');
+  document.getElementById('att-modal-body').innerHTML=files.length?files.map(function(f){return '<div class="att-file" onclick="downloadFile('+JSON.stringify(f).replace(/"/g,'&quot;')+',\''+oid+'\')"><div class="att-file-icon">'+esc(f.icon)+'</div><div class="att-file-info"><strong>'+esc(f.name)+'</strong><span>'+esc(f.type)+' · '+esc(f.size)+'</span></div><div class="att-file-dl">⬇ Download</div></div>';}).join(''):'<p style="font-size:.84rem;color:var(--ink3);text-align:center;padding:1.5rem 0">No documents for this stage.</p>';
   document.getElementById('att-modal').classList.add('open');
 }
 function downloadFile(file,orderId){showToast('📥 Downloading '+file.name+'…');}
@@ -314,7 +323,7 @@ function saveProfile(){showToast('Profile updated ✅');}
 
 function openRatingModal(orderId){
   currentRatingOrderId=orderId;currentRatingVal=0;document.getElementById('rating-comment').value='';document.getElementById('rating-submit-btn').disabled=true;document.getElementById('star-label').textContent='Tap a star to rate';document.querySelectorAll('.star').forEach(function(s){s.classList.remove('active');});
-  var o=ORDERS.find(function(x){return x.id===orderId;});document.getElementById('rating-order-info').innerHTML=o?'<strong>'+o.id+'</strong> — '+o.variety:'';
+  var o=ORDERS.find(function(x){return x.id===orderId;});document.getElementById('rating-order-info').innerHTML=o?'<strong>'+esc(o.id)+'</strong> — '+esc(o.variety):'';
   document.getElementById('rating-modal').classList.add('open');
 }
 function setRating(val){currentRatingVal=val;var labels=['','😐 Poor','🙂 Fair','😊 Good','😄 Great','🤩 Excellent!'];document.getElementById('star-label').textContent=labels[val];document.querySelectorAll('.star').forEach(function(s){s.classList.toggle('active',parseInt(s.dataset.val)<=val);});document.getElementById('rating-submit-btn').disabled=false;}

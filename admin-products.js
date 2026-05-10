@@ -537,8 +537,257 @@ async function saveProduct(){
 //  EDIT / PUBLISH / DELETE
 // ═══════════════════════════════════════
 async function editProduct(id){try{var{data}=await sb.from('salesweb_products').select('*').eq('id',id).single();if(data)openProductForm(data);}catch(e){toast('Error','error');}}
-async function togglePublish(id,pub){await sb.from('salesweb_products').update({is_published:pub,is_active:pub,updated_at:new Date().toISOString()}).eq('id',id);toast(pub?'Published':'Unpublished');loadProducts();}
 async function deleteProduct(id){if(!confirm('Delete this product?'))return;await sb.from('salesweb_products').delete().eq('id',id);toast('Deleted');loadProducts();}
+
+// togglePublish: turning OFF publishes nothing — flip is_published=false directly.
+// Turning ON opens the publish modal so admin chooses qty + strategy.
+async function togglePublish(id,pub){
+  if(!pub){
+    await sb.from('salesweb_products').update({is_published:false,is_active:false,updated_at:new Date().toISOString()}).eq('id',id);
+    toast('Unpublished');loadProducts();return;
+  }
+  openPublishModal(id);
+}
+
+// ═══════════════════════════════════════
+//  PUBLISH MODAL — qty calculator
+// ═══════════════════════════════════════
+var _publishCtx=null;  // { product, raw, alloc, suitable, estimate }
+
+async function openPublishModal(productId){
+  // Reset UI
+  document.getElementById('mpb-product-id').value=productId;
+  document.getElementById('mpb-loading').style.display='block';
+  document.getElementById('mpb-content').style.display='none';
+  document.getElementById('mpb-warnings').innerHTML='';
+  document.getElementById('mpb-confirm').disabled=true;
+  document.getElementById('mpb-manual-qty').value='';
+  // Default strategy = maturity_plus_suitable_minus_estimate
+  var radios=document.querySelectorAll('input[name=mpb-strat]');
+  radios.forEach(function(r){r.checked=(r.value==='maturity_plus_suitable_minus_estimate');});
+  openModal('modal-publish');
+
+  try{
+    var{data:p}=await sb.from('salesweb_products').select('*').eq('id',productId).single();
+    if(!p){toast('Product not found','error');closeModal('modal-publish');return;}
+    document.getElementById('mpb-product-name').textContent=p.name+' · '+(p.sell_month||'(no month)')+' '+(p.sell_year||'');
+
+    var sellMonth=p.sell_month||'';var sellYear=p.sell_year||0;
+    // Run all four computations in parallel
+    var[stockData,alloc,suitable,estimate]=await Promise.all([
+      computeProductStock(productId,sellMonth,sellYear),
+      computeCustomerAllocation(sellMonth,sellYear),
+      computeSuitableForSales(sellMonth,sellYear,productId),
+      fetchEstimateCollection(sellMonth,sellYear)
+    ]);
+    var raw=stockData.sources.reduce(function(s,x){return s+x.originalStock;},0);
+    _publishCtx={product:p,raw:raw,alloc:alloc,suitable:suitable,estimate:estimate,stockData:stockData};
+
+    document.getElementById('mpb-raw').textContent=raw.toLocaleString();
+    document.getElementById('mpb-alloc').textContent='− '+alloc.toLocaleString();
+    document.getElementById('mpb-suitable').textContent='+ '+suitable.toLocaleString();
+    document.getElementById('mpb-estimate').textContent='− '+estimate.toLocaleString();
+    document.getElementById('mpb-opt-raw').textContent=raw.toLocaleString();
+    document.getElementById('mpb-opt-minus').textContent=Math.max(0,raw-alloc).toLocaleString();
+    document.getElementById('mpb-opt-mse').textContent=Math.max(0,raw+suitable-estimate).toLocaleString();
+
+    document.getElementById('mpb-loading').style.display='none';
+    document.getElementById('mpb-content').style.display='block';
+    document.getElementById('mpb-confirm').disabled=false;
+    updatePublishPreview();
+  }catch(e){
+    console.error('publish modal error:',e);
+    document.getElementById('mpb-loading').textContent='Failed to load: '+(e.message||e);
+  }
+}
+
+function getPublishChosenQty(){
+  if(!_publishCtx)return null;
+  var sel=document.querySelector('input[name=mpb-strat]:checked');
+  if(!sel)return null;
+  if(sel.value==='raw')return _publishCtx.raw;
+  if(sel.value==='minus_alloc')return Math.max(0,_publishCtx.raw-_publishCtx.alloc);
+  if(sel.value==='maturity_plus_suitable_minus_estimate')return Math.max(0,_publishCtx.raw+_publishCtx.suitable-_publishCtx.estimate);
+  if(sel.value==='manual')return parseInt(document.getElementById('mpb-manual-qty').value)||0;
+  return null;
+}
+
+function updatePublishPreview(){
+  if(!_publishCtx)return;
+  var qty=getPublishChosenQty();
+  var sel=document.querySelector('input[name=mpb-strat]:checked');
+  var w=[];
+  // Warning 1: chosen > current month available stock → will oversell
+  var available=_publishCtx.stockData.finalStock;
+  if(qty>available){
+    var over=qty-available;
+    w.push({tone:'amber',msg:'Publishing '+qty+' but only '+available+' is currently available for '+(_publishCtx.product.sell_month||'this month')+'. Will oversell by '+over+' — likely needs to be filled from following month\'s stock.'});
+  }
+  // Warning 2: option 3 chosen → suitable-for-sales pulls from prev/curr months
+  if(sel&&sel.value==='maturity_plus_suitable_minus_estimate'&&_publishCtx.suitable>0){
+    w.push({tone:'blue',msg:'Pulling '+_publishCtx.suitable+' suitable-for-sales units from prior/current month plots (audited ≥1.5m). Those plots\' available stock will drop by the same amount.'});
+  }
+  // Warning 3: estimate collection > raw — net negative without suitable
+  if(sel&&sel.value==='maturity_plus_suitable_minus_estimate'&&_publishCtx.estimate>(_publishCtx.raw+_publishCtx.suitable)){
+    w.push({tone:'red',msg:'Estimate collection ('+_publishCtx.estimate+') exceeds maturity+suitable ('+(_publishCtx.raw+_publishCtx.suitable)+'). Result clamped to 0.'});
+  }
+  if(qty<=0){
+    w.push({tone:'red',msg:'Chosen qty is 0 — nothing will be available to buy on the storefront.'});
+  }
+  var html=w.map(function(x){
+    var bg=x.tone==='red'?'#fef2f2':(x.tone==='amber'?'#fef3c7':'#eef2ff');
+    var border=x.tone==='red'?'#fecaca':(x.tone==='amber'?'#fde68a':'#c7d2fe');
+    var color=x.tone==='red'?'#b91c1c':(x.tone==='amber'?'#92400e':'#1d4ed8');
+    return '<div style="background:'+bg+';border:1px solid '+border+';color:'+color+';padding:.5rem .7rem;border-radius:8px;font-size:12px;margin-bottom:.4rem;">⚠ '+esc(x.msg)+'</div>';
+  }).join('');
+  document.getElementById('mpb-warnings').innerHTML=html;
+}
+
+async function confirmPublish(){
+  if(!_publishCtx){closeModal('modal-publish');return;}
+  var qty=getPublishChosenQty();if(qty===null||qty<0){toast('Pick a quantity','error');return;}
+  var sel=document.querySelector('input[name=mpb-strat]:checked');
+  var btn=document.getElementById('mpb-confirm');btn.disabled=true;btn.textContent='Publishing...';
+  var session=await sb.auth.getSession();var user=session?.data?.session?.user?.email||'admin';
+  // We set stock_qty too so the existing storefront (which reads stock_qty)
+  // immediately reflects the chosen qty. stock_source='manual' prevents the
+  // refresh job from overwriting it back to raw maturity.
+  var{error}=await sb.from('salesweb_products').update({
+    is_published:true,
+    is_active:true,
+    stock_qty:qty,
+    stock_source:'manual',
+    published_qty:qty,
+    publish_strategy:sel.value,
+    published_at:new Date().toISOString(),
+    published_by:user,
+    updated_at:new Date().toISOString()
+  }).eq('id',_publishCtx.product.id);
+  btn.disabled=false;btn.textContent='Confirm & Publish';
+  if(error){toast('Publish failed: '+error.message,'error');return;}
+  toast('Published '+qty+' units');closeModal('modal-publish');loadProducts();
+}
+
+// ═══════════════════════════════════════
+//  PUBLISH HELPERS — derive qty from data
+// ═══════════════════════════════════════
+
+// Customer allocation reserved for a sell month.
+// Source: shared_plot_allocations (per batch+plot reserved_qty), filtered to
+// batches whose maturity date (transplant + 9 months) falls in (sellMonth, sellYear).
+async function computeCustomerAllocation(sellMonth,sellYear){
+  if(!sellMonth||!sellYear)return 0;
+  // 1. Find batches whose maturity matches the target month
+  var{data:transplants}=await sb.from('shared_inventory_logs').select('batch_name,plot_name,created_at,remark')
+    .eq('transaction_type','Transplanted');
+  var batchPlot=[];
+  (transplants||[]).forEach(function(t){
+    var pl=(t.plot_name||'').toLowerCase();
+    if(pl.includes('premium')||pl.includes('double')||pl.includes('tray'))return;
+    var tDate=null;
+    if(t.remark){var m=t.remark.match(/Date:\s*(\d{4}-\d{2}-\d{2})/);if(m)tDate=new Date(m[1]);}
+    if(!tDate)tDate=new Date(t.created_at);
+    var sd=new Date(tDate);sd.setMonth(sd.getMonth()+9);
+    if(sd.toLocaleDateString('en-MY',{month:'long'})===sellMonth&&sd.getFullYear()===sellYear){
+      batchPlot.push({batch:t.batch_name,plot:t.plot_name});
+    }
+  });
+  if(!batchPlot.length)return 0;
+  var batchNames=Array.from(new Set(batchPlot.map(function(x){return x.batch;}).filter(Boolean)));
+  if(!batchNames.length)return 0;
+  try{
+    var{data:allocs}=await sb.from('shared_plot_allocations').select('batch_name,plot_name,reserved_qty').in('batch_name',batchNames);
+    if(!allocs)return 0;
+    var keyset=new Set(batchPlot.map(function(x){return x.batch+'||'+x.plot;}));
+    return allocs.reduce(function(s,a){
+      if(!keyset.has(a.batch_name+'||'+a.plot_name))return s;
+      return s+(a.reserved_qty||0);
+    },0);
+  }catch(e){
+    // shared_plot_allocations may not exist — treat as zero allocation
+    console.warn('shared_plot_allocations not available:',e);
+    return 0;
+  }
+}
+
+// Suitable-for-sales qty: sum of remaining stock for plots where the LATEST
+// audit_height_records row has any sample > 1.5m. Scope: current + previous
+// months relative to (sellMonth, sellYear). Excludes the target month's own
+// raw maturity (that's already counted as "raw").
+async function computeSuitableForSales(sellMonth,sellYear,excludeProductId){
+  if(!sellMonth||!sellYear)return 0;
+  // 1. Pull all height audits, find plots whose LATEST audit qualifies
+  var{data:audits}=await sb.from('audit_height_records')
+    .select('plot,batch,sample_1,sample_2,sample_3,date,created_at')
+    .order('date',{ascending:false}).order('created_at',{ascending:false});
+  if(!audits)return 0;
+  var seen={};var suitablePlots=new Set();
+  audits.forEach(function(a){
+    var key=(a.batch||'')+'||'+(a.plot||'');
+    if(seen[key])return;  // first row per plot/batch = latest
+    seen[key]=true;
+    var max=Math.max(parseFloat(a.sample_1)||0,parseFloat(a.sample_2)||0,parseFloat(a.sample_3)||0);
+    if(max>150)suitablePlots.add(key);  // 150 cm = 1.5 m
+  });
+  if(!suitablePlots.size)return 0;
+
+  // 2. Find Transplanted entries whose plot+batch is in suitablePlots AND
+  //    whose maturity month is <= target month (current+previous).
+  var{data:transplants}=await sb.from('shared_inventory_logs').select('batch_name,plot_name,quantity_change,created_at,remark')
+    .eq('transaction_type','Transplanted');
+  if(!transplants)return 0;
+  var monthIdx=function(m){var L=['January','February','March','April','May','June','July','August','September','October','November','December'];var i=L.indexOf(m||'');return i<0?-1:i;};
+  var targetIdx=monthIdx(sellMonth);if(targetIdx<0)return 0;
+  var bucket=[];
+  transplants.forEach(function(t){
+    var pl=(t.plot_name||'').toLowerCase();
+    if(pl.includes('premium')||pl.includes('double')||pl.includes('tray'))return;
+    if(!suitablePlots.has((t.batch_name||'')+'||'+(t.plot_name||'')))return;
+    var tDate=null;
+    if(t.remark){var m=t.remark.match(/Date:\s*(\d{4}-\d{2}-\d{2})/);if(m)tDate=new Date(m[1]);}
+    if(!tDate)tDate=new Date(t.created_at);
+    var sd=new Date(tDate);sd.setMonth(sd.getMonth()+9);
+    var sy=sd.getFullYear();var sm=sd.toLocaleDateString('en-MY',{month:'long'});
+    var smI=monthIdx(sm);if(smI<0)return;
+    // Include current + previous months (sy<sellYear || same year & smI<=targetIdx)
+    if(sy<sellYear||(sy===sellYear&&smI<=targetIdx)){
+      // Skip the target month's own batches — those are already "raw"
+      if(sy===sellYear&&smI===targetIdx)return;
+      var qty=t.quantity_change||0;
+      bucket.push({batch:t.batch_name,plot:t.plot_name,raw:qty-Math.round(qty*CULL_RATE)});
+    }
+  });
+
+  // 3. Subtract DO sold + transfers to get remaining per source.
+  // Cheapest correct path: reuse computeProductStock for each product whose
+  // sell month matches a bucket entry, then sum its remaining for the matching
+  // plots. To avoid N+1 we instead run a single pass: sum bucket raw, then
+  // subtract DO qty for the same plots.
+  if(!bucket.length)return 0;
+  var{data:dos}=await sb.from('shared_do_records').select('plot_1,qty_1,plot_2,qty_2,plot_3,qty_3,plot_4,qty_4,plot_5,qty_5').neq('status','Cancelled');
+  var soldByPlot={};
+  (dos||[]).forEach(function(d){
+    for(var i=1;i<=5;i++){var p=d['plot_'+i];var q=parseInt(d['qty_'+i])||0;if(!p||!q)continue;soldByPlot[p]=(soldByPlot[p]||0)+q;}
+  });
+  // Subtract sold from bucket FIFO per plot (approximate — same approach as computeProductStock)
+  var rawByPlot={};
+  bucket.forEach(function(b){rawByPlot[b.plot]=(rawByPlot[b.plot]||0)+b.raw;});
+  var remaining=0;
+  Object.keys(rawByPlot).forEach(function(plot){
+    remaining+=Math.max(0,rawByPlot[plot]-(soldByPlot[plot]||0));
+  });
+  return remaining;
+}
+
+// Fetch (or default to 0) the admin-keyed estimate collection for a sell month.
+async function fetchEstimateCollection(sellMonth,sellYear){
+  if(!sellMonth||!sellYear)return 0;
+  try{
+    var{data}=await sb.from('salesweb_monthly_estimate_collection')
+      .select('qty').eq('sell_year',sellYear).eq('sell_month',sellMonth).maybeSingle();
+    return(data&&data.qty)||0;
+  }catch(e){return 0;}
+}
 
 // ═══════════════════════════════════════
 //  REORDER PRODUCTS — DRAG & DROP

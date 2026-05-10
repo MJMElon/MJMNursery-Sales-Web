@@ -722,6 +722,17 @@
   .cl-otp-verify{padding:12px 18px;background:var(--green-dark);color:#fff;font-weight:700;font-size:12px;border:none;border-radius:10px;cursor:pointer;white-space:nowrap;font-family:'DM Sans',sans-serif;}
   .cl-otp-verify:hover{background:var(--green-mid);}
   .cl-hint{font-size:10px;color:var(--text-light);margin-top:.25rem;padding-left:.2rem;}
+  /* ── Login modal overlay ── */
+  .login-modal-overlay{display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:1.5rem;}
+  .login-modal-overlay.open{display:flex;}
+  .login-modal-card{background:#fff;border-radius:24px;padding:2.4rem 2rem;width:100%;max-width:420px;position:relative;box-shadow:0 30px 60px rgba(0,0,0,.25);animation:modalPop .25s ease-out;max-height:90vh;overflow-y:auto;}
+  @keyframes modalPop{from{transform:scale(.93);opacity:0;}to{transform:scale(1);opacity:1;}}
+  .login-modal-close{position:absolute;top:1rem;right:1rem;background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--text-light);line-height:1;padding:2px 6px;border-radius:6px;transition:background .15s;}
+  .login-modal-close:hover{background:var(--green-pale);color:var(--green-dark);}
+  .login-modal-logo{text-align:center;margin-bottom:1rem;}
+  .login-modal-logo img{height:72px;}
+  .login-modal-title{font-family:'Cormorant Garamond',serif;font-size:1.5rem;font-weight:400;color:var(--text-dark);text-align:center;margin-bottom:.25rem;}
+  .login-modal-sub{font-size:12.5px;color:var(--text-mid);text-align:center;margin-bottom:1.4rem;}
 
   /* Product popup */
   .product-popup-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300;align-items:center;justify-content:center;padding:1rem;}
@@ -931,7 +942,7 @@
     </li>
   </ul>
   <div class="nav-actions">
-    <a href="salesweb_auth.html" id="nav-login-link">Log In</a>
+    <a onclick="openLoginModal('nav')" id="nav-login-link" style="cursor:pointer;">Log In</a>
     <a onclick="showPage('portal')" id="nav-myaccount" style="display:none;cursor:pointer;">My Account</a>
     <a onclick="portalSignOut()" id="nav-signout" style="display:none;cursor:pointer;font-size:11px;opacity:.6;">Sign Out</a>
     <div style="position:relative;">
@@ -1529,51 +1540,52 @@
 
 <!-- ═══════════════════════════════════════ CHECKOUT LOGIN PAGE ═══════════════════════════════════════ -->
 <div class="page" id="page-checkout-login">
-  <div class="page-hero">
-    <div class="page-hero-content">
-      <div class="breadcrumb" onclick="showPage('home')">Home <span>/ Checkout</span></div>
-      <h1>Sign In to <em>Checkout</em></h1>
+  <!-- Checkout login now uses the shared login modal. This page is kept for
+       the showPage router but is never visually displayed — it opens the modal
+       immediately and switches back to whichever page was last active. -->
+  <script>openLoginModal('checkout');</script>
+</div>
+
+<!-- ═══ LOGIN MODAL ═══ -->
+<div class="login-modal-overlay" id="login-modal-overlay" onclick="if(event.target===this)closeLoginModal()">
+  <div class="login-modal-card" id="login-modal-card">
+    <button class="login-modal-close" onclick="closeLoginModal()" aria-label="Close">✕</button>
+
+    <div class="login-modal-logo">
+      <img src="https://cdn.store-assets.com/s/1408881/f/16655641.png" alt="MJM Nursery">
     </div>
-  </div>
-  <div class="checkout-login-wrap">
-    <div class="checkout-login-card">
-      <div class="checkout-login-title">Welcome</div>
-      <div class="checkout-login-sub">Sign in or create an account to complete your order</div>
+    <div class="login-modal-title">Welcome</div>
+    <div class="login-modal-sub" id="lm-sub">Sign in to your account</div>
 
-      <div class="cl-status" id="cl-status"></div>
+    <div class="cl-status" id="cl-status"></div>
 
-      <div id="cl-form-main">
-        <div style="display:flex;flex-direction:column;gap:.65rem;">
-          <!-- Signup name (hidden) -->
-          <div id="cl-signup-fields" style="display:none;">
-            <input type="text" id="cl-signup-name" class="cl-input" placeholder="Full Name" style="margin-bottom:.65rem;">
-          </div>
-
-          <input type="text" id="cl-identity" class="cl-input" placeholder="Email or Phone Number" oninput="clDetectInput()">
-          <div class="cl-hint" id="cl-hint"></div>
-
-          <input type="password" id="cl-password" class="cl-input" placeholder="Password">
-
-          <button class="cl-btn" id="cl-btn-login" onclick="clLoginPassword()">Sign In</button>
-
-          <div class="cl-divider"><span>or</span></div>
-
-          <button class="cl-otp-btn" id="cl-btn-otp" onclick="clSendOTP()">Send OTP Code</button>
-
-          <div class="cl-otp-row" id="cl-otp-row">
-            <input type="text" id="cl-otp-code" class="cl-input" placeholder="Enter 6-digit code" maxlength="6">
-            <button class="cl-otp-verify" onclick="clVerifyOTP()">Verify</button>
-          </div>
+    <div id="cl-form-main">
+      <div style="display:flex;flex-direction:column;gap:.65rem;">
+        <div id="cl-signup-fields" style="display:none;">
+          <input type="text" id="cl-signup-name" class="cl-input" placeholder="Full Name" style="margin-bottom:.65rem;">
         </div>
 
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.8rem;">
-          <button class="cl-link" onclick="clForgotPassword()">Forgot Password?</button>
-          <button class="cl-link" id="cl-btn-toggle" onclick="clToggleSignup()">Create Account</button>
+        <input type="text" id="cl-identity" class="cl-input" placeholder="Email or Phone Number" oninput="clDetectInput()" autocomplete="email">
+        <div class="cl-hint" id="cl-hint"></div>
+
+        <input type="password" id="cl-password" class="cl-input" placeholder="Password" autocomplete="current-password">
+
+        <button class="cl-btn" id="cl-btn-login" onclick="clLoginPassword()">Sign In</button>
+
+        <div class="cl-divider"><span>or</span></div>
+
+        <button class="cl-otp-btn" id="cl-btn-otp" onclick="clSendOTP()">Send OTP Code</button>
+
+        <div class="cl-otp-row" id="cl-otp-row">
+          <input type="text" id="cl-otp-code" class="cl-input" placeholder="Enter 6-digit code" maxlength="6">
+          <button class="cl-otp-verify" onclick="clVerifyOTP()">Verify</button>
         </div>
       </div>
-    </div>
-    <div style="text-align:center;margin-top:1rem;">
-      <button class="cl-link" onclick="showPage('home')" style="font-size:13px;">&larr; Continue Shopping</button>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.8rem;">
+        <button class="cl-link" onclick="clForgotPassword()">Forgot Password?</button>
+        <button class="cl-link" id="cl-btn-toggle" onclick="clToggleSignup()">Create Account</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1916,9 +1928,9 @@ function proceedToCheckout() {
     // Already logged in — go straight to payment
     window.location.href = 'salesweb_payment.html';
   } else {
-    // Not logged in — show inline login page
+    // Not logged in — open login modal (stays on current page)
     toggleCartDropdown();
-    showPage('checkout-login');
+    openLoginModal('checkout');
   }
 }
 
@@ -2110,7 +2122,8 @@ var pConsentSigned={}, pRatings={}, pVtab='active', pRatingOrderId=null, pRating
 var portalUser = null;
 
 function pBadge(s){return{
-  'Order Confirmed':'p-badge-green','Pending Payment':'p-badge-amber','Ready-to-Collect':'p-badge-teal',
+  'Paid':'p-badge-green','Order Confirmed':'p-badge-green',
+  'Pending Payment':'p-badge-amber','Ready-to-Collect':'p-badge-teal',
   'Collecting':'p-badge-orange','Order Completed':'p-badge-grey'
 }[s]||'p-badge-grey';}
 
@@ -2603,6 +2616,55 @@ function pSubmitRating(){if(!pRatingOrderId||!pRatingVal)return;pRatings[pRating
 // ═══════════════════════════════════════
 var clIsSignUp = false;
 var clInputType = 'email';
+var clLoginContext = 'nav'; // 'nav' or 'checkout'
+
+function openLoginModal(context) {
+  clLoginContext = context || 'nav';
+  // Reset form state
+  clIsSignUp = false;
+  var sfEl = document.getElementById('cl-signup-fields');
+  if (sfEl) sfEl.style.display = 'none';
+  var btnTog = document.getElementById('cl-btn-toggle');
+  if (btnTog) btnTog.textContent = 'Create Account';
+  var btnLogin = document.getElementById('cl-btn-login');
+  if (btnLogin) btnLogin.textContent = 'Sign In';
+  var statusEl = document.getElementById('cl-status');
+  if (statusEl) { statusEl.textContent = ''; statusEl.className = 'cl-status'; }
+  var otpRow = document.getElementById('cl-otp-row');
+  if (otpRow) otpRow.classList.remove('show');
+  // Update subtitle
+  var subEl = document.getElementById('lm-sub');
+  if (subEl) subEl.textContent = context === 'checkout'
+    ? 'Sign in or create an account to complete your order'
+    : 'Sign in to your account';
+  // Show overlay
+  var overlay = document.getElementById('login-modal-overlay');
+  overlay.classList.add('open');
+  document.body.style.overflow = 'hidden';
+  // Focus email field
+  setTimeout(function() {
+    var inp = document.getElementById('cl-identity');
+    if (inp) inp.focus();
+  }, 100);
+}
+
+function closeLoginModal() {
+  var overlay = document.getElementById('login-modal-overlay');
+  overlay.classList.remove('open');
+  document.body.style.overflow = '';
+  // If we were on checkout-login page, go back to home
+  if (document.getElementById('page-checkout-login').classList.contains('active')) {
+    showPage('home');
+  }
+}
+
+// Escape key closes login modal
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    var overlay = document.getElementById('login-modal-overlay');
+    if (overlay && overlay.classList.contains('open')) closeLoginModal();
+  }
+});
 
 function clDetectInput() {
   var val = document.getElementById('cl-identity').value.trim();
@@ -2633,22 +2695,33 @@ function clClearStatus() { document.getElementById('cl-status').className = 'cl-
 
 async function clPostLogin(session) {
   if (!session) { clShowStatus('Login failed.', 'error'); return; }
-  clShowStatus('Welcome! Redirecting to checkout...', 'success');
-  sessionStorage.setItem('mjm_user_email', session.user.email || '');
-  sessionStorage.setItem('mjm_user_name', session.user.user_metadata?.full_name || session.user.email || session.user.phone || '');
-  // Update nav
   var name = session.user.user_metadata?.full_name || session.user.email || session.user.phone || '';
+  sessionStorage.setItem('mjm_user_email', session.user.email || '');
+  sessionStorage.setItem('mjm_user_name', name);
+  // Update nav
   document.getElementById('nav-login-link').style.display = 'none';
   document.getElementById('nav-myaccount').style.display = 'inline';
   document.getElementById('nav-myaccount').textContent = 'Hi, ' + name.split(' ')[0];
   document.getElementById('nav-signout').style.display = 'inline';
-  // Check role
-  var { data: profile } = await _sb.from('shared_profiles').select('role').eq('id', session.user.id).single();
-  var role = (profile && profile.role) || 'customer';
-  if (role === 'admin') {
-    setTimeout(function() { window.location.href = 'salesweb_admin.html'; }, 800);
+  // Check role + permissions
+  var { data: profile } = await _sb.from('shared_profiles').select('role, permissions').eq('id', session.user.id).single();
+  var swLevel = (profile && profile.permissions && profile.permissions.modules && profile.permissions.modules.salesweb) || 'none';
+  var isAdmin = swLevel === 'admin' || swLevel === 'normal' || (profile && profile.role === 'admin');
+
+  if (isAdmin) {
+    clShowStatus('Welcome, admin! Redirecting...', 'success');
+    setTimeout(function() { window.location.href = 'admin.html'; }, 700);
+  } else if (clLoginContext === 'checkout') {
+    clShowStatus('Welcome! Redirecting to checkout...', 'success');
+    setTimeout(function() { window.location.href = 'payment.html'; }, 700);
   } else {
-    setTimeout(function() { window.location.href = 'salesweb_payment.html'; }, 800);
+    // nav login — show customer portal inline
+    clShowStatus('Welcome! Opening your account...', 'success');
+    setTimeout(function() {
+      closeLoginModal();
+      showPage('portal');
+      initPortal();
+    }, 500);
   }
 }
 

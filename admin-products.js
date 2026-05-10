@@ -11,7 +11,7 @@
   Transferred = qty moved to/from other products
   Remaining = Original - Sold - TransferredOut + TransferredIn
 
-  TABLES: products, inventory_logs, do_records, stock_transfers
+  TABLES: salesweb_products, shared_inventory_logs, shared_do_records, salesweb_stock_transfers
 ═══════════════════════════════════════════════════
 */
 
@@ -25,7 +25,7 @@ async function loadProducts(){
   var typeF=document.getElementById('prod-type-filter').value;
   var collF=document.getElementById('prod-coll-filter').value;
   var statusF=document.getElementById('prod-status-filter').value;
-  var query=sb.from('products').select('*').order('sort_order',{ascending:true,nullsFirst:false}).order('sell_year',{ascending:true}).order('sell_month',{ascending:true});
+  var query=sb.from('salesweb_products').select('*').order('sort_order',{ascending:true,nullsFirst:false}).order('sell_year',{ascending:true}).order('sell_month',{ascending:true});
   if(typeF)query=query.eq('product_type',typeF);
   if(collF)query=query.eq('collection',collF);
   if(statusF==='published')query=query.eq('is_published',true);
@@ -33,7 +33,7 @@ async function loadProducts(){
   var{data,error}=await query;
   // Fallback if sort_order column doesn't exist
   if(error){
-    query=sb.from('products').select('*').order('sell_year',{ascending:true}).order('sell_month',{ascending:true});
+    query=sb.from('salesweb_products').select('*').order('sell_year',{ascending:true}).order('sell_month',{ascending:true});
     if(typeF)query=query.eq('product_type',typeF);
     if(collF)query=query.eq('collection',collF);
     if(statusF==='published')query=query.eq('is_published',true);
@@ -74,7 +74,7 @@ async function loadProducts(){
 // ═══════════════════════════════════════
 async function computeProductStock(productId, sellMonth, sellYear){
   // 1. Transplants to main plots for this sell month
-  var{data:transplants}=await sb.from('inventory_logs').select('batch_name, breed_name, plot_name, quantity_change, created_at, remark')
+  var{data:transplants}=await sb.from('shared_inventory_logs').select('batch_name, breed_name, plot_name, quantity_change, created_at, remark')
     .eq('transaction_type','Transplanted').order('created_at',{ascending:true});
   if(!transplants)transplants=[];
 
@@ -94,7 +94,7 @@ async function computeProductStock(productId, sellMonth, sellYear){
   });
 
   // 2. DO sold qty — match by plot
-  var{data:dos}=await sb.from('do_records').select('*').neq('status','Cancelled');
+  var{data:dos}=await sb.from('shared_do_records').select('*').neq('status','Cancelled');
   if(dos&&dos.length){
     dos.forEach(function(d){
       for(var i=1;i<=5;i++){
@@ -113,8 +113,8 @@ async function computeProductStock(productId, sellMonth, sellYear){
   }
 
   // 3. Transfers — show per source
-  var{data:tOut}=await sb.from('stock_transfers').select('quantity,reason,created_at,to_product').eq('from_product',productId).order('created_at',{ascending:true});
-  var{data:tIn}=await sb.from('stock_transfers').select('quantity,reason,created_at,from_product').eq('to_product',productId).order('created_at',{ascending:true});
+  var{data:tOut}=await sb.from('salesweb_stock_transfers').select('quantity,reason,created_at,to_product').eq('from_product',productId).order('created_at',{ascending:true});
+  var{data:tIn}=await sb.from('salesweb_stock_transfers').select('quantity,reason,created_at,from_product').eq('to_product',productId).order('created_at',{ascending:true});
   tOut=tOut||[];tIn=tIn||[];
 
   // Get product names for transfers
@@ -122,7 +122,7 @@ async function computeProductStock(productId, sellMonth, sellYear){
   tOut.forEach(function(t){if(t.to_product&&tIds.indexOf(t.to_product)===-1)tIds.push(t.to_product);});
   tIn.forEach(function(t){if(t.from_product&&tIds.indexOf(t.from_product)===-1)tIds.push(t.from_product);});
   var tNames={};
-  if(tIds.length){var{data:ps}=await sb.from('products').select('id,name').in('id',tIds);(ps||[]).forEach(function(p){tNames[p.id]=p.name;});}
+  if(tIds.length){var{data:ps}=await sb.from('salesweb_products').select('id,name').in('id',tIds);(ps||[]).forEach(function(p){tNames[p.id]=p.name;});}
 
   // FIFO deduct transfers out from sources
   var totalTransferOut=0;
@@ -232,7 +232,7 @@ function renderStockSource(d){
 // ═══════════════════════════════════════
 async function syncProductsFromBatches(){
   toast('Syncing...');
-  var{data:transplants}=await sb.from('inventory_logs').select('quantity_change, created_at, remark, plot_name')
+  var{data:transplants}=await sb.from('shared_inventory_logs').select('quantity_change, created_at, remark, plot_name')
     .eq('transaction_type','Transplanted').order('created_at',{ascending:true});
   if(!transplants||!transplants.length){toast('No transplant data','error');return;}
   var mq={};
@@ -250,18 +250,18 @@ async function syncProductsFromBatches(){
   for(var k of Object.keys(mq)){
     var parts=k.split('|');var sm=parts[0];var sy=parseInt(parts[1]);
     // Check by sell_month+year first, fallback to name match to avoid duplicates
-    var{data:ex}=await sb.from('products').select('id,stock_source').eq('sell_month',sm).eq('sell_year',sy).eq('product_type','Seedling').limit(1);
+    var{data:ex}=await sb.from('salesweb_products').select('id,stock_source').eq('sell_month',sm).eq('sell_year',sy).eq('product_type','Seedling').limit(1);
     if(!ex||!ex.length){
       // Fallback: check by name containing the month+year
       var searchName=sm+' '+sy;
-      var{data:ex2}=await sb.from('products').select('id,stock_source').ilike('name','%'+searchName+'%').limit(1);
+      var{data:ex2}=await sb.from('salesweb_products').select('id,stock_source').ilike('name','%'+searchName+'%').limit(1);
       if(ex2&&ex2.length)ex=ex2;
     }
     if(ex&&ex.length){
-      if(ex[0].stock_source!=='manual'){var sd=await computeProductStock(ex[0].id,sm,sy);await sb.from('products').update({stock_qty:sd.finalStock,sell_month:sm,sell_year:sy,updated_at:new Date().toISOString()}).eq('id',ex[0].id);}
+      if(ex[0].stock_source!=='manual'){var sd=await computeProductStock(ex[0].id,sm,sy);await sb.from('salesweb_products').update({stock_qty:sd.finalStock,sell_month:sm,sell_year:sy,updated_at:new Date().toISOString()}).eq('id',ex[0].id);}
       updated++;
     } else {
-      await sb.from('products').insert([{name:'Oil Palm Seedling — '+sm+' '+sy,description:'Oil Palm Seedling — '+sm+' '+sy,product_type:'Seedling',collection:'Normal Sales',category:'Seedling',price:25.00,stock_qty:mq[k],sell_month:sm,sell_year:sy,is_active:false,is_published:false,stock_source:'auto'}]);
+      await sb.from('salesweb_products').insert([{name:'Oil Palm Seedling — '+sm+' '+sy,description:'Oil Palm Seedling — '+sm+' '+sy,product_type:'Seedling',collection:'Normal Sales',category:'Seedling',price:25.00,stock_qty:mq[k],sell_month:sm,sell_year:sy,is_active:false,is_published:false,stock_source:'auto'}]);
       created++;
     }
   }
@@ -269,11 +269,11 @@ async function syncProductsFromBatches(){
 }
 
 async function refreshProductStock(pid){
-  var{data:p}=await sb.from('products').select('*').eq('id',pid).single();
+  var{data:p}=await sb.from('salesweb_products').select('*').eq('id',pid).single();
   if(!p){toast('Not found','error');return;}
   if(p.stock_source==='manual'){toast('Manual stock');return;}
   var sd=await computeProductStock(pid,p.sell_month,p.sell_year);
-  await sb.from('products').update({stock_qty:sd.finalStock,updated_at:new Date().toISOString()}).eq('id',pid);
+  await sb.from('salesweb_products').update({stock_qty:sd.finalStock,updated_at:new Date().toISOString()}).eq('id',pid);
   toast('Stock: '+sd.finalStock);loadProducts();
 }
 
@@ -344,14 +344,14 @@ function toggleManualStock(){
 // ═══════════════════════════════════════
 // Fallback: load only transfer records (no batch data needed)
 async function loadTransfersOnly(productId){
-  var{data:out}=await sb.from('stock_transfers').select('*').eq('from_product',productId).order('created_at',{ascending:false});
-  var{data:inT}=await sb.from('stock_transfers').select('*').eq('to_product',productId).order('created_at',{ascending:false});
+  var{data:out}=await sb.from('salesweb_stock_transfers').select('*').eq('from_product',productId).order('created_at',{ascending:false});
+  var{data:inT}=await sb.from('salesweb_stock_transfers').select('*').eq('to_product',productId).order('created_at',{ascending:false});
   out=out||[];inT=inT||[];
   var ids=[];
   out.forEach(function(t){if(t.to_product&&ids.indexOf(t.to_product)===-1)ids.push(t.to_product);});
   inT.forEach(function(t){if(t.from_product&&ids.indexOf(t.from_product)===-1)ids.push(t.from_product);});
   var names={};
-  if(ids.length){var{data:ps}=await sb.from('products').select('id,name').in('id',ids);(ps||[]).forEach(function(p){names[p.id]=p.name;});}
+  if(ids.length){var{data:ps}=await sb.from('salesweb_products').select('id,name').in('id',ids);(ps||[]).forEach(function(p){names[p.id]=p.name;});}
 
   if(!out.length&&!inT.length)return '<div style="margin-top:.6rem;padding:.5rem .8rem;background:#f8f8f8;border-radius:8px;font-size:12px;color:var(--ink4);">No stock transfers</div>';
 
@@ -378,7 +378,7 @@ async function loadTransfersOnly(productId){
 }
 
 async function loadTransferSourceDropdown(excludeId){
-  var{data}=await sb.from('products').select('id,name,stock_qty').order('name');
+  var{data}=await sb.from('salesweb_products').select('id,name,stock_qty').order('name');
   var sel=document.getElementById('mp-transfer-from');if(!sel)return;
   sel.innerHTML='<option value="">— Select source product —</option>';
   (data||[]).forEach(function(p){if(p.id===excludeId)return;sel.innerHTML+='<option value="'+p.id+'">'+esc(p.name)+' ('+p.stock_qty+')</option>';});
@@ -392,16 +392,16 @@ async function executeTransfer(){
   if(!fromId){toast('Select source','error');return;}
   if(!toId){toast('Save product first','error');return;}
   if(qty<=0){toast('Enter quantity','error');return;}
-  var{data:src}=await sb.from('products').select('stock_qty,name').eq('id',fromId).single();
+  var{data:src}=await sb.from('salesweb_products').select('stock_qty,name').eq('id',fromId).single();
   if(!src||src.stock_qty<qty){toast('Source only has '+(src?src.stock_qty:0),'error');return;}
   if(!confirm('Transfer '+qty+' from "'+src.name+'"?'))return;
 
   var session=await sb.auth.getSession();var user=session?.data?.session?.user?.email||'admin';
-  await sb.from('stock_transfers').insert([{from_product:fromId,to_product:toId,quantity:qty,reason:reason||'Stock transfer',transferred_by:user}]);
-  await sb.from('products').update({stock_qty:src.stock_qty-qty,updated_at:new Date().toISOString()}).eq('id',fromId);
-  var{data:dest}=await sb.from('products').select('stock_qty').eq('id',toId).single();
+  await sb.from('salesweb_stock_transfers').insert([{from_product:fromId,to_product:toId,quantity:qty,reason:reason||'Stock transfer',transferred_by:user}]);
+  await sb.from('salesweb_products').update({stock_qty:src.stock_qty-qty,updated_at:new Date().toISOString()}).eq('id',fromId);
+  var{data:dest}=await sb.from('salesweb_products').select('stock_qty').eq('id',toId).single();
   var nq=(dest?dest.stock_qty:0)+qty;
-  await sb.from('products').update({stock_qty:nq,updated_at:new Date().toISOString()}).eq('id',toId);
+  await sb.from('salesweb_products').update({stock_qty:nq,updated_at:new Date().toISOString()}).eq('id',toId);
 
   document.getElementById('mp-stock').value=nq;
   document.getElementById('mp-transfer-qty').value='';document.getElementById('mp-transfer-reason').value='';
@@ -409,7 +409,7 @@ async function executeTransfer(){
   loadTransferSourceDropdown(toId);
 
   // Refresh stock source view (includes transfer details)
-  var{data:prod}=await sb.from('products').select('sell_month,sell_year,stock_source').eq('id',toId).single();
+  var{data:prod}=await sb.from('salesweb_products').select('sell_month,sell_year,stock_source').eq('id',toId).single();
   if(prod&&prod.sell_month&&prod.stock_source!=='manual'){
     computeProductStock(toId,prod.sell_month,prod.sell_year).then(function(d){
       document.getElementById('mp-stock-source').innerHTML=renderStockSource(d);
@@ -453,7 +453,7 @@ async function saveProduct(){
   var row={name:document.getElementById('mp-name').value.trim(),description:document.getElementById('mp-desc').value.trim(),product_type:document.getElementById('mp-type').value,collection:document.getElementById('mp-coll').value,category:document.getElementById('mp-type').value,price:parseFloat(document.getElementById('mp-price').value)||0,compare_price:parseFloat(document.getElementById('mp-compare').value)||0,tags:tags.length?tags.join(','):null,image_url:imgUrl||null,is_active:isPub,is_published:isPub,stock_source:isManual?'manual':'auto',updated_at:new Date().toISOString()};
   if(isManual)row.stock_qty=parseInt(document.getElementById('mp-stock').value)||0;
   if(!row.name){toast('Name required','error');btn.disabled=false;btn.textContent='Save Product';return;}
-  var{error}=id?await sb.from('products').update(row).eq('id',id):await sb.from('products').insert([row]);
+  var{error}=id?await sb.from('salesweb_products').update(row).eq('id',id):await sb.from('salesweb_products').insert([row]);
   btn.disabled=false;btn.textContent='Save Product';
   if(error){toast('Error: '+error.message,'error');return;}
   toast(id?'Updated':'Added');closeModal('modal-product');loadProducts();
@@ -462,9 +462,9 @@ async function saveProduct(){
 // ═══════════════════════════════════════
 //  EDIT / PUBLISH / DELETE
 // ═══════════════════════════════════════
-async function editProduct(id){try{var{data}=await sb.from('products').select('*').eq('id',id).single();if(data)openProductForm(data);}catch(e){toast('Error','error');}}
-async function togglePublish(id,pub){await sb.from('products').update({is_published:pub,is_active:pub,updated_at:new Date().toISOString()}).eq('id',id);toast(pub?'Published':'Unpublished');loadProducts();}
-async function deleteProduct(id){if(!confirm('Delete this product?'))return;await sb.from('products').delete().eq('id',id);toast('Deleted');loadProducts();}
+async function editProduct(id){try{var{data}=await sb.from('salesweb_products').select('*').eq('id',id).single();if(data)openProductForm(data);}catch(e){toast('Error','error');}}
+async function togglePublish(id,pub){await sb.from('salesweb_products').update({is_published:pub,is_active:pub,updated_at:new Date().toISOString()}).eq('id',id);toast(pub?'Published':'Unpublished');loadProducts();}
+async function deleteProduct(id){if(!confirm('Delete this product?'))return;await sb.from('salesweb_products').delete().eq('id',id);toast('Deleted');loadProducts();}
 
 // ═══════════════════════════════════════
 //  REORDER PRODUCTS
@@ -483,7 +483,7 @@ async function moveProduct(idx,dir){
   // Save sort_order for ALL products (ensures consistency)
   var promises=[];
   for(var i=0;i<list.length;i++){
-    promises.push(sb.from('products').update({sort_order:i}).eq('id',list[i].id));
+    promises.push(sb.from('salesweb_products').update({sort_order:i}).eq('id',list[i].id));
   }
   try{
     await Promise.all(promises);

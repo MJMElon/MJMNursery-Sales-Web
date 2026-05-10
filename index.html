@@ -75,7 +75,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MJM Nursery | MPOB Certified Oil Palm Seedlings</title>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -240,7 +240,7 @@
     position: fixed; top: 0; left: 0; right: 0; z-index: 100;
     background: var(--green-dark);
     display: flex; align-items: center; justify-content: space-between;
-    padding: 0 3rem; height: 120px; transition: box-shadow .3s;
+    padding: 0 3rem; height: 144px; transition: box-shadow .3s;
   }
   nav.scrolled { box-shadow: 0 2px 20px rgba(0,0,0,.3); }
   .nav-logo { display: flex; align-items: center; gap: .75rem; text-decoration: none; cursor: pointer; }
@@ -272,7 +272,7 @@
   .page-hero {
     height: 280px; background: var(--green-dark); position: relative;
     display: flex; align-items: flex-end; padding: 3rem;
-    margin-top: 120px; overflow: hidden;
+    margin-top: 144px; overflow: hidden;
   }
   .page-hero::before {
     content: ''; position: absolute; inset: 0;
@@ -307,21 +307,25 @@
 
   /* ── FEATURES STRIP ── */
   .features-strip { background: var(--green-dark); padding: 3rem 2.5rem; display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.2rem; }
-  .feature-item { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08); border-radius: 16px; padding: 2rem 1.5rem; text-align: center; transition: transform .25s ease, box-shadow .25s ease, background .25s ease; cursor: default; }
-  .feature-item:hover { transform: scale(1.08); box-shadow: 0 12px 32px rgba(0,0,0,.3); background: rgba(255,255,255,.1); z-index: 2; position: relative; }
-  .feature-icon { width: 52px; height: 52px; margin: 0 auto .9rem; background: rgba(255,255,255,.08); border-radius: 14px; display: flex; align-items: center; justify-content: center; }
-  .feature-icon svg { width: 24px; height: 24px; fill: none; stroke-width: 1.5; }
-  .feature-label { font-size: 14px; font-weight: 600; color: var(--white); margin-bottom: .4rem; letter-spacing: .01em; }
-  .feature-desc { font-size: 12.5px; color: rgba(255,255,255,.5); line-height: 1.6; }
-  /* Individual icon colors */
-  .feature-item.fi-award .feature-icon { background: rgba(201,168,76,.15); }
-  .feature-item.fi-award .feature-icon svg { stroke: var(--gold); }
-  .feature-item.fi-quality .feature-icon { background: rgba(239,68,68,.12); }
-  .feature-item.fi-quality .feature-icon svg { stroke: #f59e0b; }
-  .feature-item.fi-response .feature-icon { background: rgba(106,155,110,.15); }
-  .feature-item.fi-response .feature-icon svg { stroke: var(--green-light); }
-  .feature-item.fi-trusted .feature-icon { background: rgba(236,72,153,.12); }
-  .feature-item.fi-trusted .feature-icon svg { stroke: #ec4899; fill: #ec4899; fill-opacity: .3; }
+  .feature-item { background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.15); border-radius: 16px; padding: 2rem 1.5rem; text-align: center; transition: transform .25s ease, box-shadow .25s ease, background .25s ease; cursor: default; backdrop-filter: blur(4px); }
+  .feature-item:hover { transform: scale(1.08); box-shadow: 0 12px 32px rgba(0,0,0,.3); background: rgba(255,255,255,.2); z-index: 2; position: relative; }
+  .feature-icon { width: 56px; height: 56px; margin: 0 auto .9rem; border-radius: 16px; display: flex; align-items: center; justify-content: center; }
+  .feature-icon svg { width: 26px; height: 26px; fill: none; stroke-width: 1.5; }
+  .feature-label { font-size: 15px; font-weight: 700; color: var(--white); margin-bottom: .5rem; letter-spacing: .01em; }
+  .feature-desc { font-size: 12.5px; color: rgba(255,255,255,.65); line-height: 1.6; }
+  /* Individual card accent colors */
+  .feature-item.fi-award { background: rgba(201,168,76,.15); border-color: rgba(201,168,76,.25); }
+  .feature-item.fi-award .feature-icon { background: rgba(201,168,76,.25); }
+  .feature-item.fi-award .feature-icon svg { stroke: var(--gold-light); }
+  .feature-item.fi-quality { background: rgba(245,158,11,.12); border-color: rgba(245,158,11,.2); }
+  .feature-item.fi-quality .feature-icon { background: rgba(245,158,11,.2); }
+  .feature-item.fi-quality .feature-icon svg { stroke: #fbbf24; }
+  .feature-item.fi-response { background: rgba(106,155,110,.15); border-color: rgba(106,155,110,.25); }
+  .feature-item.fi-response .feature-icon { background: rgba(106,155,110,.25); }
+  .feature-item.fi-response .feature-icon svg { stroke: #86efac; }
+  .feature-item.fi-trusted { background: rgba(236,72,153,.1); border-color: rgba(236,72,153,.18); }
+  .feature-item.fi-trusted .feature-icon { background: rgba(236,72,153,.18); }
+  .feature-item.fi-trusted .feature-icon svg { stroke: #f9a8d4; fill: #ec4899; fill-opacity: .2; }
 
   /* ── PRODUCTS ── */
   .products { background: var(--cream); }
@@ -376,16 +380,7 @@
   .btn-add:hover { background: var(--green-mid); }
   .btn-add:disabled { background: #ccc; cursor: not-allowed; }
 
-  /* ── ABOUT ── */
-  .about { display: grid; grid-template-columns: 1fr 1fr; gap: 0; padding: 0; min-height: 600px; overflow: hidden; }
-  .about-visual { background: var(--green-dark); position: relative; overflow: hidden; min-height: 500px; display: flex; align-items: center; justify-content: center; }
-  .about-visual-bg { position: absolute; inset: 0; background: url('https://images.unsplash.com/photo-1500468756762-a401b6f17b46?w=800&q=80') center/cover; opacity: .35; }
-  .about-visual-content { position: relative; z-index: 2; text-align: center; padding: 3rem; }
-  .about-visual-content .big-number { font-family: 'Cormorant Garamond', serif; font-size: 8rem; font-weight: 300; color: var(--white); line-height: 1; opacity: .9; }
-  .about-visual-content .big-label { font-size: 13px; color: var(--gold-light); letter-spacing: .2em; text-transform: uppercase; }
-  .about-text { background: var(--cream); padding: 5rem 4rem; display: flex; flex-direction: column; justify-content: center; }
-  .about-text p { font-size: 15px; color: var(--text-mid); line-height: 1.8; margin-bottom: 1.25rem; }
-  .about-text .highlight { display: inline-block; background: var(--green-pale); color: var(--green-dark); font-size: 13px; font-weight: 500; padding: .4rem 1rem; border-radius: 20px; margin-bottom: 1.5rem; }
+  /* ── (about section removed — merged into features strip) ── */
 
   /* ── BRANDS ── */
   .brands { background: var(--white); text-align: center; }
@@ -398,13 +393,56 @@
   .brand-card-desc { font-size: 12px; color: var(--text-light); text-align: center; line-height: 1.5; }
 
   /* ── REWARDS ── */
-  .rewards { background: var(--green-dark); text-align: center; position: relative; overflow: hidden; }
-  .rewards::before { content: ''; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 50% 120%, rgba(201,168,76,.12) 0%, transparent 60%); }
-  .rewards .section-label { color: var(--gold-light); }
-  .rewards .section-title { color: var(--white); }
-  .rewards p { color: rgba(255,255,255,.55); font-size: 15px; margin-bottom: 2.5rem; }
-  .rewards-btn { display: inline-block; background: var(--gold); color: var(--green-dark); font-weight: 500; font-size: 14px; letter-spacing: .06em; padding: .9rem 2.5rem; border-radius: 8px; text-decoration: none; transition: background .2s; }
-  .rewards-btn:hover { background: var(--gold-light); }
+  .rewards { background: var(--green-dark); text-align: center; position: relative; overflow: hidden; padding: 5rem 3rem; }
+  .rewards::before { content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse at 30% 20%, rgba(201,168,76,.12) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 80%, rgba(106,155,110,.08) 0%, transparent 40%),
+                radial-gradient(ellipse at 50% 120%, rgba(201,168,76,.15) 0%, transparent 50%);
+  }
+  /* Decorative floating stars */
+  .rewards::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background-image:
+      radial-gradient(circle at 15% 25%, rgba(201,168,76,.3) 1px, transparent 1px),
+      radial-gradient(circle at 85% 15%, rgba(201,168,76,.25) 1.5px, transparent 1.5px),
+      radial-gradient(circle at 45% 85%, rgba(201,168,76,.2) 1px, transparent 1px),
+      radial-gradient(circle at 75% 65%, rgba(201,168,76,.35) 1px, transparent 1px),
+      radial-gradient(circle at 25% 70%, rgba(201,168,76,.15) 1.5px, transparent 1.5px),
+      radial-gradient(circle at 90% 45%, rgba(201,168,76,.2) 1px, transparent 1px),
+      radial-gradient(circle at 10% 55%, rgba(201,168,76,.25) 1px, transparent 1px),
+      radial-gradient(circle at 60% 30%, rgba(201,168,76,.2) 1.5px, transparent 1.5px);
+    background-size: 100% 100%;
+    animation: rewardStars 6s ease-in-out infinite alternate;
+  }
+  @keyframes rewardStars { 0% { opacity: .4; } 100% { opacity: 1; } }
+  .rewards .section-title { color: var(--white); position: relative; z-index: 1; }
+  .rewards p { color: rgba(255,255,255,.55); font-size: 15px; margin-bottom: 1.5rem; position: relative; z-index: 1; }
+  .rewards-features {
+    display: flex; justify-content: center; gap: 2rem; margin-bottom: 2.5rem; flex-wrap: wrap;
+    position: relative; z-index: 1;
+  }
+  .rewards-feat {
+    display: flex; align-items: center; gap: .6rem;
+    background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
+    border-radius: 12px; padding: .7rem 1.2rem;
+  }
+  .rewards-feat-icon {
+    width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center;
+    font-size: 1.1rem;
+  }
+  .rewards-feat-icon.rf-star { background: rgba(201,168,76,.2); }
+  .rewards-feat-icon.rf-gift { background: rgba(106,155,110,.15); }
+  .rewards-feat-icon.rf-badge { background: rgba(236,72,153,.1); }
+  .rewards-feat-text { font-size: 12px; color: rgba(255,255,255,.7); font-weight: 600; text-align: left; line-height: 1.3; }
+  .rewards-btn {
+    display: inline-block; background: linear-gradient(135deg, var(--gold), var(--gold-light));
+    color: var(--green-dark); font-weight: 700; font-size: 14px; letter-spacing: .08em;
+    text-transform: uppercase;
+    padding: 1rem 3rem; border-radius: 12px; text-decoration: none;
+    transition: all .3s; position: relative; z-index: 1;
+    box-shadow: 0 6px 20px rgba(201,168,76,.3);
+  }
+  .rewards-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(201,168,76,.45); }
 
   /* ── INFORMATION PAGE ── */
   .info-page { background: var(--cream); }
@@ -423,13 +461,118 @@
   .policy-card h3 { font-family: 'Cormorant Garamond', serif; font-size: 20px; font-weight: 600; color: var(--text-dark); margin-bottom: .5rem; }
   .policy-card p { font-size: 13px; color: var(--text-light); line-height: 1.6; }
 
+  /* Policy tabs */
+  .policy-tab {
+    padding: .6rem 1.4rem; border-radius: 8px; font-size: 13px; font-weight: 600;
+    background: var(--white); border: 1px solid var(--green-pale); color: var(--text-mid);
+    cursor: pointer; transition: all .2s; font-family: 'DM Sans', sans-serif;
+  }
+  .policy-tab:hover { border-color: var(--green-mid); color: var(--green-dark); }
+  .policy-tab.active { background: var(--green-dark); color: #fff; border-color: var(--green-dark); }
+  .policy-content { display: none; }
+  .policy-content.active { display: block; animation: fadeIn .3s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
   /* Partners section */
   .partners { background: var(--white); padding: 4rem 3rem; text-align: center; }
   .partners-strip { display: flex; align-items: center; justify-content: center; gap: 3rem; flex-wrap: wrap; margin-top: 2.5rem; }
   .partner-logo { height: 60px; width: auto; object-fit: contain; opacity: .7; transition: opacity .2s; filter: grayscale(30%); }
   .partner-logo:hover { opacity: 1; filter: none; }
-  /* Fallback partner badges when no image */
-  .partner-badge { background: var(--green-pale); color: var(--green-dark); font-size: 12px; font-weight: 600; padding: .6rem 1.4rem; border-radius: 6px; letter-spacing: .06em; text-transform: uppercase; }
+
+  /* ── LOGO FLY-TO-CENTER ── */
+  .logo-backdrop {
+    position: fixed; inset: 0; z-index: 9998;
+    background: rgba(0,0,0,0); backdrop-filter: blur(0px);
+    pointer-events: none;
+    transition: background .6s ease, backdrop-filter .6s ease;
+  }
+  .logo-backdrop.active {
+    background: rgba(0,0,0,.55); backdrop-filter: blur(10px);
+    pointer-events: auto;
+  }
+  .logo-fly-wrap {
+    position: fixed; z-index: 9999; pointer-events: none;
+    transition: all .7s cubic-bezier(.4, 0, .1, 1);
+    filter: drop-shadow(0 0 0 transparent);
+  }
+  .logo-fly-wrap.flying {
+    filter: drop-shadow(0 12px 50px rgba(201,168,76,.5));
+  }
+  .logo-fly-wrap img { width: 100%; height: 100%; object-fit: contain; }
+  .logo-slogan-float {
+    position: fixed; z-index: 10000; pointer-events: none;
+    white-space: nowrap;
+    font-family: 'Cormorant Garamond', serif; font-size: 16px; font-weight: 600;
+    color: var(--gold-light); letter-spacing: .18em; text-transform: uppercase;
+    text-shadow: 0 2px 16px rgba(201,168,76,.5);
+    opacity: 0; transition: opacity .5s ease .3s;
+  }
+  .logo-slogan-float.visible { opacity: 1; }
+
+  /* ── (flip clock removed — merged into features strip) ── */
+
+  /* ── PASSION PHOTO STRIP ── */
+  .passion-section { background: var(--cream); text-align: center; padding: 4rem 3rem 2rem; }
+  .passion-strip {
+    display: flex; width: 100%; margin-top: 2.5rem;
+    border-radius: 20px; overflow: hidden;
+    box-shadow: 0 12px 40px rgba(0,0,0,.12);
+    position: relative;
+  }
+  .passion-panel {
+    flex: 1; position: relative; min-height: 280px;
+    overflow: hidden; cursor: default;
+    transition: flex .4s ease;
+  }
+  .passion-panel:hover { flex: 1.3; }
+  .passion-panel-img {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; transition: transform .4s ease;
+  }
+  .passion-panel:hover .passion-panel-img { transform: scale(1.05); }
+  .passion-panel-overlay {
+    position: absolute; inset: 0;
+    background: linear-gradient(to top, rgba(0,0,0,.7) 0%, rgba(0,0,0,.15) 50%, rgba(0,0,0,.05) 100%);
+    display: flex; flex-direction: column; justify-content: flex-end;
+    padding: 1.2rem; z-index: 2;
+  }
+  .passion-panel-name {
+    font-size: 13px; font-weight: 700; color: #fff;
+    text-transform: uppercase; letter-spacing: .06em; line-height: 1.3;
+  }
+  .passion-panel-desc {
+    font-size: 11px; color: rgba(255,255,255,.65); line-height: 1.4; margin-top: .3rem;
+  }
+  /* Inclined divider between panels */
+  .passion-divider {
+    position: relative; flex: 0 0 0; z-index: 3;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 -14px;
+  }
+  .passion-divider::before {
+    content: ''; position: absolute;
+    width: 28px; height: 120%; top: -10%;
+    background: var(--cream);
+    transform: skewX(-8deg);
+    box-shadow: 0 0 12px rgba(0,0,0,.1);
+  }
+  .passion-divider-arrow {
+    position: relative; z-index: 4;
+    font-size: 1.4rem; font-weight: 900; color: var(--green-mid);
+    text-shadow: 0 1px 3px rgba(0,0,0,.1);
+  }
+  /* Placeholder for panels without images */
+  .passion-panel-placeholder {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 3rem; opacity: .15;
+  }
+  @media (max-width: 768px) {
+    .passion-strip { flex-direction: column; border-radius: 16px; }
+    .passion-panel { min-height: 160px; }
+    .passion-panel:hover { flex: 1; }
+    .passion-divider { margin: -10px 0; }
+    .passion-divider::before { width: 120%; height: 20px; transform: skewY(-3deg); top: auto; }
+  }
 
   /* ── CONTACT US PAGE ── */
   .contact-page { background: var(--cream); }
@@ -484,19 +627,42 @@
   .join-resume-box h4 { font-size: 15px; font-weight: 600; color: var(--text-dark); margin-bottom: .5rem; }
   .join-resume-box p { font-size: 14px; color: var(--text-mid); line-height: 1.7; }
 
-  /* ── FOOTER ── */
-  footer { background: var(--green-dark); padding: 3rem 3rem 2rem; display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; gap: 3rem; }
-  .footer-brand p { font-size: 13px; color: rgba(255,255,255,.45); line-height: 1.7; margin-top: .75rem; }
-  .footer-col h4 { font-size: 11px; font-weight: 500; letter-spacing: .15em; text-transform: uppercase; color: var(--gold-light); margin-bottom: 1.25rem; }
-  .footer-col ul { list-style: none; display: flex; flex-direction: column; gap: .6rem; }
-  .footer-col ul li a { font-size: 13px; color: rgba(255,255,255,.5); text-decoration: none; transition: color .2s; cursor: pointer; }
-  .footer-col ul li a:hover { color: var(--white); }
-  .footer-social { display: flex; gap: .75rem; margin-top: 1rem; }
-  .footer-social a { width: 34px; height: 34px; border-radius: 8px; background: rgba(255,255,255,.08); display: flex; align-items: center; justify-content: center; transition: background .2s; }
-  .footer-social a:hover { background: rgba(255,255,255,.18); }
-  .footer-social a svg { width: 16px; height: 16px; fill: rgba(255,255,255,.7); }
-  .footer-bottom { background: var(--green-dark); border-top: 1px solid rgba(255,255,255,.08); padding: 1.25rem 3rem; display: flex; justify-content: space-between; align-items: center; }
-  .footer-bottom p { font-size: 12px; color: rgba(255,255,255,.3); }
+  /* ── FOOTER (metallic dark green) ── */
+  footer {
+    background: linear-gradient(170deg, #2D4A30 0%, #1a3320 40%, #2D4A30 70%, #3a5a3e 100%);
+    padding: 3rem 3rem 2rem; text-align: center;
+    position: relative; overflow: hidden;
+  }
+  footer::before {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(135deg, rgba(255,255,255,.06) 0%, transparent 40%, rgba(255,255,255,.04) 70%, transparent 100%);
+  }
+  footer::after {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(201,168,76,.3), rgba(255,255,255,.15), rgba(201,168,76,.3), transparent);
+  }
+  .footer-inner { position: relative; z-index: 1; }
+  .footer-title {
+    font-size: 11px; font-weight: 600; letter-spacing: .2em; text-transform: uppercase;
+    color: var(--gold-light); margin-bottom: 1.5rem;
+  }
+  .footer-social { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+  .footer-social a {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.1);
+    display: flex; align-items: center; justify-content: center;
+    transition: all .25s; text-decoration: none;
+  }
+  .footer-social a:hover { background: rgba(255,255,255,.18); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.2); }
+  .footer-social a svg { width: 20px; height: 20px; fill: rgba(255,255,255,.7); }
+  .footer-social a:hover svg { fill: #fff; }
+  .footer-bottom {
+    background: linear-gradient(170deg, #1a3320, #243d28);
+    border-top: 1px solid rgba(255,255,255,.06);
+    padding: 1.25rem 3rem; text-align: center;
+    position: relative;
+  }
+  .footer-bottom p { font-size: 12px; color: rgba(255,255,255,.25); }
 
   /* ── WHATSAPP FLOAT ── */
   .wa-float { position: fixed; bottom: 2rem; right: 2rem; z-index: 200; }
@@ -585,17 +751,12 @@
     .nav-links.open { display: flex; flex-direction: column; position: fixed; top: 70px; left: 0; right: 0; background: var(--green-dark); padding: 1.5rem 2rem; gap: 1.5rem; z-index: 99; }
     .hamburger { display: block; }
     .features-strip { grid-template-columns: repeat(2, 1fr); padding: 2rem 1.5rem; gap: 1rem; }
-    .about { grid-template-columns: 1fr; }
-    .about-text { padding: 3rem 2rem; }
-    .brands-grid { grid-template-columns: 1fr; }
     .info-policies-grid { grid-template-columns: 1fr; }
     .contact-page-grid { grid-template-columns: 1fr; gap: 2rem; padding: 3rem 1.5rem; }
     .form-row { grid-template-columns: 1fr; }
     .join-intro { grid-template-columns: 1fr; gap: 2rem; padding: 3rem 1.5rem; }
     .join-info-grid { grid-template-columns: 1fr; padding: 0 1.5rem 3rem; }
     .join-resume-box { margin: 0 1.5rem 3rem; }
-    footer { grid-template-columns: 1fr 1fr; gap: 2rem; }
-    .footer-bottom { flex-direction: column; gap: .75rem; text-align: center; }
     section { padding: 3.5rem 1.5rem; }
     .info-policies { padding: 3rem 1.5rem; }
     .partners { padding: 3rem 1.5rem; }
@@ -604,7 +765,6 @@
   @media (max-width: 600px) {
     .features-strip { grid-template-columns: 1fr; padding: 1.5rem 1rem; gap: 1rem; }
     .products-grid { grid-template-columns: repeat(2, 1fr); gap: 1rem; }
-    footer { grid-template-columns: 1fr; }
     .hero h1 { font-size: 2.8rem; }
     .partners-strip { gap: 1.5rem; }
   }
@@ -748,15 +908,15 @@
   </div>
 </div>
 
-<!-- NAV -->
-<nav id="navbar">
+<!-- NAV (hidden during splash, revealed after) -->
+<nav id="navbar" style="display:none;">
   <div class="nav-logo" onclick="showPage('home')">
-    <img src="https://cdn.store-assets.com/s/1408881/f/16655641.png" alt="MJM Nursery" style="height:140px;cursor:pointer;transition:transform .3s ease;" onmouseenter="this.style.transform='scale(2)';this.style.zIndex='100';this.style.position='relative';" onmouseleave="this.style.transform='scale(1)';this.style.zIndex=''">
+    <img id="nav-logo-img" src="https://cdn.store-assets.com/s/1408881/f/16655641.png" alt="MJM Nursery" style="height:140px;cursor:pointer;transition:transform .3s ease;" onmouseenter="showLogoOverlay()" onclick="event.stopPropagation();">
   </div>
   <ul class="nav-links" id="navLinks">
-    <li><a onclick="showPage('home'); scrollToSection('products')" id="nav-shop" style="font-weight:700;">Shop</a></li>
+    <li><a onclick="showPage('home'); scrollToSection('salesweb_products')" id="nav-shop" style="font-weight:700;">Shop</a></li>
     <li>
-      <a href="../Customer-Booking-MJM-Nursery/index.html" target="_blank" class="btn-book-collection" style="font-size:11px;padding:.45rem 1rem;">
+      <a href="https://collect.mjmnursery.com" target="_blank" class="btn-book-collection" style="font-size:11px;padding:.45rem 1rem;">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
         Book Seedling Collection
       </a>
@@ -771,7 +931,7 @@
     </li>
   </ul>
   <div class="nav-actions">
-    <a href="auth.html" id="nav-login-link">Log In</a>
+    <a href="salesweb_auth.html" id="nav-login-link">Log In</a>
     <a onclick="showPage('portal')" id="nav-myaccount" style="display:none;cursor:pointer;">My Account</a>
     <a onclick="portalSignOut()" id="nav-signout" style="display:none;cursor:pointer;font-size:11px;opacity:.6;">Sign Out</a>
     <div style="position:relative;">
@@ -791,13 +951,18 @@
   </div>
 </nav>
 
+<!-- LOGO FLY SYSTEM -->
+<div class="logo-backdrop" id="logoBackdrop" onclick="logoFlyBack()"></div>
+<div class="logo-fly-wrap" id="logoFlyWrap" style="display:none;"><img src="https://cdn.store-assets.com/s/1408881/f/16655641.png" alt="MJM Nursery"></div>
+<div class="logo-slogan-float" id="logoSlogan">The Gold Standard for Oil Palm Seedlings</div>
+
 <!-- ═══════════════════════════════════════ HOME PAGE ═══════════════════════════════════════ -->
 <div class="page active" id="page-home">
 
-  <div style="height:100px;"></div><!-- spacer for fixed nav -->
+  <div style="height:160px;"></div><!-- spacer for fixed nav -->
 
   <!-- Special For You section -->
-  <section class="products" id="products" style="padding-top:3rem;">
+  <section class="salesweb_products" id="salesweb_products" style="padding-top:3rem;">
     <div style="text-align:center;margin-bottom:2rem;">
       <span class="section-label">Handpicked For You</span>
       <h2 class="section-title">Special <em>For You</em></h2>
@@ -806,7 +971,7 @@
   </section>
 
   <!-- All Seedlings -->
-  <section class="products" style="padding-top:1rem;">
+  <section class="salesweb_products" style="padding-top:1rem;">
     <div class="products-header">
       <div>
         <span class="section-label">All Products</span>
@@ -816,8 +981,13 @@
     <div class="products-grid" id="productsGrid"></div>
   </section>
 
-  <!-- Why Choose Us — floating cards -->
+  <!-- 20+ Years of Excellence — features strip -->
   <div class="features-strip">
+    <div style="grid-column: 1 / -1; text-align: center; padding-bottom: .5rem;">
+      <h2 style="font-family:'Playfair Display',serif;font-size:clamp(1.8rem,4vw,2.8rem);font-weight:700;color:#fff;letter-spacing:.02em;line-height:1.15;margin:0;">
+        20+ Years of Excellence.<br><em style="color:var(--gold-light);font-style:italic;font-weight:400;">Award-Winning Nursery.</em>
+      </h2>
+    </div>
     <div class="feature-item fi-award">
       <div class="feature-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg></div>
       <div class="feature-label">MPOB Award Winner</div>
@@ -840,73 +1010,18 @@
     </div>
   </div>
 
-  <div class="about">
-    <div class="about-visual">
-      <div class="about-visual-bg"></div>
-      <div class="about-visual-content">
-        <div class="big-number">20+</div>
-        <div class="big-label">Years of Excellence</div>
-      </div>
-    </div>
-    <div class="about-text">
-      <span class="section-label">Who We Are</span>
-      <h2 class="section-title" style="line-height:1.2;">Award-Winning Seedlings.<br><em>20 Years of Expertise.</em></h2>
-      <span class="highlight">663951-U · MPOB Licensed</span>
-      <p style="font-size:15px;color:var(--text-dark);font-weight:500;line-height:1.7;">Empowering planters across Sarawak with quality-assured, premium seedlings that guarantee exceptionally high yields.</p>
-      <div style="display:grid;grid-template-columns:1fr;gap:.8rem;margin:1.2rem 0;">
-        <div style="display:flex;gap:.8rem;align-items:flex-start;">
-          <span style="font-size:1.5rem;flex-shrink:0;line-height:1;">🏆</span>
-          <div>
-            <div style="font-weight:700;font-size:13px;color:var(--text-dark);margin-bottom:.15rem;">MPOB Best Nursery Award</div>
-            <div style="font-size:12px;color:var(--text-mid);line-height:1.5;">Our unwavering dedication to quality earned us the prestigious Best Nursery Award from the Malaysian Palm Oil Board.</div>
-          </div>
-        </div>
-        <div style="display:flex;gap:.8rem;align-items:flex-start;">
-          <span style="font-size:1.5rem;flex-shrink:0;line-height:1;">🌱</span>
-          <div>
-            <div style="font-weight:700;font-size:13px;color:var(--text-dark);margin-bottom:.15rem;">20+ Years of Excellence</div>
-            <div style="font-size:12px;color:var(--text-mid);line-height:1.5;">With two decades of dedicated experience in the oil palm industry, MJM Nursery stands as a pillar of agricultural excellence in Sarawak.</div>
-          </div>
-        </div>
-        <div style="display:flex;gap:.8rem;align-items:flex-start;">
-          <span style="font-size:1.5rem;flex-shrink:0;line-height:1;">⚙️</span>
-          <div>
-            <div style="font-weight:700;font-size:13px;color:var(--text-dark);margin-bottom:.15rem;">Latest Technology</div>
-            <div style="font-size:12px;color:var(--text-mid);line-height:1.5;">Our commitment to utilizing the latest technology and maintaining high-accuracy cultivation methods consistently produces extraordinary results.</div>
-          </div>
-        </div>
-      </div>
-      <p style="font-size:12px;color:var(--text-light);">2nd Floor (B), Lot 1180, Bangunan BEI, Lorong Dua, Krokop, Miri, Sarawak · Tel: 085-419907</p>
-    </div>
-  </div>
-
-  <section class="brands">
-    <span class="section-label">Our Network</span>
-    <h2 class="section-title">Related <em>Companies</em></h2>
-    <div class="brands-grid">
-      <a class="brand-card" href="#">
-        <div class="brand-card-icon"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>
-        <div class="brand-card-name">MJM Oil Palm Collection Center</div>
-        <div class="brand-card-desc">Convenient collection points for your seedling orders</div>
-      </a>
-      <a class="brand-card" href="#">
-        <div class="brand-card-icon"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
-        <div class="brand-card-name">MJM Nursery</div>
-        <div class="brand-card-desc">Premium MPOB certified oil palm seedlings supplier</div>
-      </a>
-      <a class="brand-card" href="#">
-        <div class="brand-card-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></div>
-        <div class="brand-card-name">SawitGro (Baja Kompos)</div>
-        <div class="brand-card-desc">High quality compost fertilizer for oil palm cultivation</div>
-      </a>
+  <section class="passion-section">
+    <span class="section-label">Our Passion</span>
+    <h2 class="section-title">From Seed to <em>Sustainability</em></h2>
+    <div class="passion-strip" id="passionFlow">
+      <!-- Loaded dynamically from site_content table -->
     </div>
   </section>
 
   <section class="rewards">
-    <span class="section-label">Loyalty Programme</span>
     <h2 class="section-title">Earn Points for<br>Every <em style="color:var(--gold-light)">Purchase</em></h2>
     <p>Sign up today and start earning reward points. More exciting rewards coming soon.</p>
-    <a href="#" class="rewards-btn">Sign Up Now</a>
+    <a href="salesweb_auth.html" class="rewards-btn">Sign Up Now</a>
   </section>
 
 </div><!-- /page-home -->
@@ -926,28 +1041,109 @@
     <div class="info-policies">
       <span class="section-label">Legal Documents</span>
       <h2 class="section-title">Our <em>Policies</em></h2>
-      <div class="info-policies-grid">
-        <a class="policy-card" href="https://mjnnursery.easy.co/pages/terms-of-service" target="_blank">
-          <div class="policy-icon terms">
-            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-          </div>
-          <h3>Terms & Conditions</h3>
-          <p>Read our full terms of service governing the use of MJM Nursery's products and platform.</p>
-        </a>
-        <a class="policy-card" href="https://mjnnursery.easy.co/pages/privacy-policy" target="_blank">
-          <div class="policy-icon privacy">
-            <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          </div>
-          <h3>Privacy Policy</h3>
-          <p>Understand how we collect, use, and protect your personal information and data.</p>
-        </a>
-        <a class="policy-card" href="https://mjnnursery.easy.co/pages/refund-policy" target="_blank">
-          <div class="policy-icon refund">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          </div>
-          <h3>Non Refund Policy</h3>
-          <p>All deposits and payments made to MJM Nursery are non-refundable. Please read carefully.</p>
-        </a>
+
+      <!-- Policy tabs -->
+      <div style="display:flex;gap:.5rem;margin-bottom:1.5rem;flex-wrap:wrap;">
+        <button class="policy-tab active" onclick="switchPolicyTab('terms',this)">Terms & Conditions</button>
+        <button class="policy-tab" onclick="switchPolicyTab('privacy',this)">Privacy Policy</button>
+        <button class="policy-tab" onclick="switchPolicyTab('refund',this)">Non Refund Policy</button>
+      </div>
+
+      <!-- Terms & Conditions -->
+      <div class="policy-content active" id="pol-terms">
+        <div style="background:#fff;border-radius:16px;padding:2.5rem;border:1px solid rgba(0,0,0,.06);line-height:1.8;color:var(--text-mid);font-size:14px;">
+          <h3 style="color:var(--text-dark);font-size:15px;margin:0 0 .5rem;">1. Introduction</h3>
+          <p>These Terms apply to the website and transactions for products and services. Additional contracts may apply and will control if they conflict with these Terms.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">2. Binding</h3>
+          <p>By registering, accessing, or using this website, you agree to be bound by these Terms. The mere use of this website implies the knowledge and acceptance of these Terms.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">3. Electronic Communication</h3>
+          <p>You consent to electronic communications from the company via website or email, which satisfy legal requirements for written communication.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">4. Intellectual Property</h3>
+          <p>The company owns all copyright and intellectual property rights in the website and its content. Without written permission, you may not use, copy, reproduce, distribute, alter, reverse engineer, decompile, transfer, download, transmit, monetize, sell, market, or commercialize website resources.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">5. Third-Party Property</h3>
+          <p>The site contains links to other websites. The company does not monitor their content and is not responsible for any privacy practices or content of these sites.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">6. Responsible Use</h3>
+          <p>You agree to use the website only lawfully and ethically. Prohibited activities include distributing malware, collecting data for marketing, or conducting automated data collection.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">7. Registration</h3>
+          <p>Account holders must maintain password confidentiality and are responsible for all account activities. You must immediately notify the company of password disclosure.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">8. Idea Submission</h3>
+          <p>Unsolicited idea submissions grant the company a worldwide, irrevocable, non-exclusive, royalty-free license to use, reproduce, store, adapt, publish, translate and distribute your content.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">9. Termination of Use</h3>
+          <p>The company may suspend or discontinue website access at any discretion without liability.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">10. Warranties and Liability</h3>
+          <p>The website is provided "as is and as available" with all warranties disclaimed. Liability is limited to amounts paid for products or services.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">11. Privacy</h3>
+          <p>Users must provide accurate information during registration. The company commits to protecting personal data.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">12. Accessibility</h3>
+          <p>The company commits to making content accessible to individuals with disabilities.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">13. Export Restrictions / Legal Compliance</h3>
+          <p>Users must comply with Malaysian export regulations.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">14. Assignment</h3>
+          <p>Users cannot assign rights or obligations under these Terms without written consent.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">15. Breaches of Terms</h3>
+          <p>The company may suspend accounts, contact internet service providers, or pursue legal action for breaches.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">16. Force Majeure</h3>
+          <p>Neither party is liable for delays or failures arising from causes beyond reasonable control, except for payment obligations.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">17. Indemnification</h3>
+          <p>Users must indemnify and compensate the company for claims relating to Terms violations.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">18. Waiver</h3>
+          <p>Failure to enforce provisions does not constitute waiver of those provisions.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">19. Language</h3>
+          <p>These Terms are interpreted exclusively in English.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">20. Entire Agreement</h3>
+          <p>These Terms, privacy statement, and cookie policy constitute the entire agreement regarding website use.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">21. Updating of Terms</h3>
+          <p>It is your obligation to periodically check these Terms for changes or updates.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">22. Choice of Law and Jurisdiction</h3>
+          <p>Malaysian law governs these Terms, with disputes subject to Malaysian court jurisdiction.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">23. Contact Information</h3>
+          <p>Company: Mega Jutamas Sdn Bhd<br>Email: nursery.mjsb@gmail.com<br>Address: 2nd Floor, Bangunan Bei, Lot 1180B, Lorong 2, Krokop 98000 Miri, Sarawak</p>
+        </div>
+      </div>
+
+      <!-- Privacy Policy -->
+      <div class="policy-content" id="pol-privacy">
+        <div style="background:#fff;border-radius:16px;padding:2.5rem;border:1px solid rgba(0,0,0,.06);line-height:1.8;color:var(--text-mid);font-size:14px;">
+          <p style="font-size:12px;color:var(--text-light);margin-bottom:1rem;font-style:italic;">Last updated January 01, 2024</p>
+          <p>This privacy notice for Mega Jutamas Sdn. Bhd. describes how and why we might collect, store, use, and/or share your information when you use our services.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">1. What Information Do We Collect?</h3>
+          <p>We collect personal information that you voluntarily provide: names, phone numbers, email addresses, mailing addresses, passwords, usernames, billing addresses, debit/credit card numbers, and contact or authentication data. We do not process sensitive information. Payment data is stored by Billplz.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">2. How Do We Process Your Information?</h3>
+          <p>We process your information to provide, improve, and administer our Services, communicate with you, for security and fraud prevention, and to comply with law.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">3. When and With Whom Do We Share Your Information?</h3>
+          <p>We may share your information in connection with any merger, sale of company assets, financing, or acquisition of our business.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">4. How Long Do We Keep Your Information?</h3>
+          <p>We keep your personal information only as long as necessary for the purposes set out in this notice.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">5. How Do We Keep Your Information Safe?</h3>
+          <p>We have implemented appropriate technical and organisational security measures. However, no transmission over the Internet can be guaranteed 100% secure.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">6. Do We Collect Information From Minors?</h3>
+          <p>We do not knowingly solicit data from children under 18 years of age.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">7. What Are Your Privacy Rights?</h3>
+          <p>You may review, change, or terminate your account at any time. You have the right to withdraw your consent by contacting us.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">8. Do-Not-Track Features</h3>
+          <p>We do not currently respond to DNT browser signals.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">9. Updates to This Notice</h3>
+          <p>We may update this privacy notice from time to time. We encourage you to review it frequently.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">10. Contact Us</h3>
+          <p>Mega Jutamas Sdn. Bhd.<br>Lot 1180, 2nd Floor, Bangunan Bei, Krokop 2, Miri, Sarawak 98000<br>Email: <a href="mailto:nursery.mjsb@gmail.com" style="color:var(--green-mid);">nursery.mjsb@gmail.com</a></p>
+        </div>
+      </div>
+
+      <!-- Non Refund Policy -->
+      <div class="policy-content" id="pol-refund">
+        <div style="background:#fff;border-radius:16px;padding:2.5rem;border:1px solid rgba(0,0,0,.06);line-height:1.8;color:var(--text-mid);font-size:14px;">
+          <p style="background:var(--green-pale);color:var(--green-dark);padding:1rem 1.5rem;border-radius:10px;font-weight:500;margin-bottom:1.5rem;">We honor the committed price and reservation within the valid collection period. Please review our non-refund policy before making any purchases.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:0 0 .5rem;">1. Order Confirmation</h3>
+          <p>To secure your order for ready stock, we require full payment before collection. For pre-orders, a 10% deposit is necessary, and full payment must be made before collecting your oil palm seedlings.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">2. Non-Refundable Payment / Deposit</h3>
+          <p>All payments / deposits made towards oil palm seedlings are non-refundable. Once a payment has been made, it cannot be refunded for any reason. We allocate resources and reserve seedlings specifically for your order — it is non-transferable and non-refundable.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">3. Scheduled Collection</h3>
+          <p>Customers must collect seedlings on the scheduled date. Failure to collect may result in forfeiture of payment and cancellation of the order.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">4. Change of Collection Date</h3>
+          <p>Rescheduling may require additional payment for any price difference, subject to availability. Additional payment must be made before a new date is confirmed.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">5. Final Payment</h3>
+          <p>Deposits will be automatically deducted from the total invoice amount during final payment.</p>
+        </div>
       </div>
     </div>
 
@@ -965,6 +1161,7 @@
   </div>
 
 </div><!-- /page-information -->
+
 
 
 <!-- ═══════════════════════════════════════ CONTACT US PAGE ═══════════════════════════════════════ -->
@@ -986,7 +1183,7 @@
         <div class="contact-card">
           <div class="cc-icon"><svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></div>
           <div>
-            <div class="cc-label">Address</div>
+            <div class="cc-label">Office Address</div>
             <div class="cc-value">2nd Floor (B), Lot 1180, Bangunan BEI, Lorong Dua, Krokop, P.O. Box 163, 98007 Miri, Sarawak</div>
           </div>
         </div>
@@ -1001,7 +1198,7 @@
           <div class="cc-icon"><svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div>
           <div>
             <div class="cc-label">Email</div>
-            <div class="cc-value"><a href="mailto:info@mjmnursery.com">info@mjmnursery.com</a></div>
+            <div class="cc-value"><a href="mailto:nursery.mjsb@gmail.com">nursery.mjsb@gmail.com</a></div>
           </div>
         </div>
         <div class="contact-card">
@@ -1172,7 +1369,7 @@
         <!-- Order tabs -->
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem;">
           <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;">
-            <a href="../Customer-Booking-MJM-Nursery/index.html" target="_blank" class="btn-book-collection">
+            <a href="https://collect.mjmnursery.com" target="_blank" class="btn-book-collection">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
               Book Collection
             </a>
@@ -1386,46 +1583,19 @@
 
 <!-- ═══════════════════════════════════════ SHARED FOOTER ═══════════════════════════════════════ -->
 <footer>
-  <div class="footer-brand">
-    <img src="https://cdn.store-assets.com/s/1408881/f/16655641.png" alt="MJM Nursery" style="height:52px;cursor:pointer;" onclick="showPage('home')">
-    <p>MPOB Certified Oil Palm Seedlings supplier based in Miri, Sarawak. Quality you can trust, harvest after harvest.</p>
+  <div class="footer-inner">
+    <div class="footer-title">Social Media</div>
     <div class="footer-social">
-      <a href="https://www.facebook.com/theMJMGroup" target="_blank" title="Facebook"><svg viewBox="0 0 24 24"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg></a>
-      <a href="https://www.instagram.com/themjmgroup/" target="_blank" title="Instagram"><svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg></a>
-      <a href="https://wa.me/601129337889" target="_blank" title="WhatsApp"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></a>
+      <a href="#" target="_blank" title="Facebook"><svg viewBox="0 0 24 24"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg></a>
+      <a href="#" target="_blank" title="Instagram"><svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg></a>
+      <a href="#" target="_blank" title="TikTok"><svg viewBox="0 0 24 24"><path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5"/></svg></a>
+      <a href="#" target="_blank" title="Threads"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3v2.5c0 .83-.67 1.5-1.5 1.5S12 11.33 12 10.5V8a1 1 0 0 0-2 0v4c0 2.76 2.24 5 5 5s5-2.24 5-5"/></svg></a>
+      <a href="#" target="_blank" title="LinkedIn"><svg viewBox="0 0 24 24"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg></a>
     </div>
-  </div>
-  <div class="footer-col">
-    <h4>Shop</h4>
-    <ul>
-      <li><a onclick="showPage('home');scrollToSection('products')">All Products</a></li>
-      <li><a onclick="showPage('home');scrollToSection('products')">2026 Raya Promo</a></li>
-      <li><a onclick="showPage('home');scrollToSection('products')">Oil Palm Seedlings</a></li>
-      <li><a onclick="showPage('home');scrollToSection('products')">Reserved Stock</a></li>
-    </ul>
-  </div>
-  <div class="footer-col">
-    <h4>Information</h4>
-    <ul>
-      <li><a onclick="showPage('information')">Policies</a></li>
-      <li><a onclick="showPage('information')">Trusted Partners</a></li>
-      <li><a href="https://mjnnursery.easy.co/pages/terms-of-service" target="_blank">Terms & Conditions</a></li>
-      <li><a href="https://mjnnursery.easy.co/pages/refund-policy" target="_blank">Non Refund Policy</a></li>
-    </ul>
-  </div>
-  <div class="footer-col">
-    <h4>Company</h4>
-    <ul>
-      <li><a onclick="showPage('contact')">Contact Us</a></li>
-      <li><a onclick="showPage('join')">Join Our Team</a></li>
-      <li><a href="https://wa.me/601129337889" target="_blank">WhatsApp Us</a></li>
-      <li><a href="https://mjnnursery.easy.co/pages/privacy-policy" target="_blank">Privacy Policy</a></li>
-    </ul>
   </div>
 </footer>
 <div class="footer-bottom">
-  <p>© 2026 Mega Jutamas Sdn Bhd (663951-U). All rights reserved.</p>
-  <p>Reg. No: 663951-U · MPOB Licensed</p>
+  <p>&copy; 2026 Mega Jutamas Sdn Bhd. All rights reserved.</p>
 </div>
 
 <!-- Product Popup -->
@@ -1486,6 +1656,15 @@ function scrollToSection(id) {
     const el = document.getElementById(id);
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, 100);
+}
+
+// ── POLICY TABS ──
+function switchPolicyTab(tab, btn) {
+  document.querySelectorAll('.policy-tab').forEach(function(t) { t.classList.remove('active'); });
+  document.querySelectorAll('.policy-content').forEach(function(c) { c.classList.remove('active'); });
+  btn.classList.add('active');
+  var el = document.getElementById('pol-' + tab);
+  if (el) el.classList.add('active');
 }
 
 // ── PRODUCTS ──
@@ -1735,7 +1914,7 @@ function proceedToCheckout() {
   var userName = sessionStorage.getItem('mjm_user_name');
   if (userName) {
     // Already logged in — go straight to payment
-    window.location.href = 'payment.html';
+    window.location.href = 'salesweb_payment.html';
   } else {
     // Not logged in — show inline login page
     toggleCartDropdown();
@@ -1767,8 +1946,148 @@ document.getElementById('hamburger').addEventListener('click', () => {
   document.getElementById('navLinks').classList.toggle('open');
 });
 
+// ── Logo fly-to-center on hover ──
+var logoFlying = false;
+var logoFlyWrap = document.getElementById('logoFlyWrap');
+var logoBackdrop = document.getElementById('logoBackdrop');
+var logoSlogan = document.getElementById('logoSlogan');
+var navLogoImg = document.getElementById('nav-logo-img');
+
+logoFlyWrap.style.display = 'none';
+
+function showLogoOverlay() {
+  if (logoFlying) return;
+  logoFlying = true;
+
+  var rect = navLogoImg.getBoundingClientRect();
+  navLogoImg.style.opacity = '0';
+
+  logoFlyWrap.style.display = 'block';
+  logoFlyWrap.style.transition = 'none';
+  logoFlyWrap.style.left = rect.left + 'px';
+  logoFlyWrap.style.top = rect.top + 'px';
+  logoFlyWrap.style.width = rect.width + 'px';
+  logoFlyWrap.style.height = rect.height + 'px';
+
+  void logoFlyWrap.offsetWidth;
+
+  var targetSize = 260;
+  logoFlyWrap.style.transition = 'all .6s cubic-bezier(.4, 0, .1, 1)';
+  logoFlyWrap.style.left = (window.innerWidth / 2 - targetSize / 2) + 'px';
+  logoFlyWrap.style.top = (window.innerHeight / 2 - targetSize / 2) + 'px';
+  logoFlyWrap.style.width = targetSize + 'px';
+  logoFlyWrap.style.height = targetSize + 'px';
+  logoFlyWrap.classList.add('flying');
+
+  logoBackdrop.classList.add('active');
+
+  setTimeout(function() {
+    logoSlogan.style.left = '50%';
+    logoSlogan.style.top = (window.innerHeight / 2 + targetSize / 2 + 8) + 'px';
+    logoSlogan.style.transform = 'translateX(-50%)';
+    logoSlogan.classList.add('visible');
+  }, 250);
+}
+
+function logoFlyBack() {
+  if (!logoFlying) return;
+  var rect = navLogoImg.getBoundingClientRect();
+
+  logoSlogan.classList.remove('visible');
+  logoBackdrop.classList.remove('active');
+
+  logoFlyWrap.style.transition = 'all .25s cubic-bezier(.4, 0, .8, 1)';
+  logoFlyWrap.style.left = rect.left + 'px';
+  logoFlyWrap.style.top = rect.top + 'px';
+  logoFlyWrap.style.width = rect.width + 'px';
+  logoFlyWrap.style.height = rect.height + 'px';
+  logoFlyWrap.classList.remove('flying');
+
+  setTimeout(function() {
+    logoFlyWrap.style.display = 'none';
+    navLogoImg.style.opacity = '1';
+    logoFlying = false;
+  }, 250);
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') logoFlyBack();
+});
+
 fetchProducts();
 updateCartUI();
+loadPassionSection();
+
+// ── Load passion section (fast: metadata first, images lazy-loaded individually) ──
+var _passionPlaceholderBg = {
+  plantation: 'linear-gradient(135deg, #2e7d32, #4caf50)',
+  nursery: 'linear-gradient(135deg, #2D4A30, #3E6B42)',
+  mill: 'linear-gradient(135deg, #bf360c, #e65100)',
+  collection: 'linear-gradient(135deg, #0d47a1, #1565c0)',
+  baja: 'linear-gradient(135deg, #4a148c, #7b1fa2)'
+};
+var _passionEmoji = { plantation:'🌴', nursery:'🌱', mill:'🏭', collection:'🚛', baja:'♻️' };
+var _passionDefaults = [
+  { id:'d1', key:'plantation', label:'Oil Palm Plantation', description:'Where it all begins' },
+  { id:'d2', key:'nursery', label:'MJM Nursery', description:'Premium seedling supplier' },
+  { id:'d3', key:'mill', label:'MJM Palm Oil Mill', description:'Processing into crude palm oil' },
+  { id:'d4', key:'collection', label:'MJM Collection Center', description:'Collection points for planters' },
+  { id:'d5', key:'baja', label:'SawitGro Baja Kompos', description:'Completing the cycle' }
+];
+
+async function loadPassionSection() {
+  var container = document.getElementById('passionFlow');
+  if (!container) return;
+
+  // Step 1: Fetch metadata only (no image_url) — instant
+  var items = _passionDefaults;
+  try {
+    var { data } = await _sb.from('salesweb_site_content').select('id,key,label,description,sort_order').eq('section','passion').order('sort_order');
+    if (data && data.length > 0) items = data;
+  } catch(e) { /* use defaults */ }
+
+  // Step 2: Render placeholders immediately
+  var html = '';
+  items.forEach(function(item, i) {
+    if (i > 0) html += '<div class="passion-divider"><span class="passion-divider-arrow">&rsaquo;</span></div>';
+    var bg = _passionPlaceholderBg[item.key] || _passionPlaceholderBg.plantation;
+    var emoji = _passionEmoji[item.key] || '';
+    html += '<div class="passion-panel" id="pp-' + item.id + '">' +
+      '<div class="passion-panel-img" style="background:' + bg + ';"></div>' +
+      '<div class="passion-panel-placeholder">' + emoji + '</div>' +
+      '<div class="passion-panel-overlay">' +
+        '<div class="passion-panel-name">' + (item.label||'') + '</div>' +
+        '<div class="passion-panel-desc">' + (item.description||'') + '</div>' +
+      '</div>' +
+    '</div>';
+  });
+  container.innerHTML = html;
+
+  // Step 3: Load each image individually in background (non-blocking)
+  items.forEach(function(item) {
+    if (item.id && !item.id.startsWith('d')) loadPassionPanelImg(item.id, item.key);
+  });
+}
+
+async function loadPassionPanelImg(id, key) {
+  try {
+    var { data } = await _sb.from('salesweb_site_content').select('image_url').eq('id', id).single();
+    if (data && data.image_url) {
+      var panel = document.getElementById('pp-' + id);
+      if (!panel) return;
+      var placeholder = panel.querySelector('.passion-panel-placeholder');
+      if (placeholder) placeholder.remove();
+      var bgDiv = panel.querySelector('.passion-panel-img');
+      if (bgDiv) bgDiv.remove();
+      var img = document.createElement('img');
+      img.className = 'passion-panel-img';
+      img.src = data.image_url;
+      img.alt = key || '';
+      img.loading = 'lazy';
+      panel.insertBefore(img, panel.firstChild);
+    }
+  } catch(e) { /* keep placeholder */ }
+}
 
 // Restore last page on refresh
 (function(){
@@ -2046,7 +2365,7 @@ function pOrderCard(o){
 function goPayOrder(orderId,total){
   sessionStorage.setItem('mjm_pay_order_id',orderId);
   sessionStorage.setItem('mjm_pay_order_total',total);
-  window.location.href='payment-proof.html';
+  window.location.href='salesweb_payment_proof.html';
 }
 
 function _odLabel(label,val){return'<div style="color:var(--text-light);font-size:11px;">'+label+'</div><div style="font-weight:600;font-size:12px;">'+esc(val||'—')+'</div>';}
@@ -2324,9 +2643,9 @@ async function clPostLogin(session) {
   var { data: profile } = await _sb.from('shared_profiles').select('role').eq('id', session.user.id).single();
   var role = (profile && profile.role) || 'customer';
   if (role === 'admin') {
-    setTimeout(function() { window.location.href = 'admin.html'; }, 800);
+    setTimeout(function() { window.location.href = 'salesweb_admin.html'; }, 800);
   } else {
-    setTimeout(function() { window.location.href = 'payment.html'; }, 800);
+    setTimeout(function() { window.location.href = 'salesweb_payment.html'; }, 800);
   }
 }
 
@@ -2339,7 +2658,7 @@ async function clLoginPassword() {
     if (!name) { clShowStatus('Please enter your full name.', 'error'); return; }
     if (pw.length < 6) { clShowStatus('Password must be at least 6 characters.', 'error'); return; }
     clShowStatus('Creating account...', 'success');
-    var { data: signUpData, error } = await _sb.auth.signUp({ email: identity, password: pw, options: { data: { full_name: name } } });
+    var { data: signUpData, error } = await _sb.auth.signUp({ email: identity, password: pw, options: { data: { full_name: name, user_type: 'customer' } } });
     if (error) {
       // If trigger error, try without metadata then create profile manually
       if (error.message.toLowerCase().includes('database')) {
@@ -2347,14 +2666,14 @@ async function clLoginPassword() {
         if (retryErr) { clShowStatus(retryErr.message, 'error'); return; }
         // Manually create profile row
         if (retryData && retryData.user) {
-          await _sb.from('shared_profiles').upsert({ id: retryData.user.id, email: identity, full_name: name, role: 'customer' }, { onConflict: 'id' });
+          await _sb.from('shared_profiles').upsert({ id: retryData.user.id, email: identity, full_name: name, role: 'customer', user_type: 'customer' }, { onConflict: 'id' });
         }
       } else {
         clShowStatus(error.message, 'error'); return;
       }
     } else if (signUpData && signUpData.user) {
       // Ensure profile exists (trigger may or may not have created it)
-      await _sb.from('shared_profiles').upsert({ id: signUpData.user.id, email: identity, full_name: name, role: 'customer' }, { onConflict: 'id' });
+      await _sb.from('shared_profiles').upsert({ id: signUpData.user.id, email: identity, full_name: name, role: 'customer', user_type: 'customer' }, { onConflict: 'id' });
     }
     clShowStatus('Account created! You can now sign in.', 'success');
     clToggleSignup();
@@ -2612,6 +2931,8 @@ document.querySelectorAll('.portal-modal-overlay').forEach(function(m){
   // Skip splash if already shown, or if coming from login (mjm_last_page is set)
   if (sessionStorage.getItem('mjm_splash_shown') || sessionStorage.getItem('mjm_last_page')) {
     if (splash) splash.remove();
+    var nav = document.getElementById('navbar');
+    if (nav) nav.style.display = '';
     return;
   }
   sessionStorage.setItem('mjm_splash_shown', '1');
@@ -2652,9 +2973,11 @@ document.querySelectorAll('.portal-modal-overlay').forEach(function(m){
     if (cdNum <= 0) clearInterval(cdInterval);
   }, 1000);
 
-  // Fade after 5 seconds
+  // Fade after 3 seconds, show nav
   setTimeout(function() {
     var splash = document.getElementById('splash-poster');
+    var nav = document.getElementById('navbar');
+    if (nav) nav.style.display = '';
     if (splash) {
       splash.classList.add('fade-out');
       setTimeout(function() { splash.remove(); }, 1200);

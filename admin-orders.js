@@ -364,22 +364,38 @@ async function applyCoupon(orderId){
   var code=document.getElementById('mo-coupon').value.trim().toUpperCase();
   if(!code){toast('Enter coupon code','error');return;}
 
-  var{data:coupon}=await sb.from('salesweb_coupons').select('*').eq('code',code).eq('is_active',true).single();
-  if(!coupon){toast('Invalid or inactive coupon','error');return;}
-  if(coupon.expiry_date&&coupon.expiry_date<new Date().toISOString().split('T')[0]){toast('Coupon expired','error');return;}
-  if(coupon.usage_limit>0&&coupon.usage_count>=coupon.usage_limit){toast('Coupon usage limit reached','error');return;}
-
-  // Calculate discount
-  var{data:items}=await sb.from('salesweb_order_items').select('subtotal').eq('order_id',orderId);
+  // Pull order + items + product categories so the RPC can evaluate scope.
+  var{data:items}=await sb.from('salesweb_order_items').select('product_id,quantity,unit_price,subtotal').eq('order_id',orderId);
+  var{data:order}=await sb.from('salesweb_customer_orders').select('customer_id,customer_email,discount_amount').eq('id',orderId).single();
   var subtotal=(items||[]).reduce(function(s,i){return s+(i.subtotal||0);},0);
-  var{data:order}=await sb.from('salesweb_customer_orders').select('discount_amount').eq('id',orderId).single();
-  var discount=coupon.discount_type==='percentage'?Math.round(subtotal*(coupon.discount_value/100)*100)/100:coupon.discount_value;
 
-  if(coupon.min_order_value>0&&subtotal<coupon.min_order_value){toast('Min order RM '+coupon.min_order_value+' required','error');return;}
+  var prodIds=(items||[]).map(function(i){return i.product_id;}).filter(Boolean);
+  var byId={};
+  if(prodIds.length){
+    var{data:prods}=await sb.from('salesweb_products').select('id,category,product_type').in('id',prodIds);
+    (prods||[]).forEach(function(p){byId[p.id]={category:p.category||p.product_type||null};});
+  }
+  var rpcItems=(items||[]).map(function(i){
+    var meta=byId[i.product_id]||{};
+    return{product_id:i.product_id,category:meta.category,qty:i.quantity,price:i.unit_price};
+  });
 
-  var total=Math.max(0,subtotal-(order?.discount_amount||0)-discount);
+  // Single source of truth: redeem_coupon writes the redemption row + bumps
+  // usage_count atomically, and re-validates against the live cart.
+  var{data:res,error}=await sb.rpc('redeem_coupon',{
+    p_code:code,
+    p_customer_id:order&&order.customer_id||null,
+    p_customer_email:order&&order.customer_email||null,
+    p_order_id:orderId,
+    p_subtotal:subtotal,
+    p_items:rpcItems
+  });
+  if(error){toast('Coupon error: '+error.message,'error');return;}
+  if(!res||res.ok===false){toast(res&&res.reason?res.reason:'Coupon rejected','error');return;}
+
+  var discount=Number(res.discount||0);
+  var total=Math.max(0,subtotal-(order&&order.discount_amount||0)-discount);
   await sb.from('salesweb_customer_orders').update({coupon_code:code,coupon_discount:discount,total:total,updated_at:new Date().toISOString()}).eq('id',orderId);
-  await sb.from('salesweb_coupons').update({usage_count:(coupon.usage_count||0)+1}).eq('id',coupon.id);
   toast('Coupon applied: -RM '+discount.toFixed(2));
   viewOrder(orderId);
 }

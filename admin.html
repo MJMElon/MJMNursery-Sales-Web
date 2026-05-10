@@ -106,6 +106,58 @@ input,select,textarea,button{font-family:inherit;}
 .filter-input{background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:7px 12px;font-size:12px;outline:none;min-width:200px;}
 .filter-input:focus{border-color:var(--green);}
 .filter-select{background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:7px 12px;font-size:12px;outline:none;cursor:pointer;}
+.filter-chip{background:var(--surface);border:1.5px solid var(--border);border-radius:999px;padding:6px 14px;font-size:11px;font-weight:600;color:var(--ink3);cursor:pointer;transition:all .15s;}
+.filter-chip:hover{border-color:var(--green);color:var(--green);}
+.filter-chip.active{background:var(--green);border-color:var(--green);color:#fff;}
+
+/* AI PROMOTION ASSISTANT — chat + preview layout */
+.promo-assistant-modal{max-width:1100px !important;width:95vw !important;}
+.promo-assistant-grid{display:grid;grid-template-columns:1fr 380px;gap:1rem;height:70vh;}
+.promo-chat{display:flex;flex-direction:column;background:var(--bg);border-radius:12px;border:1px solid var(--border);overflow:hidden;}
+.promo-chat-log{flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:.7rem;}
+.promo-chat-msg{padding:.7rem 1rem;border-radius:14px;font-size:13px;line-height:1.5;max-width:85%;white-space:pre-wrap;word-wrap:break-word;}
+.promo-chat-msg.user{align-self:flex-end;background:var(--green);color:#fff;border-bottom-right-radius:4px;}
+.promo-chat-msg.assistant{align-self:flex-start;background:#fff;color:var(--ink2);border:1px solid var(--border);border-bottom-left-radius:4px;}
+.promo-chat-msg.system{align-self:center;background:transparent;color:var(--ink4);font-size:11px;font-style:italic;padding:.2rem 0;}
+.promo-chat-input{display:flex;gap:.5rem;padding:.8rem;border-top:1px solid var(--border);background:#fff;}
+.promo-chat-input textarea{flex:1;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;padding:9px 12px;font-size:13px;font-family:inherit;outline:none;resize:none;min-height:38px;max-height:120px;}
+.promo-chat-input textarea:focus{border-color:var(--green);}
+.promo-chat-input button{padding:8px 18px;background:var(--green);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:12px;cursor:pointer;}
+.promo-chat-input button:disabled{opacity:.5;cursor:not-allowed;}
+.promo-typing{display:inline-flex;gap:3px;align-items:center;}
+.promo-typing span{width:6px;height:6px;background:var(--ink4);border-radius:50%;animation:bounce 1.2s infinite;}
+.promo-typing span:nth-child(2){animation-delay:.15s;}.promo-typing span:nth-child(3){animation-delay:.3s;}
+@keyframes bounce{0%,80%,100%{transform:translateY(0);opacity:.4;}40%{transform:translateY(-4px);opacity:1;}}
+
+.promo-preview-pane{display:flex;flex-direction:column;background:#fff;border-radius:12px;border:1px solid var(--border);overflow:hidden;}
+.promo-preview-head{padding:.7rem 1rem;border-bottom:1px solid var(--border);font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;}
+.promo-preview-body{flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:.8rem;}
+.promo-preview-empty{flex:1;display:flex;align-items:center;justify-content:center;color:var(--ink4);font-size:12px;text-align:center;padding:2rem 1rem;}
+.promo-banner{padding:14px 16px;border-radius:12px;font-weight:700;font-size:14px;text-align:center;color:#fff;display:flex;align-items:center;justify-content:center;gap:.5rem;}
+.promo-banner.green{background:linear-gradient(135deg,#7c5cbf,#5b3fa0);}
+.promo-banner.amber{background:linear-gradient(135deg,#f59e0b,#d97706);}
+.promo-banner.red{background:linear-gradient(135deg,#ef4444,#dc2626);}
+.promo-banner.blue{background:linear-gradient(135deg,#6366f1,#4f46e5);}
+.promo-banner.purple{background:linear-gradient(135deg,#a855f7,#7e22ce);}
+.promo-prod-card{background:var(--bg);border-radius:10px;padding:.8rem;border:1px solid var(--border);}
+.promo-prod-name{font-size:13px;font-weight:600;color:var(--ink);margin-bottom:.3rem;}
+.promo-prod-price{font-size:18px;font-weight:800;color:var(--green);}
+.promo-prod-strike{font-size:13px;color:var(--ink4);text-decoration:line-through;margin-right:.5rem;}
+.promo-meta-grid{display:grid;grid-template-columns:auto 1fr;gap:.4rem .8rem;font-size:12px;background:var(--bg);border-radius:8px;padding:.7rem .9rem;}
+.promo-meta-grid dt{color:var(--ink4);font-weight:600;}
+.promo-meta-grid dd{color:var(--ink2);font-weight:500;}
+.promo-preview-foot{padding:.8rem;border-top:1px solid var(--border);background:var(--bg);display:flex;gap:.5rem;}
+.promo-preview-foot button{flex:1;padding:9px;font-size:12px;font-weight:700;border-radius:9px;cursor:pointer;border:none;font-family:inherit;}
+.promo-publish-btn{background:var(--green);color:#fff;}
+.promo-publish-btn:hover{background:var(--green-dark);}
+.promo-publish-btn:disabled{opacity:.5;cursor:not-allowed;}
+.promo-discard-btn{background:none;border:1.5px solid var(--border2) !important;color:var(--ink3);}
+.promo-discard-btn:hover{border-color:var(--red) !important;color:var(--red);}
+
+@media(max-width:900px){
+  .promo-assistant-grid{grid-template-columns:1fr;height:auto;}
+  .promo-preview-pane{order:-1;}
+}
 
 /* MODAL */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center;padding:1rem;}
@@ -246,14 +298,45 @@ input,select,textarea,button{font-family:inherit;}
 
     <!-- PROMOTIONS -->
     <div class="tab-content" id="tab-promos">
-      <div class="main-header"><div class="main-title">Manage Promotions</div><button class="btn btn-primary" onclick="openPromoForm()">+ New Promotion</button></div>
+      <div class="main-header">
+        <div class="main-title">Manage Promotions</div>
+        <div style="display:flex;gap:.5rem;">
+          <button class="btn btn-primary" onclick="openPromoAssistant()">✨ AI Builder</button>
+          <button class="btn btn-outline" onclick="openPromoForm()">+ Manual Entry</button>
+        </div>
+      </div>
+      <div class="filter-bar" style="margin-bottom:1rem;">
+        <button class="filter-chip active" data-promo-status="" onclick="setPromoFilter('')">All</button>
+        <button class="filter-chip" data-promo-status="live" onclick="setPromoFilter('live')">Live</button>
+        <button class="filter-chip" data-promo-status="scheduled" onclick="setPromoFilter('scheduled')">Scheduled</button>
+        <button class="filter-chip" data-promo-status="draft" onclick="setPromoFilter('draft')">Drafts</button>
+        <button class="filter-chip" data-promo-status="ended" onclick="setPromoFilter('ended')">Ended</button>
+      </div>
       <div class="card"><div id="promos-table"><div class="loading">Loading promotions...</div></div></div>
     </div>
 
     <!-- COUPONS -->
     <div class="tab-content" id="tab-coupons">
-      <div class="main-header"><div class="main-title">Manage Coupons</div><button class="btn btn-primary" onclick="openCouponForm()">+ New Coupon</button></div>
-      <div class="card"><div class="filter-bar"><input class="filter-input" id="coupon-search" placeholder="Search coupon code..." oninput="loadCoupons()"></div><div id="coupons-table"><div class="loading">Loading coupons...</div></div></div>
+      <div class="main-header">
+        <div class="main-title">Manage Coupons</div>
+        <div style="display:flex;gap:.5rem;">
+          <button class="btn btn-outline" onclick="openCouponBulkForm()">⚡ Bulk Generate</button>
+          <button class="btn btn-primary" onclick="openCouponForm()">+ New Coupon</button>
+        </div>
+      </div>
+      <div class="stats-grid" id="coupon-stats"></div>
+      <div class="card">
+        <div class="filter-bar">
+          <input class="filter-input" id="coupon-search" placeholder="Search code or name..." oninput="loadCoupons()">
+          <button class="filter-chip active" data-coupon-status="" onclick="setCouponFilter('')">All</button>
+          <button class="filter-chip" data-coupon-status="active" onclick="setCouponFilter('active')">Active</button>
+          <button class="filter-chip" data-coupon-status="scheduled" onclick="setCouponFilter('scheduled')">Scheduled</button>
+          <button class="filter-chip" data-coupon-status="expired" onclick="setCouponFilter('expired')">Expired</button>
+          <button class="filter-chip" data-coupon-status="exhausted" onclick="setCouponFilter('exhausted')">Exhausted</button>
+          <button class="filter-chip" data-coupon-status="inactive" onclick="setCouponFilter('inactive')">Inactive</button>
+        </div>
+        <div id="coupons-table"><div class="loading">Loading coupons...</div></div>
+      </div>
     </div>
 
     <!-- SETTINGS -->
@@ -336,11 +419,104 @@ input,select,textarea,button{font-family:inherit;}
   <div class="modal-foot"><button class="btn btn-outline" onclick="closeModal('modal-product')">Cancel</button><button class="btn btn-primary" id="mp-save-btn" onclick="saveProduct()">Save Product</button></div>
 </div></div>
 
-<!-- PROMO FORM MODAL -->
-<div class="modal-overlay" id="modal-promo"><div class="modal"><div class="modal-head"><h2 id="mpr-title">New Promotion</h2><button class="modal-close" onclick="closeModal('modal-promo')">&#x2715;</button></div><div class="modal-body"><input type="hidden" id="mpr-id"><div class="form-group"><label class="form-label">Title</label><input class="form-input" id="mpr-name"></div><div class="form-group"><label class="form-label">Description</label><textarea class="form-input" id="mpr-desc" rows="2"></textarea></div><div class="form-row"><div class="form-group"><label class="form-label">Discount Type</label><select class="form-input" id="mpr-dtype"><option value="percentage">Percentage (%)</option><option value="fixed">Fixed Amount (RM)</option></select></div><div class="form-group"><label class="form-label">Discount Value</label><input class="form-input" id="mpr-dval" type="number" step="0.01"></div></div><div class="form-row"><div class="form-group"><label class="form-label">Target</label><select class="form-input" id="mpr-target"><option value="all">All Products</option><option value="category">Category</option><option value="specific">Specific Product</option></select></div><div class="form-group"><label class="form-label">Target Detail</label><input class="form-input" id="mpr-tdetail"></div></div><div class="form-row"><div class="form-group"><label class="form-label">Start Date</label><input class="form-input" id="mpr-start" type="date"></div><div class="form-group"><label class="form-label">End Date</label><input class="form-input" id="mpr-end" type="date"></div></div><label class="form-toggle"><input type="checkbox" id="mpr-active" checked><span>Active</span></label></div><div class="modal-foot"><button class="btn btn-outline" onclick="closeModal('modal-promo')">Cancel</button><button class="btn btn-primary" onclick="savePromo()">Save Promotion</button></div></div></div>
+<!-- PROMO FORM MODAL (manual entry — for admins who skip the AI builder) -->
+<div class="modal-overlay" id="modal-promo"><div class="modal" style="max-width:680px;"><div class="modal-head"><h2 id="mpr-title">New Promotion</h2><button class="modal-close" onclick="closeModal('modal-promo')">&#x2715;</button></div><div class="modal-body"><input type="hidden" id="mpr-id">
+<div class="form-row"><div class="form-group"><label class="form-label">Title (internal)</label><input class="form-input" id="mpr-name"></div><div class="form-group"><label class="form-label">Status</label><select class="form-input" id="mpr-status"><option value="draft">Draft</option><option value="scheduled">Scheduled</option><option value="live">Live</option><option value="ended">Ended</option><option value="archived">Archived</option></select></div></div>
+<div class="form-group"><label class="form-label">Description (internal)</label><textarea class="form-input" id="mpr-desc" rows="2"></textarea></div>
+<div class="form-row"><div class="form-group"><label class="form-label">Customer Banner Text</label><input class="form-input" id="mpr-banner" maxlength="80" placeholder="e.g. 20% off all seedlings this weekend!"></div><div class="form-group"><label class="form-label">Banner Style</label><div style="display:flex;gap:.4rem;"><input class="form-input" id="mpr-banner-emoji" style="width:60px;text-align:center;font-size:18px;" placeholder="🎁" maxlength="4"><select class="form-input" id="mpr-banner-color" style="flex:1;"><option value="green">Green</option><option value="amber">Amber</option><option value="red">Red</option><option value="blue">Blue</option><option value="purple">Purple</option></select></div></div></div>
+<div class="form-row"><div class="form-group"><label class="form-label">Discount Type</label><select class="form-input" id="mpr-dtype"><option value="percentage">Percentage (%)</option><option value="fixed">Fixed Amount (RM)</option></select></div><div class="form-group"><label class="form-label">Discount Value</label><input class="form-input" id="mpr-dval" type="number" step="0.01"></div></div>
+<div class="form-row"><div class="form-group"><label class="form-label">Max Discount (RM, 0=none)</label><input class="form-input" id="mpr-maxdisc" type="number" step="0.01" value="0"></div><div class="form-group"><label class="form-label">Min Order (RM, 0=none)</label><input class="form-input" id="mpr-minorder" type="number" step="0.01" value="0"></div></div>
+<div class="form-group"><label class="form-label">Target</label><select class="form-input" id="mpr-target" onchange="togglePromoTargetFields()"><option value="all">All Products</option><option value="category">Specific Categories</option><option value="specific">Specific Products</option></select></div>
+<div class="form-group" id="mpr-target-cats" style="display:none;"><label class="form-label">Categories (comma-separated)</label><input class="form-input" id="mpr-tcats" placeholder="Seedling, Merchandise"></div>
+<div class="form-group" id="mpr-target-prods" style="display:none;"><label class="form-label">Products</label><select class="form-input" id="mpr-tprods" multiple size="4" style="height:auto;"></select><div style="font-size:10px;color:var(--ink4);margin-top:.2rem;">Ctrl/Cmd+click to multi-select</div></div>
+<div class="form-row"><div class="form-group"><label class="form-label">Start Date</label><input class="form-input" id="mpr-start" type="date"></div><div class="form-group"><label class="form-label">End Date</label><input class="form-input" id="mpr-end" type="date"></div></div>
+<div class="form-row"><div class="form-group"><label class="form-label">Priority (higher wins)</label><input class="form-input" id="mpr-priority" type="number" value="0"></div><div class="form-group" style="display:flex;align-items:center;"><label class="form-toggle"><input type="checkbox" id="mpr-active" checked><span>Active</span></label></div></div>
+</div><div class="modal-foot"><button class="btn btn-outline" onclick="closeModal('modal-promo')">Cancel</button><button class="btn btn-primary" onclick="savePromo()">Save Promotion</button></div></div></div>
+
+<!-- AI PROMOTION ASSISTANT MODAL -->
+<div class="modal-overlay" id="modal-promo-assistant" style="z-index:260;"><div class="modal promo-assistant-modal">
+  <div class="modal-head">
+    <h2>✨ Promotion Builder — AI Assistant</h2>
+    <button class="modal-close" onclick="closePromoAssistant()">&#x2715;</button>
+  </div>
+  <div class="modal-body" style="padding:1rem;">
+    <div class="promo-assistant-grid">
+      <div class="promo-chat">
+        <div class="promo-chat-log" id="pa-log"></div>
+        <div class="promo-chat-input">
+          <textarea id="pa-input" placeholder="e.g. 20% off all seedlings this weekend, max RM 50 discount" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendPromoMessage();}"></textarea>
+          <button id="pa-send" onclick="sendPromoMessage()">Send</button>
+        </div>
+      </div>
+      <div class="promo-preview-pane">
+        <div class="promo-preview-head">Live Preview</div>
+        <div class="promo-preview-body" id="pa-preview"><div class="promo-preview-empty">Describe your promotion in the chat — a preview will appear here as the assistant drafts it.</div></div>
+        <div class="promo-preview-foot" id="pa-preview-foot" style="display:none;">
+          <button class="promo-discard-btn" onclick="discardPromoDraft()">Discard</button>
+          <button class="promo-publish-btn" id="pa-publish" onclick="publishPromoDraft()">Publish</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div></div>
 
 <!-- COUPON FORM MODAL -->
-<div class="modal-overlay" id="modal-coupon"><div class="modal"><div class="modal-head"><h2 id="mc-title">New Coupon</h2><button class="modal-close" onclick="closeModal('modal-coupon')">&#x2715;</button></div><div class="modal-body"><input type="hidden" id="mc-id"><div class="form-row"><div class="form-group"><label class="form-label">Coupon Code</label><input class="form-input" id="mc-code" style="text-transform:uppercase;"></div><div class="form-group"><label class="form-label">Discount Type</label><select class="form-input" id="mc-dtype"><option value="percentage">Percentage (%)</option><option value="fixed">Fixed Amount (RM)</option></select></div></div><div class="form-row"><div class="form-group"><label class="form-label">Discount Value</label><input class="form-input" id="mc-dval" type="number" step="0.01"></div><div class="form-group"><label class="form-label">Min Order Value (RM)</label><input class="form-input" id="mc-min" type="number" step="0.01" value="0"></div></div><div class="form-row"><div class="form-group"><label class="form-label">Usage Limit (0 = unlimited)</label><input class="form-input" id="mc-limit" type="number" value="0"></div><div class="form-group"><label class="form-label">Expiry Date</label><input class="form-input" id="mc-expiry" type="date"></div></div><label class="form-toggle"><input type="checkbox" id="mc-active" checked><span>Active</span></label></div><div class="modal-foot"><button class="btn btn-outline" onclick="closeModal('modal-coupon')">Cancel</button><button class="btn btn-primary" onclick="saveCoupon()">Save Coupon</button></div></div></div>
+<div class="modal-overlay" id="modal-coupon"><div class="modal" style="max-width:720px;"><div class="modal-head"><h2 id="mc-title">New Coupon</h2><button class="modal-close" onclick="closeModal('modal-coupon')">&#x2715;</button></div><div class="modal-body"><input type="hidden" id="mc-id">
+<div class="form-row">
+  <div class="form-group"><label class="form-label">Coupon Code</label><div style="display:flex;gap:.4rem;"><input class="form-input" id="mc-code" style="text-transform:uppercase;flex:1;"><button type="button" class="btn btn-outline btn-sm" onclick="randomizeCouponCode()" title="Generate a random code">🎲</button></div></div>
+  <div class="form-group"><label class="form-label">Internal Name</label><input class="form-input" id="mc-name" placeholder="e.g. Influencer Sept campaign"></div>
+</div>
+<div class="form-group"><label class="form-label">Customer Description</label><input class="form-input" id="mc-desc" placeholder="Shown to customer when applied"></div>
+<div class="form-row">
+  <div class="form-group"><label class="form-label">Discount Type</label><select class="form-input" id="mc-dtype" onchange="togglePctDiscountFields()"><option value="percentage">Percentage (%)</option><option value="fixed">Fixed Amount (RM)</option><option value="free_shipping">Free Shipping</option></select></div>
+  <div class="form-group"><label class="form-label">Discount Value</label><input class="form-input" id="mc-dval" type="number" step="0.01"></div>
+</div>
+<div class="form-row" id="mc-row-pct">
+  <div class="form-group"><label class="form-label">Max Discount (RM, 0=none)</label><input class="form-input" id="mc-maxdisc" type="number" step="0.01" value="0"></div>
+  <div class="form-group"><label class="form-label">Min Order Value (RM)</label><input class="form-input" id="mc-min" type="number" step="0.01" value="0"></div>
+</div>
+<div class="form-row">
+  <div class="form-group"><label class="form-label">Total Usage Limit (0 = unlimited)</label><input class="form-input" id="mc-limit" type="number" value="0"></div>
+  <div class="form-group"><label class="form-label">Per-Customer Limit (0 = unlimited)</label><input class="form-input" id="mc-percust" type="number" value="0"></div>
+</div>
+<div class="form-row">
+  <div class="form-group"><label class="form-label">Start Date</label><input class="form-input" id="mc-start" type="date"></div>
+  <div class="form-group"><label class="form-label">Expiry Date</label><input class="form-input" id="mc-expiry" type="date"></div>
+</div>
+<div class="form-group"><label class="form-label">Scope</label>
+  <select class="form-input" id="mc-scope" onchange="toggleCouponScopeFields()">
+    <option value="all">All Products</option>
+    <option value="category">Specific Categories</option>
+    <option value="product">Specific Products</option>
+  </select>
+</div>
+<div class="form-group" id="mc-scope-cats" style="display:none;"><label class="form-label">Categories (comma-separated)</label><input class="form-input" id="mc-cats" placeholder="Seedling, Merchandise"></div>
+<div class="form-group" id="mc-scope-prods" style="display:none;"><label class="form-label">Products</label><select class="form-input" id="mc-prods" multiple size="4" style="height:auto;"></select></div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;background:var(--bg);padding:.7rem;border-radius:8px;">
+  <label class="form-toggle" style="font-size:12px;"><input type="checkbox" id="mc-active" checked><span>Active</span></label>
+  <label class="form-toggle" style="font-size:12px;"><input type="checkbox" id="mc-firstorder"><span>First-order only</span></label>
+  <label class="form-toggle" style="font-size:12px;"><input type="checkbox" id="mc-stack" checked><span>Stack with promos</span></label>
+  <label class="form-toggle" style="font-size:12px;"><input type="checkbox" id="mc-autoapply"><span>Auto-apply at checkout</span></label>
+</div>
+</div><div class="modal-foot"><button class="btn btn-outline" onclick="closeModal('modal-coupon')">Cancel</button><button class="btn btn-primary" onclick="saveCoupon()">Save Coupon</button></div></div></div>
+
+<!-- BULK COUPON GENERATOR MODAL -->
+<div class="modal-overlay" id="modal-coupon-bulk"><div class="modal" style="max-width:560px;"><div class="modal-head"><h2>⚡ Bulk Generate Coupons</h2><button class="modal-close" onclick="closeModal('modal-coupon-bulk')">&#x2715;</button></div><div class="modal-body">
+<div style="font-size:12px;color:var(--ink3);margin-bottom:1rem;line-height:1.5;">Generate many one-time-use codes from a single template — useful for influencer campaigns, gift drops, or partnership codes.</div>
+<div class="form-row">
+  <div class="form-group"><label class="form-label">Quantity</label><input class="form-input" id="mcb-qty" type="number" value="50" min="1" max="2000"></div>
+  <div class="form-group"><label class="form-label">Code Prefix</label><input class="form-input" id="mcb-prefix" placeholder="e.g. INFLU" style="text-transform:uppercase;"></div>
+</div>
+<div class="form-row">
+  <div class="form-group"><label class="form-label">Discount Type</label><select class="form-input" id="mcb-dtype"><option value="percentage">Percentage (%)</option><option value="fixed">Fixed Amount (RM)</option></select></div>
+  <div class="form-group"><label class="form-label">Discount Value</label><input class="form-input" id="mcb-dval" type="number" step="0.01" value="10"></div>
+</div>
+<div class="form-row">
+  <div class="form-group"><label class="form-label">Min Order (RM)</label><input class="form-input" id="mcb-min" type="number" step="0.01" value="0"></div>
+  <div class="form-group"><label class="form-label">Expiry Date</label><input class="form-input" id="mcb-expiry" type="date"></div>
+</div>
+<div style="background:var(--bg);padding:.6rem .8rem;border-radius:8px;font-size:11px;color:var(--ink3);"><strong>Note:</strong> Generated codes are 8 characters long, single-use (usage_limit=1), and tagged with the same bulk_batch_id so you can track or deactivate them together.</div>
+</div><div class="modal-foot"><button class="btn btn-outline" onclick="closeModal('modal-coupon-bulk')">Cancel</button><button class="btn btn-primary" id="mcb-go" onclick="bulkGenerateCoupons()">Generate &amp; Download CSV</button></div></div></div>
 
 <!-- CUSTOMER DETAIL MODAL -->
 <div class="modal-overlay" id="modal-customer"><div class="modal" style="max-width:900px;"><div class="modal-head"><h2 id="mcu-title">Customer Profile</h2><button class="modal-close" onclick="closeModal('modal-customer')">&#x2715;</button></div><div class="modal-body" id="mcu-body" style="max-height:80vh;overflow-y:auto;"></div></div></div>

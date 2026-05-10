@@ -725,14 +725,32 @@
   /* ── Login modal overlay ── */
   .login-modal-overlay{display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:1.5rem;}
   .login-modal-overlay.open{display:flex;}
-  .login-modal-card{background:#fff;border-radius:24px;padding:2.4rem 2rem;width:100%;max-width:420px;position:relative;box-shadow:0 30px 60px rgba(0,0,0,.25);animation:modalPop .25s ease-out;max-height:90vh;overflow-y:auto;}
+  .login-modal-card{background:var(--cream);border-radius:24px;padding:0;width:100%;max-width:420px;position:relative;box-shadow:0 30px 60px rgba(0,0,0,.25);animation:modalPop .25s ease-out;max-height:90vh;overflow-y:auto;overflow-x:hidden;}
   @keyframes modalPop{from{transform:scale(.93);opacity:0;}to{transform:scale(1);opacity:1;}}
-  .login-modal-close{position:absolute;top:1rem;right:1rem;background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--text-light);line-height:1;padding:2px 6px;border-radius:6px;transition:background .15s;}
-  .login-modal-close:hover{background:var(--green-pale);color:var(--green-dark);}
-  .login-modal-logo{text-align:center;margin-bottom:1rem;}
-  .login-modal-logo img{height:72px;}
-  .login-modal-title{font-family:'Cormorant Garamond',serif;font-size:1.5rem;font-weight:400;color:var(--text-dark);text-align:center;margin-bottom:.25rem;}
-  .login-modal-sub{font-size:12.5px;color:var(--text-mid);text-align:center;margin-bottom:1.4rem;}
+  .login-modal-close{position:absolute;top:.85rem;right:.85rem;background:rgba(255,255,255,.15);border:none;font-size:1.1rem;cursor:pointer;color:#fff;line-height:1;padding:4px 9px;border-radius:50%;transition:background .15s;z-index:2;}
+  .login-modal-close:hover{background:rgba(255,255,255,.3);}
+  .login-modal-hero{background:linear-gradient(135deg,var(--green-dark) 0%,var(--green-mid) 100%);padding:1.6rem 2rem 1.3rem;text-align:center;position:relative;}
+  .login-modal-hero::after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:24px;background:var(--cream);border-radius:24px 24px 0 0;}
+  .login-modal-logo{text-align:center;margin-bottom:.6rem;position:relative;z-index:1;}
+  .login-modal-logo img{height:72px;filter:drop-shadow(0 2px 8px rgba(0,0,0,.25));}
+  .login-modal-title{font-family:'Cormorant Garamond',serif;font-size:1.5rem;font-weight:400;color:#fff;text-align:center;margin-bottom:.2rem;position:relative;z-index:1;}
+  .login-modal-sub{font-size:12.5px;color:rgba(255,255,255,.85);text-align:center;position:relative;z-index:1;}
+  .login-modal-body{padding:1.6rem 2rem 2rem;}
+  /* Login mode tabs */
+  .lm-tabs{display:flex;gap:.4rem;background:#fff;border:1px solid var(--green-pale);border-radius:12px;padding:4px;margin-bottom:1.1rem;}
+  .lm-tab{flex:1;background:none;border:none;padding:.55rem .6rem;font-size:12px;font-weight:600;color:var(--text-mid);cursor:pointer;border-radius:9px;transition:all .15s;font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:.35rem;}
+  .lm-tab.active{background:var(--green-dark);color:#fff;box-shadow:0 2px 6px rgba(45,74,48,.25);}
+  .lm-tab:not(.active):hover{color:var(--green-dark);background:rgba(45,74,48,.05);}
+  .lm-pane{display:none;}
+  .lm-pane.active{display:block;animation:lmFade .2s ease;}
+  @keyframes lmFade{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+  .lm-otp-channels{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.3rem;}
+  .lm-channel-btn{padding:11px 8px;background:#fff;border:1.5px solid var(--green-pale);color:var(--green-dark);font-weight:700;font-size:11.5px;border-radius:10px;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:.35rem;letter-spacing:.02em;}
+  .lm-channel-btn:hover{border-color:var(--green-mid);background:var(--green-pale);}
+  .lm-channel-btn:disabled{opacity:.4;cursor:not-allowed;}
+  .lm-channel-btn.wa{border-color:#25D366;color:#0c6e3a;}
+  .lm-channel-btn.wa:hover{background:rgba(37,211,102,.1);border-color:#25D366;}
+  .lm-helper{font-size:11px;color:var(--text-mid);background:rgba(45,74,48,.05);border-left:3px solid var(--green-mid);border-radius:6px;padding:.5rem .65rem;margin-bottom:.85rem;line-height:1.45;}
 
   /* Product popup */
   .product-popup-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300;align-items:center;justify-content:center;padding:1rem;}
@@ -1551,40 +1569,77 @@
   <div class="login-modal-card" id="login-modal-card">
     <button class="login-modal-close" onclick="closeLoginModal()" aria-label="Close">✕</button>
 
-    <div class="login-modal-logo">
-      <img src="https://cdn.store-assets.com/s/1408881/f/16655641.png" alt="MJM Nursery">
+    <div class="login-modal-hero">
+      <div class="login-modal-logo">
+        <img src="https://cdn.store-assets.com/s/1408881/f/16655641.png" alt="MJM Nursery">
+      </div>
+      <div class="login-modal-title">Welcome</div>
+      <div class="login-modal-sub" id="lm-sub">Sign in to your account</div>
     </div>
-    <div class="login-modal-title">Welcome</div>
-    <div class="login-modal-sub" id="lm-sub">Sign in to your account</div>
 
-    <div class="cl-status" id="cl-status"></div>
+    <div class="login-modal-body">
+      <div class="cl-status" id="cl-status"></div>
 
-    <div id="cl-form-main">
-      <div style="display:flex;flex-direction:column;gap:.65rem;">
-        <div id="cl-signup-fields" style="display:none;">
-          <input type="text" id="cl-signup-name" class="cl-input" placeholder="Full Name" style="margin-bottom:.65rem;">
+      <!-- Mode tabs -->
+      <div class="lm-tabs" role="tablist">
+        <button class="lm-tab active" id="lm-tab-phone" onclick="clSwitchMode('phone')" role="tab">📱 Phone OTP</button>
+        <button class="lm-tab" id="lm-tab-email" onclick="clSwitchMode('email')" role="tab">✉ Email</button>
+      </div>
+
+      <!-- ── PHONE PANE (default) ── -->
+      <div class="lm-pane active" id="lm-pane-phone">
+        <div class="lm-helper">No password needed — we'll send a 6-digit code to your phone via SMS or WhatsApp.</div>
+
+        <div style="display:flex;flex-direction:column;gap:.65rem;">
+          <div id="cl-signup-fields-phone" style="display:none;">
+            <input type="text" id="cl-signup-name-phone" class="cl-input" placeholder="Full Name">
+          </div>
+
+          <input type="tel" id="cl-phone" class="cl-input" placeholder="Phone Number (e.g. +60 12 345 6789)" autocomplete="tel">
+
+          <div class="lm-otp-channels">
+            <button class="lm-channel-btn" id="cl-btn-sms" onclick="clSendOTP('sms')">📩 Send SMS</button>
+            <button class="lm-channel-btn wa" id="cl-btn-wa" onclick="clSendOTP('whatsapp')">💬 WhatsApp</button>
+          </div>
+
+          <div class="cl-otp-row" id="cl-otp-row-phone">
+            <input type="text" id="cl-otp-code-phone" class="cl-input" placeholder="Enter 6-digit code" maxlength="6" inputmode="numeric">
+            <button class="cl-otp-verify" onclick="clVerifyOTP('phone')">Verify</button>
+          </div>
         </div>
 
-        <input type="text" id="cl-identity" class="cl-input" placeholder="Email or Phone Number" oninput="clDetectInput()" autocomplete="email">
-        <div class="cl-hint" id="cl-hint"></div>
-
-        <input type="password" id="cl-password" class="cl-input" placeholder="Password" autocomplete="current-password">
-
-        <button class="cl-btn" id="cl-btn-login" onclick="clLoginPassword()">Sign In</button>
-
-        <div class="cl-divider"><span>or</span></div>
-
-        <button class="cl-otp-btn" id="cl-btn-otp" onclick="clSendOTP()">Send OTP Code</button>
-
-        <div class="cl-otp-row" id="cl-otp-row">
-          <input type="text" id="cl-otp-code" class="cl-input" placeholder="Enter 6-digit code" maxlength="6">
-          <button class="cl-otp-verify" onclick="clVerifyOTP()">Verify</button>
+        <div style="display:flex;justify-content:center;align-items:center;margin-top:.9rem;">
+          <button class="cl-link" id="cl-btn-toggle-phone" onclick="clToggleSignup('phone')">First time? Create Account</button>
         </div>
       </div>
 
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.8rem;">
-        <button class="cl-link" onclick="clForgotPassword()">Forgot Password?</button>
-        <button class="cl-link" id="cl-btn-toggle" onclick="clToggleSignup()">Create Account</button>
+      <!-- ── EMAIL PANE ── -->
+      <div class="lm-pane" id="lm-pane-email">
+        <div style="display:flex;flex-direction:column;gap:.65rem;">
+          <div id="cl-signup-fields" style="display:none;">
+            <input type="text" id="cl-signup-name" class="cl-input" placeholder="Full Name" style="margin-bottom:.65rem;">
+          </div>
+
+          <input type="email" id="cl-identity" class="cl-input" placeholder="Email Address" autocomplete="email">
+
+          <input type="password" id="cl-password" class="cl-input" placeholder="Password" autocomplete="current-password">
+
+          <button class="cl-btn" id="cl-btn-login" onclick="clLoginPassword()">Sign In</button>
+
+          <div class="cl-divider"><span>or no password?</span></div>
+
+          <button class="cl-otp-btn" id="cl-btn-otp" onclick="clSendOTP('email')">Send Email OTP Code</button>
+
+          <div class="cl-otp-row" id="cl-otp-row">
+            <input type="text" id="cl-otp-code" class="cl-input" placeholder="Enter 6-digit code" maxlength="6" inputmode="numeric">
+            <button class="cl-otp-verify" onclick="clVerifyOTP('email')">Verify</button>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.8rem;">
+          <button class="cl-link" onclick="clForgotPassword()">Forgot Password?</button>
+          <button class="cl-link" id="cl-btn-toggle" onclick="clToggleSignup('email')">Create Account</button>
+        </div>
       </div>
     </div>
   </div>
@@ -2512,20 +2567,21 @@ function openOrderDetail(ordNum){
     });
   }
 
-  // Sort by date
-  tlEntries.sort(function(a,b){return new Date(a.date||0)-new Date(b.date||0);});
+  // Sort by date — newest first so the latest status is always on top
+  tlEntries.sort(function(a,b){return new Date(b.date||0)-new Date(a.date||0);});
 
   if(!tlEntries.length){
     h+='<div style="font-size:12px;color:var(--text-light);padding:.5rem 0;">No timeline events yet.</div>';
   } else {
     tlEntries.forEach(function(t,i){
-      var isLast=i===tlEntries.length-1;
+      var isLatest=i===0;
       var dt=t.date?new Date(t.date).toLocaleString('en-MY',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';
-      var dotColor=t.type==='do'?'#15803d':t.type==='ba'?'var(--gold)':isLast?'var(--green-mid)':'var(--green-pale)';
+      var dotColor=isLatest?'var(--green-mid)':t.type==='do'?'#15803d':t.type==='ba'?'var(--gold)':'var(--green-pale)';
       var icon=t.type==='do'?'📦 ':t.type==='ba'?'📋 ':'';
-      h+='<div style="position:relative;padding-bottom:.6rem;margin-bottom:.2rem;">';
-      h+='<div style="position:absolute;left:-20px;top:3px;width:10px;height:10px;border-radius:50%;background:'+dotColor+';border:2px solid #fff;box-shadow:0 0 0 1px '+dotColor+';"></div>';
-      h+='<div style="font-size:12px;font-weight:600;color:var(--text-dark);">'+icon+esc(t.label)+'</div>';
+      var latestBadge=isLatest?' <span style="display:inline-block;font-size:9px;font-weight:700;color:#fff;background:var(--green-mid);padding:1px 6px;border-radius:10px;letter-spacing:.05em;text-transform:uppercase;vertical-align:middle;margin-left:.3rem;">Latest</span>':'';
+      h+='<div style="position:relative;padding-bottom:.6rem;margin-bottom:.2rem;'+(isLatest?'background:rgba(62,107,66,.05);border-radius:8px;padding:.45rem .6rem .55rem;margin-left:-.6rem;':'')+'">';
+      h+='<div style="position:absolute;left:'+(isLatest?'-14px':'-20px')+';top:'+(isLatest?'.55rem':'3px')+';width:'+(isLatest?'12px':'10px')+';height:'+(isLatest?'12px':'10px')+';border-radius:50%;background:'+dotColor+';border:2px solid #fff;box-shadow:0 0 0 '+(isLatest?'2px':'1px')+' '+dotColor+';"></div>';
+      h+='<div style="font-size:12px;font-weight:'+(isLatest?'700':'600')+';color:var(--text-dark);">'+icon+esc(t.label)+latestBadge+'</div>';
       if(t.note)h+='<div style="font-size:11px;color:var(--text-mid);">'+esc(t.note)+'</div>';
       h+='<div style="font-size:10px;color:var(--text-light);">'+dt+'</div>';
       h+='</div>';
@@ -2615,35 +2671,42 @@ function pSubmitRating(){if(!pRatingOrderId||!pRatingVal)return;pRatings[pRating
 //  CHECKOUT LOGIN (inline)
 // ═══════════════════════════════════════
 var clIsSignUp = false;
-var clInputType = 'email';
-var clLoginContext = 'nav'; // 'nav' or 'checkout'
+var clInputType = 'phone';        // 'phone' or 'email' — driven by active tab
+var clLoginContext = 'nav';       // 'nav' or 'checkout'
+var clOtpChannel = 'sms';         // 'sms' or 'whatsapp' — for phone OTP
 
 function openLoginModal(context) {
   clLoginContext = context || 'nav';
   // Reset form state
   clIsSignUp = false;
-  var sfEl = document.getElementById('cl-signup-fields');
-  if (sfEl) sfEl.style.display = 'none';
+  ['cl-signup-fields','cl-signup-fields-phone'].forEach(function(id){
+    var el = document.getElementById(id); if (el) el.style.display = 'none';
+  });
   var btnTog = document.getElementById('cl-btn-toggle');
   if (btnTog) btnTog.textContent = 'Create Account';
+  var btnTogP = document.getElementById('cl-btn-toggle-phone');
+  if (btnTogP) btnTogP.textContent = 'First time? Create Account';
   var btnLogin = document.getElementById('cl-btn-login');
   if (btnLogin) btnLogin.textContent = 'Sign In';
   var statusEl = document.getElementById('cl-status');
   if (statusEl) { statusEl.textContent = ''; statusEl.className = 'cl-status'; }
-  var otpRow = document.getElementById('cl-otp-row');
-  if (otpRow) otpRow.classList.remove('show');
+  ['cl-otp-row','cl-otp-row-phone'].forEach(function(id){
+    var el = document.getElementById(id); if (el) el.classList.remove('show');
+  });
+  // Default to phone tab
+  clSwitchMode('phone');
   // Update subtitle
   var subEl = document.getElementById('lm-sub');
   if (subEl) subEl.textContent = context === 'checkout'
-    ? 'Sign in or create an account to complete your order'
+    ? 'Sign in to complete your order'
     : 'Sign in to your account';
   // Show overlay
   var overlay = document.getElementById('login-modal-overlay');
   overlay.classList.add('open');
   document.body.style.overflow = 'hidden';
-  // Focus email field
+  // Focus phone field
   setTimeout(function() {
-    var inp = document.getElementById('cl-identity');
+    var inp = document.getElementById('cl-phone');
     if (inp) inp.focus();
   }, 100);
 }
@@ -2666,28 +2729,31 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
-function clDetectInput() {
-  var val = document.getElementById('cl-identity').value.trim();
-  var hint = document.getElementById('cl-hint');
-  var otpBtn = document.getElementById('cl-btn-otp');
-  if (val.startsWith('+') || /^\d{8,}$/.test(val)) {
-    clInputType = 'phone';
-    hint.textContent = '\u260e Phone detected — OTP will be sent via SMS';
-    otpBtn.textContent = 'Send SMS OTP';
-  } else if (val.includes('@')) {
-    clInputType = 'email';
-    hint.textContent = '\u2709 Email detected — OTP will be sent to your inbox';
-    otpBtn.textContent = 'Send Email OTP';
-  } else {
-    clInputType = 'email'; hint.textContent = ''; otpBtn.textContent = 'Send OTP Code';
-  }
+function clSwitchMode(mode) {
+  clInputType = mode;
+  var tabPhone = document.getElementById('lm-tab-phone');
+  var tabEmail = document.getElementById('lm-tab-email');
+  var paneP = document.getElementById('lm-pane-phone');
+  var paneE = document.getElementById('lm-pane-email');
+  if (tabPhone) tabPhone.classList.toggle('active', mode === 'phone');
+  if (tabEmail) tabEmail.classList.toggle('active', mode === 'email');
+  if (paneP) paneP.classList.toggle('active', mode === 'phone');
+  if (paneE) paneE.classList.toggle('active', mode === 'email');
+  var statusEl = document.getElementById('cl-status');
+  if (statusEl) { statusEl.textContent = ''; statusEl.className = 'cl-status'; }
 }
-
-function clToggleSignup() {
+function clToggleSignup(pane) {
   clIsSignUp = !clIsSignUp;
-  document.getElementById('cl-signup-fields').style.display = clIsSignUp ? 'block' : 'none';
-  document.getElementById('cl-btn-login').textContent = clIsSignUp ? 'Create Account' : 'Sign In';
-  document.getElementById('cl-btn-toggle').textContent = clIsSignUp ? 'Back to Sign In' : 'Create Account';
+  if (pane === 'phone' || (!pane && clInputType === 'phone')) {
+    var sf = document.getElementById('cl-signup-fields-phone');
+    var btnP = document.getElementById('cl-btn-toggle-phone');
+    if (sf) sf.style.display = clIsSignUp ? 'block' : 'none';
+    if (btnP) btnP.textContent = clIsSignUp ? 'Back to Sign In' : 'First time? Create Account';
+  } else {
+    document.getElementById('cl-signup-fields').style.display = clIsSignUp ? 'block' : 'none';
+    document.getElementById('cl-btn-login').textContent = clIsSignUp ? 'Create Account' : 'Sign In';
+    document.getElementById('cl-btn-toggle').textContent = clIsSignUp ? 'Back to Sign In' : 'Create Account';
+  }
 }
 
 function clShowStatus(msg, type) { var el = document.getElementById('cl-status'); el.textContent = msg; el.className = 'cl-status ' + type; }
@@ -2725,10 +2791,22 @@ async function clPostLogin(session) {
   }
 }
 
+// Normalise phone to E.164 (Malaysia default if no country code)
+function clNormalisePhone(raw) {
+  var v = (raw || '').replace(/[\s\-\(\)]/g, '');
+  if (!v) return '';
+  if (v.startsWith('+')) return v;
+  // Local Malaysian format starting with 0 (e.g. 0123456789) -> +60123456789
+  if (v.startsWith('0')) return '+60' + v.substring(1);
+  // Already country-code with no plus
+  if (/^\d{10,}$/.test(v)) return '+' + v;
+  return v;
+}
+
 async function clLoginPassword() {
   var identity = document.getElementById('cl-identity').value.trim();
   var pw = document.getElementById('cl-password').value;
-  if (!identity || !pw) { clShowStatus('Please enter email/phone and password.', 'error'); return; }
+  if (!identity || !pw) { clShowStatus('Please enter email and password.', 'error'); return; }
   if (clIsSignUp) {
     var name = document.getElementById('cl-signup-name').value.trim();
     if (!name) { clShowStatus('Please enter your full name.', 'error'); return; }
@@ -2736,11 +2814,9 @@ async function clLoginPassword() {
     clShowStatus('Creating account...', 'success');
     var { data: signUpData, error } = await _sb.auth.signUp({ email: identity, password: pw, options: { data: { full_name: name, user_type: 'customer' } } });
     if (error) {
-      // If trigger error, try without metadata then create profile manually
       if (error.message.toLowerCase().includes('database')) {
         var { data: retryData, error: retryErr } = await _sb.auth.signUp({ email: identity, password: pw });
         if (retryErr) { clShowStatus(retryErr.message, 'error'); return; }
-        // Manually create profile row
         if (retryData && retryData.user) {
           await _sb.from('shared_profiles').upsert({ id: retryData.user.id, email: identity, full_name: name, role: 'customer', user_type: 'customer' }, { onConflict: 'id' });
         }
@@ -2748,54 +2824,117 @@ async function clLoginPassword() {
         clShowStatus(error.message, 'error'); return;
       }
     } else if (signUpData && signUpData.user) {
-      // Ensure profile exists (trigger may or may not have created it)
       await _sb.from('shared_profiles').upsert({ id: signUpData.user.id, email: identity, full_name: name, role: 'customer', user_type: 'customer' }, { onConflict: 'id' });
     }
     clShowStatus('Account created! You can now sign in.', 'success');
-    clToggleSignup();
+    clToggleSignup('email');
     return;
   }
   clShowStatus('Signing in...', 'success');
-  var creds = clInputType === 'phone' ? { phone: identity, password: pw } : { email: identity, password: pw };
-  var { data, error } = await _sb.auth.signInWithPassword(creds);
+  var { data, error } = await _sb.auth.signInWithPassword({ email: identity, password: pw });
   if (error) { clShowStatus(error.message, 'error'); return; }
   await clPostLogin(data.session);
 }
 
-async function clSendOTP() {
-  var identity = document.getElementById('cl-identity').value.trim();
-  if (!identity) { clShowStatus('Please enter your email or phone number.', 'error'); return; }
-  var btn = document.getElementById('cl-btn-otp');
-  btn.disabled = true; btn.textContent = 'Sending...';
-  var opts = clInputType === 'phone' ? { phone: identity } : { email: identity };
+// Send OTP via SMS, WhatsApp, or Email.
+//   channel: 'sms' | 'whatsapp' | 'email'
+async function clSendOTP(channel) {
+  channel = channel || (clInputType === 'phone' ? 'sms' : 'email');
+  clOtpChannel = channel;
+  var isPhone = channel === 'sms' || channel === 'whatsapp';
+
+  // Pick the right input
+  var identity = isPhone
+    ? clNormalisePhone(document.getElementById('cl-phone').value)
+    : document.getElementById('cl-identity').value.trim();
+  if (!identity) {
+    clShowStatus(isPhone ? 'Please enter your phone number.' : 'Please enter your email address.', 'error');
+    return;
+  }
+
+  // Optional sign-up name capture
+  var signupName = '';
+  if (clIsSignUp) {
+    var nameEl = document.getElementById(isPhone ? 'cl-signup-name-phone' : 'cl-signup-name');
+    signupName = nameEl ? nameEl.value.trim() : '';
+    if (!signupName) { clShowStatus('Please enter your full name.', 'error'); return; }
+  }
+
+  // Disable the channel button for this transaction
+  var btnIds = isPhone ? ['cl-btn-sms', 'cl-btn-wa'] : ['cl-btn-otp'];
+  btnIds.forEach(function(id){ var b = document.getElementById(id); if (b) b.disabled = true; });
+  var clickedBtn = document.getElementById(channel === 'whatsapp' ? 'cl-btn-wa' : channel === 'sms' ? 'cl-btn-sms' : 'cl-btn-otp');
+  var origLabel = clickedBtn ? clickedBtn.textContent : '';
+  if (clickedBtn) clickedBtn.textContent = 'Sending...';
+
+  var opts;
+  if (isPhone) {
+    opts = { phone: identity, options: { channel: channel } };
+    if (clIsSignUp && signupName) opts.options.data = { full_name: signupName, user_type: 'customer' };
+  } else {
+    opts = { email: identity };
+    if (clIsSignUp && signupName) opts.options = { data: { full_name: signupName, user_type: 'customer' } };
+  }
+
   var { error } = await _sb.auth.signInWithOtp(opts);
   if (error) {
     clShowStatus(error.message, 'error');
-    btn.disabled = false; btn.textContent = clInputType === 'phone' ? 'Send SMS OTP' : 'Send Email OTP';
+    btnIds.forEach(function(id){ var b = document.getElementById(id); if (b) b.disabled = false; });
+    if (clickedBtn) clickedBtn.textContent = origLabel;
     return;
   }
-  var dest = clInputType === 'phone' ? 'SMS sent to ' + identity : 'Code sent to ' + identity;
-  clShowStatus(dest, 'success');
-  document.getElementById('cl-otp-row').classList.add('show');
-  document.getElementById('cl-otp-code').focus();
-  btn.textContent = 'Sent';
+  var destLabel = channel === 'whatsapp' ? 'WhatsApp message sent to ' : channel === 'sms' ? 'SMS sent to ' : 'Code sent to ';
+  clShowStatus(destLabel + identity, 'success');
+
+  // Show the right OTP row + focus
+  var otpRowId = isPhone ? 'cl-otp-row-phone' : 'cl-otp-row';
+  var otpInputId = isPhone ? 'cl-otp-code-phone' : 'cl-otp-code';
+  document.getElementById(otpRowId).classList.add('show');
+  document.getElementById(otpInputId).focus();
+
+  // Cooldown only on the clicked button; sibling stays usable for fallback channel
+  if (clickedBtn) clickedBtn.textContent = 'Sent';
   var cd = 30;
   var t = setInterval(function() {
-    cd--; btn.textContent = 'Resend (' + cd + ')';
-    if (cd <= 0) { clearInterval(t); btn.disabled = false; btn.textContent = clInputType === 'phone' ? 'Resend SMS' : 'Resend Code'; }
+    cd--;
+    if (clickedBtn) clickedBtn.textContent = 'Resend (' + cd + ')';
+    if (cd <= 0) {
+      clearInterval(t);
+      btnIds.forEach(function(id){ var b = document.getElementById(id); if (b) b.disabled = false; });
+      if (clickedBtn) clickedBtn.textContent = origLabel;
+    }
   }, 1000);
 }
 
-async function clVerifyOTP() {
-  var identity = document.getElementById('cl-identity').value.trim();
-  var otp = document.getElementById('cl-otp-code').value.trim();
+async function clVerifyOTP(pane) {
+  pane = pane || clInputType;
+  var isPhone = pane === 'phone';
+  var identity = isPhone
+    ? clNormalisePhone(document.getElementById('cl-phone').value)
+    : document.getElementById('cl-identity').value.trim();
+  var otp = (isPhone
+    ? document.getElementById('cl-otp-code-phone').value
+    : document.getElementById('cl-otp-code').value).trim();
   if (!identity || !otp) { clShowStatus('Please enter the 6-digit code.', 'error'); return; }
   clShowStatus('Verifying...', 'success');
-  var opts = clInputType === 'phone'
+  // For Supabase verifyOtp, the type is 'sms' for both SMS and WhatsApp channels.
+  var opts = isPhone
     ? { phone: identity, token: otp, type: 'sms' }
     : { email: identity, token: otp, type: 'email' };
   var { data, error } = await _sb.auth.verifyOtp(opts);
   if (error) { clShowStatus(error.message, 'error'); return; }
+  // For first-time phone signups, ensure profile row exists with full_name
+  if (isPhone && data && data.user) {
+    var fullName = data.user.user_metadata?.full_name || '';
+    var phoneVal = data.user.phone || identity;
+    await _sb.from('shared_profiles').upsert({
+      id: data.user.id,
+      phone: phoneVal,
+      full_name: fullName || phoneVal,
+      role: 'customer',
+      user_type: 'customer'
+    }, { onConflict: 'id' });
+  }
   await clPostLogin(data.session);
 }
 
@@ -2807,11 +2946,13 @@ async function clForgotPassword() {
   clShowStatus('Reset link sent! Check your inbox.', 'success');
 }
 
-// Enter key support for checkout login
+// Enter key support for login modal
 document.addEventListener('keydown', function(e) {
   if (e.key !== 'Enter') return;
-  if (e.target.id === 'cl-otp-code') clVerifyOTP();
+  if (e.target.id === 'cl-otp-code') clVerifyOTP('email');
+  else if (e.target.id === 'cl-otp-code-phone') clVerifyOTP('phone');
   else if (e.target.id === 'cl-identity' || e.target.id === 'cl-password') clLoginPassword();
+  else if (e.target.id === 'cl-phone') clSendOTP('sms');
 });
 
 // Sign out

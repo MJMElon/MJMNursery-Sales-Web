@@ -54,16 +54,15 @@ async function loadProducts(){
   if(!prods.length){document.getElementById('products-table').innerHTML='<div class="loading">No products found</div>';return;}
   // Store for reorder
   window._productsList=prods;
-  var html='<table class="data-table"><thead><tr><th style="width:30px;">#</th><th style="width:50px;">Order</th><th style="width:40px;"></th><th>Product</th><th>Collection</th><th>Sell Month</th><th>Price</th><th>Stock</th><th>Published</th><th>Actions</th></tr></thead><tbody>';
+  var html='<table class="data-table" id="products-data-table"><thead><tr><th style="width:36px;" title="Drag to reorder"></th><th style="width:30px;">#</th><th style="width:40px;"></th><th>Product</th><th>Collection</th><th>Sell Month</th><th>Price</th><th>Stock</th><th>Published</th><th>Actions</th></tr></thead><tbody id="products-tbody">';
   prods.forEach(function(p,idx){
     var img=p.image_url?'<img src="'+esc(p.image_url)+'" style="width:36px;height:36px;object-fit:cover;border-radius:6px;">':'<div style="width:36px;height:36px;background:var(--bg);border-radius:6px;display:flex;align-items:center;justify-content:center;">🌱</div>';
     var sell=p.sell_month?(p.sell_month+(p.sell_year?' '+p.sell_year:'')):'—';
     var pr='RM '+(p.price||0).toFixed(2);
     if(p.compare_price&&p.compare_price>p.price)pr='<span style="text-decoration:line-through;color:var(--ink4);font-size:11px;">RM '+p.compare_price.toFixed(2)+'</span> <span style="color:var(--red);font-weight:700;">RM '+(p.price||0).toFixed(2)+'</span>';
     var pub='<label style="position:relative;display:inline-block;width:36px;height:20px;cursor:pointer;"><input type="checkbox" '+(p.is_published?'checked':'')+' onchange="togglePublish(\''+p.id+'\',this.checked)" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:'+(p.is_published?'var(--green)':'#ccc')+';border-radius:10px;transition:.2s;"></span><span style="position:absolute;left:'+(p.is_published?'18px':'2px')+';top:2px;width:16px;height:16px;background:#fff;border-radius:50%;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2);"></span></label>';
-    var upBtn=idx>0?'<button onclick="moveProduct('+idx+',-1)" style="background:none;border:1px solid var(--border);border-radius:4px;cursor:pointer;padding:2px 4px;font-size:10px;" title="Move up">▲</button>':'<span style="width:24px;display:inline-block;"></span>';
-    var dnBtn=idx<prods.length-1?'<button onclick="moveProduct('+idx+',1)" style="background:none;border:1px solid var(--border);border-radius:4px;cursor:pointer;padding:2px 4px;font-size:10px;" title="Move down">▼</button>':'<span style="width:24px;display:inline-block;"></span>';
-    html+='<tr><td style="font-size:11px;font-weight:700;color:var(--ink4);text-align:center;">'+(idx+1)+'</td><td style="white-space:nowrap;">'+upBtn+' '+dnBtn+'</td><td>'+img+'</td><td style="font-weight:600;">'+esc(p.name)+'</td><td><span class="badge '+(p.collection==='Promotion'?'badge-amber':'badge-grey')+'">'+esc(p.collection||'')+'</span></td><td>'+esc(sell)+'</td><td>'+pr+'</td><td style="font-weight:700;color:'+(p.stock_qty>0?'var(--green)':'var(--red)')+';">'+p.stock_qty+'</td><td>'+pub+'</td><td style="white-space:nowrap;"><button class="btn btn-outline btn-sm" onclick="editProduct(\''+p.id+'\')">Edit</button> <button class="btn btn-outline btn-sm" onclick="refreshProductStock(\''+p.id+'\')">🔄</button> <button class="btn btn-outline btn-sm" onclick="deleteProduct(\''+p.id+'\')" style="color:var(--red);">✕</button></td></tr>';
+    var handle='<span class="drag-handle" title="Drag to reorder" style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;color:var(--ink4);cursor:grab;font-size:16px;line-height:1;user-select:none;">&#x2630;</span>';
+    html+='<tr draggable="true" data-pid="'+p.id+'" data-idx="'+idx+'" ondragstart="onProductDragStart(event)" ondragover="onProductDragOver(event)" ondragleave="onProductDragLeave(event)" ondrop="onProductDrop(event)" ondragend="onProductDragEnd(event)" style="transition:background .15s;"><td style="text-align:center;">'+handle+'</td><td style="font-size:11px;font-weight:700;color:var(--ink4);text-align:center;">'+(idx+1)+'</td><td>'+img+'</td><td style="font-weight:600;">'+esc(p.name)+'</td><td><span class="badge '+(p.collection==='Promotion'?'badge-amber':'badge-grey')+'">'+esc(p.collection||'')+'</span></td><td>'+esc(sell)+'</td><td>'+pr+'</td><td style="font-weight:700;color:'+(p.stock_qty>0?'var(--green)':'var(--red)')+';">'+p.stock_qty+'</td><td>'+pub+'</td><td style="white-space:nowrap;"><button class="btn btn-outline btn-sm" onclick="editProduct(\''+p.id+'\')">Edit</button> <button class="btn btn-outline btn-sm" onclick="refreshProductStock(\''+p.id+'\')">🔄</button> <button class="btn btn-outline btn-sm" onclick="deleteProduct(\''+p.id+'\')" style="color:var(--red);">✕</button></td></tr>';
   });
   html+='</tbody></table>';
   document.getElementById('products-table').innerHTML=html;
@@ -164,10 +163,18 @@ function renderStockSource(d){
   html+='<div onclick="var n=this.nextElementSibling;n.style.display=n.style.display===\'none\'?\'block\':\'none\';this.querySelector(\'span\').textContent=n.style.display===\'none\'?\'▶\':\'▼\'" style="cursor:pointer;display:flex;align-items:center;gap:.4rem;padding:.5rem 0;font-size:13px;font-weight:600;color:var(--ink);user-select:none;"><span>▶</span> Stock Sources</div>';
   html+='<div style="display:none;">';
 
-  // Table — only Batch, Plot, Original, Sold, Remaining (no Transferred column)
-  html+='<table style="width:100%;font-size:12px;border-collapse:collapse;"><thead><tr style="border-bottom:1.5px solid var(--border);"><th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink3);">Batch</th><th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink3);">Plot</th><th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--ink3);">Original</th><th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--ink3);">Sold</th><th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--ink3);">Remaining</th></tr></thead><tbody>';
+  // Table — Maturity Date, Batch, Plot, Original, Sold, Remaining (matches seedling-stock module layout)
+  html+='<table style="width:100%;font-size:12px;border-collapse:collapse;"><thead><tr style="border-bottom:1.5px solid var(--border);"><th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink3);">Maturity</th><th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink3);">Batch</th><th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink3);">Plot</th><th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--ink3);">Original</th><th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--ink3);">Sold</th><th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--ink3);">Remaining</th></tr></thead><tbody>';
   d.sources.forEach(function(s){
+    var matStr='—',tpStr='';
+    if(s.date){
+      var tp=new Date(s.date);
+      tpStr=tp.toLocaleDateString('en-MY',{day:'2-digit',month:'short',year:'numeric'});
+      var mat=new Date(s.date);mat.setMonth(mat.getMonth()+9);
+      matStr=mat.toLocaleDateString('en-MY',{day:'2-digit',month:'short',year:'numeric'});
+    }
     html+='<tr style="border-bottom:1px solid #f0f2f0;">'+
+      '<td style="padding:6px 8px;font-weight:500;" title="Transplanted: '+esc(tpStr)+'">'+esc(matStr)+'</td>'+
       '<td style="padding:6px 8px;font-weight:500;">'+esc(s.batch||'—')+'</td>'+
       '<td style="padding:6px 8px;font-weight:400;">'+esc(s.plot||'—')+'</td>'+
       '<td style="padding:6px 8px;text-align:right;font-weight:500;">'+s.originalStock+'</td>'+
@@ -378,10 +385,77 @@ async function loadTransfersOnly(productId){
 }
 
 async function loadTransferSourceDropdown(excludeId){
-  var{data}=await sb.from('salesweb_products').select('id,name,stock_qty').order('name');
+  var{data}=await sb.from('salesweb_products').select('id,name,stock_qty,sell_month,sell_year,product_type').order('sell_year',{ascending:true}).order('sell_month',{ascending:true}).order('name');
   var sel=document.getElementById('mp-transfer-from');if(!sel)return;
   sel.innerHTML='<option value="">— Select source product —</option>';
-  (data||[]).forEach(function(p){if(p.id===excludeId)return;sel.innerHTML+='<option value="'+p.id+'">'+esc(p.name)+' ('+p.stock_qty+')</option>';});
+  // Order by sell month: earliest first so leftover from previous months surfaces at the top
+  var rows=(data||[]).filter(function(p){return p.id!==excludeId&&(p.stock_qty||0)>0;});
+  rows.sort(function(a,b){
+    var ay=a.sell_year||0,by=b.sell_year||0;if(ay!==by)return ay-by;
+    var mi=function(m){var L=['January','February','March','April','May','June','July','August','September','October','November','December'];var i=L.indexOf(m||'');return i<0?99:i;};
+    return mi(a.sell_month)-mi(b.sell_month);
+  });
+  rows.forEach(function(p){
+    var sm=p.sell_month?(p.sell_month+(p.sell_year?' '+p.sell_year:'')):'(no month)';
+    sel.innerHTML+='<option value="'+p.id+'">'+esc(sm)+' — '+esc(p.name)+' (bal: '+(p.stock_qty||0)+')</option>';
+  });
+  // Wire up onchange (idempotent)
+  sel.onchange=function(){renderTransferSourceDetail(sel.value);};
+  // Reset detail panel
+  var det=document.getElementById('mp-transfer-source-detail');if(det)det.innerHTML='';
+}
+
+// Render the per-batch breakdown for the selected source product so user knows
+// which batch/nursery's leftover they are bringing forward, plus any qty already
+// moved to premium plots for those same batches.
+async function renderTransferSourceDetail(srcId){
+  var det=document.getElementById('mp-transfer-source-detail');if(!det)return;
+  if(!srcId){det.innerHTML='';return;}
+  det.innerHTML='<div style="font-size:12px;color:var(--ink4);padding:.4rem;">Loading source breakdown…</div>';
+  try{
+    var{data:p}=await sb.from('salesweb_products').select('sell_month,sell_year,name').eq('id',srcId).single();
+    if(!p){det.innerHTML='';return;}
+    var d=await computeProductStock(srcId,p.sell_month||'',p.sell_year||0);
+    var batchNames=[];
+    d.sources.forEach(function(s){if(s.batch&&batchNames.indexOf(s.batch)===-1)batchNames.push(s.batch);});
+
+    // Look up "moved to premium plot" qty for these same batches (premium plots are
+    // excluded from main stock — but the user wants to see how many went there).
+    var premiumByBatch={};
+    if(batchNames.length){
+      var{data:premiumLogs}=await sb.from('shared_inventory_logs').select('batch_name,plot_name,quantity_change').eq('transaction_type','Transplanted').in('batch_name',batchNames);
+      (premiumLogs||[]).forEach(function(t){
+        var pl=(t.plot_name||'').toLowerCase();
+        if(!(pl.includes('premium')||pl.includes('double')||pl.includes('tray')))return;
+        premiumByBatch[t.batch_name]=(premiumByBatch[t.batch_name]||0)+(t.quantity_change||0);
+      });
+    }
+
+    var html='<div style="margin-top:.4rem;padding:.6rem .8rem;background:#f8faf8;border:1px solid var(--border);border-radius:8px;">';
+    html+='<div style="font-size:12px;font-weight:600;color:var(--ink2);margin-bottom:.4rem;">Source breakdown — '+esc(p.name)+'</div>';
+    if(!d.sources.length){
+      html+='<div style="font-size:12px;color:var(--ink4);">No batch detail available.</div>';
+    } else {
+      html+='<table style="width:100%;font-size:11.5px;border-collapse:collapse;"><thead><tr style="border-bottom:1px solid var(--border);"><th style="text-align:left;padding:4px 6px;color:var(--ink3);">Maturity</th><th style="text-align:left;padding:4px 6px;color:var(--ink3);">Batch</th><th style="text-align:left;padding:4px 6px;color:var(--ink3);">Plot</th><th style="text-align:right;padding:4px 6px;color:var(--ink3);">Plot bal</th><th style="text-align:right;padding:4px 6px;color:var(--ink3);">→ Premium</th></tr></thead><tbody>';
+      d.sources.forEach(function(s){
+        var matStr='—';
+        if(s.date){var mat=new Date(s.date);mat.setMonth(mat.getMonth()+9);matStr=mat.toLocaleDateString('en-MY',{day:'2-digit',month:'short',year:'numeric'});}
+        var prem=premiumByBatch[s.batch]||0;
+        html+='<tr style="border-bottom:1px dashed #eef0ee;">'+
+          '<td style="padding:4px 6px;">'+esc(matStr)+'</td>'+
+          '<td style="padding:4px 6px;font-weight:500;">'+esc(s.batch||'—')+'</td>'+
+          '<td style="padding:4px 6px;">'+esc(s.plot||'—')+'</td>'+
+          '<td style="padding:4px 6px;text-align:right;font-weight:600;color:'+(s.remaining>0?'var(--green)':'var(--ink4)')+';">'+s.remaining+'</td>'+
+          '<td style="padding:4px 6px;text-align:right;color:'+(prem>0?'var(--amber)':'var(--ink4)')+';">'+(prem>0?prem:'—')+'</td></tr>';
+      });
+      html+='</tbody></table>';
+      html+='<div style="display:flex;justify-content:space-between;font-size:12px;margin-top:.4rem;padding-top:.4rem;border-top:1px solid var(--border);"><span style="color:var(--ink3);">Total available to transfer</span><span style="font-weight:700;color:var(--green);">'+d.finalStock+'</span></div>';
+    }
+    html+='</div>';
+    det.innerHTML=html;
+  }catch(e){
+    det.innerHTML='<div style="font-size:12px;color:var(--red);padding:.4rem;">Failed to load source breakdown.</div>';
+  }
 }
 
 async function executeTransfer(){
@@ -467,30 +541,59 @@ async function togglePublish(id,pub){await sb.from('salesweb_products').update({
 async function deleteProduct(id){if(!confirm('Delete this product?'))return;await sb.from('salesweb_products').delete().eq('id',id);toast('Deleted');loadProducts();}
 
 // ═══════════════════════════════════════
-//  REORDER PRODUCTS
+//  REORDER PRODUCTS — DRAG & DROP
 // ═══════════════════════════════════════
-async function moveProduct(idx,dir){
-  var list=window._productsList;
-  if(!list)return;
-  var newIdx=idx+dir;
-  if(newIdx<0||newIdx>=list.length)return;
+var _dragSrcRow=null;
 
-  // Swap in local array
-  var temp=list[idx];
-  list[idx]=list[newIdx];
-  list[newIdx]=temp;
-
-  // Save sort_order for ALL products (ensures consistency)
+function onProductDragStart(e){
+  var tr=e.target.closest('tr');if(!tr)return;
+  _dragSrcRow=tr;
+  tr.style.opacity='0.45';
+  try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',tr.dataset.pid||'');}catch(_){}
+}
+function onProductDragOver(e){
+  if(!_dragSrcRow)return;
+  e.preventDefault();
+  try{e.dataTransfer.dropEffect='move';}catch(_){}
+  var tr=e.target.closest('tr');if(!tr||tr===_dragSrcRow)return;
+  tr.style.background='#eef7ee';
+}
+function onProductDragLeave(e){
+  var tr=e.target.closest('tr');if(tr)tr.style.background='';
+}
+function onProductDrop(e){
+  e.preventDefault();
+  var tr=e.target.closest('tr');if(!tr||!_dragSrcRow)return;
+  tr.style.background='';
+  if(tr===_dragSrcRow)return;
+  var tbody=tr.parentNode;
+  var srcRect=_dragSrcRow.getBoundingClientRect();
+  var tgtRect=tr.getBoundingClientRect();
+  if(srcRect.top<tgtRect.top){tbody.insertBefore(_dragSrcRow,tr.nextSibling);}
+  else{tbody.insertBefore(_dragSrcRow,tr);}
+  saveProductOrderFromDOM();
+}
+function onProductDragEnd(e){
+  if(_dragSrcRow)_dragSrcRow.style.opacity='';
+  _dragSrcRow=null;
+  var rows=document.querySelectorAll('#products-tbody tr');
+  rows.forEach(function(r){r.style.background='';});
+}
+async function saveProductOrderFromDOM(){
+  var rows=document.querySelectorAll('#products-tbody tr');
+  if(!rows.length)return;
+  var ids=[];
+  rows.forEach(function(r){if(r.dataset.pid)ids.push(r.dataset.pid);});
+  // Reorder in-memory list to match new DOM order so subsequent drags are consistent
+  if(window._productsList){
+    var byId={};window._productsList.forEach(function(p){byId[p.id]=p;});
+    window._productsList=ids.map(function(id){return byId[id];}).filter(Boolean);
+  }
+  // Update visible row numbers immediately
+  rows.forEach(function(r,i){var n=r.children[1];if(n)n.textContent=(i+1);r.dataset.idx=i;});
+  // Persist sort_order to DB
   var promises=[];
-  for(var i=0;i<list.length;i++){
-    promises.push(sb.from('salesweb_products').update({sort_order:i}).eq('id',list[i].id));
-  }
-  try{
-    await Promise.all(promises);
-    toast('Product order updated');
-  }catch(e){
-    // sort_order column might not exist - try to create it
-    toast('Please run SQL: ALTER TABLE products ADD COLUMN IF NOT EXISTS sort_order INTEGER;','error');
-  }
-  loadProducts();
+  for(var i=0;i<ids.length;i++){promises.push(sb.from('salesweb_products').update({sort_order:i}).eq('id',ids[i]));}
+  try{await Promise.all(promises);toast('Order saved');}
+  catch(e){toast('Please run SQL: ALTER TABLE salesweb_products ADD COLUMN IF NOT EXISTS sort_order INTEGER;','error');}
 }

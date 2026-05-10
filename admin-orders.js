@@ -149,6 +149,31 @@ async function viewOrder(id){
   html+='</div>';
   html+='</div>';
 
+  // ── Payment Terms (Cash / Credit) ──
+  var currentTerms=order.payment_terms==='credit'?'credit':'cash';
+  var creditPeriod=order.credit_billing_period||'';
+  var billedAt=order.credit_billed_at||'';
+  html+='<div style="background:var(--bg);border-radius:10px;padding:1rem;margin-bottom:1rem;">';
+  html+='<div style="font-size:13px;font-weight:600;margin-bottom:.5rem;">Payment Terms</div>';
+  html+='<div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">';
+  html+='<select id="mo-terms-select" class="form-input" style="width:auto;font-size:12px;padding:6px 10px;" onchange="document.getElementById(\'mo-credit-period-row\').style.display=this.value===\'credit\'?\'flex\':\'none\';">';
+  html+='<option value="cash"'+(currentTerms==='cash'?' selected':'')+'>💵 Cash</option>';
+  html+='<option value="credit"'+(currentTerms==='credit'?' selected':'')+'>💳 Credit</option>';
+  html+='</select>';
+  html+='<button class="btn btn-primary btn-sm" onclick="updateOrderPaymentTerms(\''+id+'\')">Update Terms</button>';
+  html+='</div>';
+  html+='<div id="mo-credit-period-row" style="display:'+(currentTerms==='credit'?'flex':'none')+';gap:.5rem;align-items:center;flex-wrap:wrap;margin-top:.6rem;">';
+  html+='<label style="font-size:12px;color:var(--ink3);">Billing period:</label>';
+  html+='<input class="form-input" id="mo-credit-period" type="text" value="'+esc(creditPeriod)+'" placeholder="e.g. 2026-05" style="width:140px;font-size:12px;padding:6px 10px;">';
+  if(billedAt){
+    html+='<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;">Billed '+fmtDate(billedAt)+'</span>';
+    html+='<button class="btn btn-outline btn-sm" onclick="setOrderCreditBilled(\''+id+'\',false)" style="font-size:11px;">Mark Unbilled</button>';
+  } else {
+    html+='<span class="badge badge-amber">Unbilled</span>';
+    html+='<button class="btn btn-outline btn-sm" onclick="setOrderCreditBilled(\''+id+'\',true)" style="font-size:11px;">Mark Billed</button>';
+  }
+  html+='</div></div>';
+
   // ── Customer Remark ──
   if(order.customer_remark){
     html+='<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:.8rem 1rem;margin-bottom:1rem;">';
@@ -372,6 +397,48 @@ async function saveInternalNote(orderId){
   var note=document.getElementById('mo-notes').value;
   await sb.from('salesweb_customer_orders').update({internal_notes:note,updated_at:new Date().toISOString()}).eq('id',orderId);
   toast('Internal note saved');
+}
+
+// ═══════════════════════════════════════
+//  PAYMENT TERMS (cash / credit)
+// ═══════════════════════════════════════
+async function updateOrderPaymentTerms(orderId){
+  var newTerms=document.getElementById('mo-terms-select').value;
+  var period=(document.getElementById('mo-credit-period')||{}).value||'';
+  period=period.trim();
+  var{data:order}=await sb.from('salesweb_customer_orders').select('payment_terms,credit_billing_period,status').eq('id',orderId).single();
+  if(!order){toast('Order not found','error');return;}
+  var oldTerms=order.payment_terms==='credit'?'credit':'cash';
+  if(newTerms===oldTerms&&period===(order.credit_billing_period||'')){toast('No changes');return;}
+  if(newTerms==='credit'&&oldTerms!=='credit'){
+    if(!confirm('Switch this order to CREDIT terms?\n\nThe total will count toward credit outstanding until billed.'))return;
+  }
+  var update={payment_terms:newTerms,updated_at:new Date().toISOString()};
+  if(newTerms==='credit')update.credit_billing_period=period||null;
+  else{update.credit_billing_period=null;update.credit_billed_at=null;}
+  var{error}=await sb.from('salesweb_customer_orders').update(update).eq('id',orderId);
+  if(error){toast('Error: '+error.message,'error');return;}
+  var session=await sb.auth.getSession();
+  var user=session?.data?.session?.user?.email||'admin';
+  var note='Payment terms changed from '+oldTerms.toUpperCase()+' to '+newTerms.toUpperCase();
+  if(newTerms==='credit'&&period)note+=' (period: '+period+')';
+  await sb.from('salesweb_order_timeline').insert([{order_id:orderId,status:order.status,note:note,changed_by:user}]);
+  toast('Payment terms updated');
+  viewOrder(orderId);
+}
+
+async function setOrderCreditBilled(orderId,billed){
+  var{data:order}=await sb.from('salesweb_customer_orders').select('payment_terms,status').eq('id',orderId).single();
+  if(!order){toast('Order not found','error');return;}
+  if(order.payment_terms!=='credit'){toast('Order is not on credit terms','error');return;}
+  var update={credit_billed_at:billed?new Date().toISOString():null,updated_at:new Date().toISOString()};
+  var{error}=await sb.from('salesweb_customer_orders').update(update).eq('id',orderId);
+  if(error){toast('Error: '+error.message,'error');return;}
+  var session=await sb.auth.getSession();
+  var user=session?.data?.session?.user?.email||'admin';
+  await sb.from('salesweb_order_timeline').insert([{order_id:orderId,status:order.status,note:billed?'Credit marked as Billed':'Credit marked as Unbilled',changed_by:user}]);
+  toast(billed?'Marked as Billed':'Marked as Unbilled');
+  viewOrder(orderId);
 }
 
 // ═══════════════════════════════════════

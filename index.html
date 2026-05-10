@@ -1926,7 +1926,7 @@ function proceedToCheckout() {
   var userName = sessionStorage.getItem('mjm_user_name');
   if (userName) {
     // Already logged in — go straight to payment
-    window.location.href = 'salesweb_payment.html';
+    window.location.href = 'payment.html';
   } else {
     // Not logged in — open login modal (stays on current page)
     toggleCartDropdown();
@@ -2381,7 +2381,7 @@ function pOrderCard(o){
 function goPayOrder(orderId,total){
   sessionStorage.setItem('mjm_pay_order_id',orderId);
   sessionStorage.setItem('mjm_pay_order_total',total);
-  window.location.href='salesweb_payment_proof.html';
+  window.location.href='payment-proof.html';
 }
 
 function _odLabel(label,val){return'<div style="color:var(--text-light);font-size:11px;">'+label+'</div><div style="font-weight:600;font-size:12px;">'+esc(val||'—')+'</div>';}

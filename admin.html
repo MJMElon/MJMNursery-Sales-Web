@@ -520,6 +520,50 @@ input,select,textarea,button{font-family:inherit;}
 <!-- CUSTOMER DETAIL MODAL -->
 <div class="modal-overlay" id="modal-customer"><div class="modal" style="max-width:900px;"><div class="modal-head"><h2 id="mcu-title">Customer Profile</h2><button class="modal-close" onclick="closeModal('modal-customer')">✕</button></div><div class="modal-body" id="mcu-body" style="max-height:80vh;overflow-y:auto;"></div></div></div>
 
+<!-- PUBLISH PRODUCT MODAL -->
+<div class="modal-overlay" id="modal-publish"><div class="modal" style="max-width:560px;">
+  <div class="modal-head" style="background:var(--bg);"><h2 id="mpb-title" style="font-size:1.05rem;">Publish to Sales Web</h2><button class="modal-close" onclick="closeModal('modal-publish')">✕</button></div>
+  <div class="modal-body" style="padding:1.2rem 1.4rem;">
+    <input type="hidden" id="mpb-product-id">
+    <div id="mpb-product-name" style="font-size:13px;font-weight:600;color:var(--ink2);margin-bottom:.6rem;"></div>
+    <div id="mpb-loading" style="font-size:12px;color:var(--ink4);">Computing quantities…</div>
+    <div id="mpb-content" style="display:none;">
+      <!-- Breakdown summary -->
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:.8rem 1rem;font-size:12.5px;margin-bottom:1rem;">
+        <div style="display:flex;justify-content:space-between;padding:.2rem 0;"><span style="color:var(--ink3);">Raw maturity (transplanted − 10%)</span><span style="font-weight:700;" id="mpb-raw">—</span></div>
+        <div style="display:flex;justify-content:space-between;padding:.2rem 0;"><span style="color:var(--ink3);">Customer allocation (reserved this month)</span><span style="font-weight:700;color:var(--amber);" id="mpb-alloc">—</span></div>
+        <div style="display:flex;justify-content:space-between;padding:.2rem 0;"><span style="color:var(--ink3);">Suitable for sales (audited ≥1.5m, prev/curr months)</span><span style="font-weight:700;color:var(--green);" id="mpb-suitable">—</span></div>
+        <div style="display:flex;justify-content:space-between;padding:.2rem 0;"><span style="color:var(--ink3);">Estimate collection (admin-keyed)</span><span style="font-weight:700;color:var(--amber);" id="mpb-estimate">—</span></div>
+      </div>
+      <!-- Three options -->
+      <div style="font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem;">Quantity to publish</div>
+      <label class="mp-radio" style="padding:.5rem .7rem;border:1px solid var(--border);border-radius:8px;margin-bottom:.4rem;display:flex;justify-content:space-between;cursor:pointer;">
+        <span><input type="radio" name="mpb-strat" value="raw" onchange="updatePublishPreview()"> Raw maturity</span>
+        <strong id="mpb-opt-raw">—</strong>
+      </label>
+      <label class="mp-radio" style="padding:.5rem .7rem;border:1px solid var(--border);border-radius:8px;margin-bottom:.4rem;display:flex;justify-content:space-between;cursor:pointer;">
+        <span><input type="radio" name="mpb-strat" value="minus_alloc" onchange="updatePublishPreview()"> After deducting customer allocation</span>
+        <strong id="mpb-opt-minus">—</strong>
+      </label>
+      <label class="mp-radio" style="padding:.5rem .7rem;border:1.5px solid var(--green);border-radius:8px;margin-bottom:.4rem;display:flex;justify-content:space-between;cursor:pointer;background:rgba(124,92,191,.04);">
+        <span><input type="radio" name="mpb-strat" value="maturity_plus_suitable_minus_estimate" checked onchange="updatePublishPreview()"> <strong>Maturity + suitable − estimate</strong> <span style="font-size:10px;color:var(--ink4);">(default)</span></span>
+        <strong id="mpb-opt-mse">—</strong>
+      </label>
+      <label class="mp-radio" style="padding:.5rem .7rem;border:1px solid var(--border);border-radius:8px;margin-bottom:.4rem;display:flex;align-items:center;gap:.6rem;cursor:pointer;">
+        <span><input type="radio" name="mpb-strat" value="manual" onchange="updatePublishPreview()"> Manual</span>
+        <input type="number" id="mpb-manual-qty" min="0" placeholder="Enter qty" style="margin-left:auto;width:110px;padding:6px 10px;font-size:13px;border:1px solid var(--border);border-radius:6px;text-align:right;" oninput="document.querySelector('input[name=mpb-strat][value=manual]').checked=true;updatePublishPreview();">
+      </label>
+
+      <!-- Warnings -->
+      <div id="mpb-warnings" style="margin-top:.8rem;"></div>
+    </div>
+  </div>
+  <div class="modal-foot" id="mpb-foot">
+    <button class="btn btn-outline" onclick="closeModal('modal-publish')">Cancel</button>
+    <button class="btn btn-primary" id="mpb-confirm" onclick="confirmPublish()" disabled>Confirm & Publish</button>
+  </div>
+</div></div>
+
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 

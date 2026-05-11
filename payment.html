@@ -277,12 +277,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-d
           MJM Nursery Office
         </div>
         <div class="collection-addr">
-          Lot 141 Block 0 &amp; Lot 71, 100, 101, 103, 261 &amp; 267 Block 20,<br>
+          Lot 141 Block 0 & Lot 71, 100, 101, 103, 261 & 267 Block 20,<br>
           Niah Land District, Miri, 98000, Sarawak, Malaysia
         </div>
         <div class="collection-note">
-          Collection booking can be made online via your My Account page after your order is confirmed.
-          <div id="ck-collection-months" style="margin-top:.5rem;font-size:11px;font-weight:600;color:var(--green-dark);"></div>
+          Please WhatsApp or call 011-2933 7889 for seedling collection appointment.
         </div>
         <div class="collection-hours">
           <div class="collection-hours-title">Business hour:</div>
@@ -328,16 +327,14 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-d
         </div>
       </div>
 
-      <!-- Points toggle -->
-      <div style="margin-top:.6rem;">
-        <button class="btn-apply-voucher" id="btn-toggle-points" onclick="togglePointsBox()">Apply Points</button>
-        <div id="points-box" style="display:none;margin-top:.5rem;">
-          <div class="points-row">
-            <input class="points-input" type="number" id="ck-points" value="0" min="0" onchange="applyPoints()">
-            <span class="points-bal" id="points-bal">Balance: 0 pts</span>
-          </div>
-          <div class="promo-msg" id="points-msg"></div>
+      <!-- Points -->
+      <div class="promo-section" id="points-section" style="display:none;">
+        <div class="promo-label">Use Points</div>
+        <div class="points-row">
+          <input class="points-input" type="number" id="ck-points" value="0" min="0" onchange="applyPoints()">
+          <span class="points-bal" id="points-bal">Balance: 0 pts</span>
         </div>
+        <div class="promo-msg" id="points-msg"></div>
       </div>
 
       <!-- Summary totals -->
@@ -387,10 +384,6 @@ try{cart=JSON.parse(sessionStorage.getItem('mjm_cart'))||[];}catch(e){}
 // ── Discounts & Payment state ──
 var voucherDiscount=0;
 var voucherCode='';
-var voucherCouponId=null;
-var voucherEligibleSubtotal=0;
-var promoLines=[];               // [{product_id, promotion_id, promo_title, discount}]
-var promoTotal=0;
 var pointsUsed=0;
 var pointsBalance=0;
 var selectedPayMethod='';
@@ -422,29 +415,18 @@ async function loadPointsBalance(){
   var session=await _sb.auth.getSession();
   var userId=session?.data?.session?.user?.id;
   if(!userId)return;
+  // Try to get points from a points/rewards table (fallback to 0)
   try{
-    var{data}=await _sb.from('salesweb_customer_points').select('balance').eq('user_id',userId).maybeSingle();
-    pointsBalance=(data&&data.balance)||0;
-  }catch(e){pointsBalance=0;}
-  document.getElementById('points-bal').textContent='Balance: '+pointsBalance.toLocaleString()+' pts';
-  document.getElementById('ck-points').max=pointsBalance;
+    var{data}=await _sb.from('salesweb_customer_points').select('balance').eq('user_id',userId).single();
+    if(data&&data.balance>0){
+      pointsBalance=data.balance;
+      document.getElementById('points-section').style.display='block';
+      document.getElementById('points-bal').textContent='Balance: '+pointsBalance.toLocaleString()+' pts';
+      document.getElementById('ck-points').max=pointsBalance;
+    }
+  }catch(e){}
 }
 loadPointsBalance();
-
-function togglePointsBox(){
-  var box=document.getElementById('points-box');
-  var btn=document.getElementById('btn-toggle-points');
-  if(box.style.display==='none'){
-    box.style.display='block';
-    btn.classList.add('active');
-    btn.textContent='Hide Points';
-    if(pointsBalance>0)document.getElementById('ck-points').focus();
-  } else {
-    box.style.display='none';
-    btn.classList.remove('active');
-    btn.textContent='Apply Points';
-  }
-}
 
 // ── Render cart summary ──
 function renderCheckout(){
@@ -454,26 +436,12 @@ function renderCheckout(){
     var img=c.image_url?'<img src="'+c.image_url+'" class="cart-line-img">':'<div class="cart-line-img" style="display:flex;align-items:center;justify-content:center;font-size:1.2rem;">🌱</div>';
     return '<div class="cart-line">'+img+'<div class="cart-line-info"><div class="cart-line-name">'+c.name+(c.month?' — '+c.month:'')+'</div><div class="cart-line-meta">'+c.qty.toLocaleString()+' x '+fmtRM(c.price)+'</div></div><div class="cart-line-total">'+fmtRM(c.price*c.qty)+'</div></div>';
   }).join('');
-
-  // Show collection month(s) under the booking note
-  var monthsEl=document.getElementById('ck-collection-months');
-  if(monthsEl){
-    var months=Array.from(new Set(cart.map(function(c){return c.month;}).filter(Boolean)));
-    monthsEl.textContent=months.length?'Collection month'+(months.length>1?'s':'')+': '+months.join(', '):''
-  }
-
   updateSummary();
 }
 
 function updateSummary(){
   var subtotal=cart.reduce(function(s,c){return s+(c.price*c.qty);},0);
   var html='<div class="summary-row"><span>Subtotal</span><span>'+fmtRM(subtotal)+'</span></div>';
-  if(promoTotal>0){
-    var promoLabel=promoLines.length===1
-      ?('Promo: '+promoLines[0].promo_title)
-      :('Promotions ('+promoLines.length+')');
-    html+='<div class="summary-discount"><span>'+promoLabel+'</span><span>- '+fmtRM(promoTotal)+'</span></div>';
-  }
   if(voucherDiscount>0){
     html+='<div class="summary-discount"><span>Voucher ('+voucherCode+')</span><span>- '+fmtRM(voucherDiscount)+'</span></div>';
   }
@@ -481,49 +449,10 @@ function updateSummary(){
   if(pointsUsed>0){
     html+='<div class="summary-discount"><span>Points ('+pointsUsed.toLocaleString()+' pts)</span><span>- '+fmtRM(pointsValue)+'</span></div>';
   }
-  var finalTotal=Math.max(0,subtotal-promoTotal-voucherDiscount-pointsValue);
+  var finalTotal=Math.max(0,subtotal-voucherDiscount-pointsValue);
   html+='<div class="summary-total"><span>Total</span><span>'+fmtRM(finalTotal)+'</span></div>';
   document.getElementById('ck-summary').innerHTML=html;
 }
-
-// ── Hydrate cart with category/product_type for promo + scoped-coupon checks ──
-var cartHydration=null; // Promise<[{product_id, category, qty, price}]>
-function buildCartItemsForRpc(){
-  if(cartHydration) return cartHydration;
-  var ids=cart.map(function(c){return c.id;}).filter(Boolean);
-  if(!ids.length){cartHydration=Promise.resolve([]);return cartHydration;}
-  cartHydration=_sb.from('salesweb_products').select('id,category,product_type').in('id',ids).then(function(res){
-    var by={};
-    (res.data||[]).forEach(function(p){by[p.id]={category:p.category||p.product_type||null};});
-    return cart.map(function(c){
-      var meta=by[c.id]||{};
-      return{product_id:c.id,category:meta.category,qty:c.qty,price:c.price};
-    });
-  });
-  return cartHydration;
-}
-
-// ── Auto-apply live promotions ──
-async function loadAutoPromotions(){
-  try{
-    var items=await buildCartItemsForRpc();
-    if(!items.length){promoLines=[];promoTotal=0;updateSummary();return;}
-    var{data,error}=await _sb.rpc('promotions_for_cart',{p_items:items});
-    if(error){
-      // Migration not yet applied — silently skip auto-promo (no crash, no confusing error to customer).
-      console.warn('promotions_for_cart RPC unavailable:',error.message);
-      promoLines=[];promoTotal=0;updateSummary();return;
-    }
-    promoLines=(data||[]).filter(function(p){return p.discount>0;});
-    promoTotal=promoLines.reduce(function(s,p){return s+Number(p.discount||0);},0);
-    promoTotal=Math.round(promoTotal*100)/100;
-    updateSummary();
-  }catch(e){
-    console.warn('Auto-promo skipped:',e);
-    promoLines=[];promoTotal=0;
-  }
-}
-loadAutoPromotions();
 
 renderCheckout();
 
@@ -549,40 +478,23 @@ async function applyVoucher(){
   if(!code){msg.className='promo-msg err';msg.textContent='Please enter a voucher code';return;}
   var btn=document.getElementById('btn-voucher');
   btn.disabled=true;btn.textContent='Checking...';
-
-  // Reset state up-front so partial failures don't leave a stale discount.
-  voucherDiscount=0;voucherCode='';voucherCouponId=null;voucherEligibleSubtotal=0;
-
-  var subtotal=cart.reduce(function(s,c){return s+(c.price*c.qty);},0);
-  var session=await _sb.auth.getSession();
-  var userId=session?.data?.session?.user?.id||null;
-  var items=await buildCartItemsForRpc();
-
-  // Single source of truth: preview_coupon RPC. Validates code, active, dates,
-  // usage_limit, min_order_value, per-customer limit, first-order-only,
-  // scope (all/category/product), and applies max_discount cap.
-  var{data,error}=await _sb.rpc('preview_coupon',{
-    p_code:code,p_customer_id:userId,p_subtotal:subtotal,p_items:items
-  });
+  // Look up voucher in coupons table
+  var{data,error}=await _sb.from('salesweb_coupons').select('*').eq('code',code).single();
   btn.disabled=false;btn.textContent='Apply';
-
-  if(error){
-    // Migration not yet applied — surface a clear, actionable message.
-    console.error('preview_coupon RPC error:',error);
-    msg.className='promo-msg err';
-    msg.textContent='Voucher service is unavailable. Please try again later.';
-    updateSummary();return;
+  if(error||!data){msg.className='promo-msg err';msg.textContent='Invalid voucher code';voucherDiscount=0;voucherCode='';updateSummary();return;}
+  // Check if active and not expired
+  if(!data.is_active){msg.className='promo-msg err';msg.textContent='This voucher is no longer active';voucherDiscount=0;voucherCode='';updateSummary();return;}
+  if(data.expires_at&&new Date(data.expires_at)<new Date()){msg.className='promo-msg err';msg.textContent='This voucher has expired';voucherDiscount=0;voucherCode='';updateSummary();return;}
+  // Apply discount
+  var subtotal=cart.reduce(function(s,c){return s+(c.price*c.qty);},0);
+  if(data.type==='percentage'){
+    voucherDiscount=subtotal*(data.value/100);
+    msg.className='promo-msg ok';msg.textContent=data.value+'% discount applied!';
+  } else {
+    voucherDiscount=Math.min(data.value,subtotal);
+    msg.className='promo-msg ok';msg.textContent=fmtRM(voucherDiscount)+' discount applied!';
   }
-  var row=Array.isArray(data)?data[0]:data;
-  if(!row){msg.className='promo-msg err';msg.textContent='Invalid voucher code';updateSummary();return;}
-  if(!row.valid){msg.className='promo-msg err';msg.textContent=row.reason||'Voucher not valid';updateSummary();return;}
-
   voucherCode=code;
-  voucherCouponId=row.coupon_id;
-  voucherDiscount=Number(row.discount||0);
-  voucherEligibleSubtotal=Number(row.applies_to_subtotal||subtotal);
-  msg.className='promo-msg ok';
-  msg.textContent=fmtRM(voucherDiscount)+' discount applied!';
   updateSummary();
 }
 
@@ -656,7 +568,14 @@ function renderSavedBilling(){
       detail=[b.company_reg?'Reg: '+b.company_reg:null,b.tin?'TIN: '+b.tin:null,b.mpob_license?'MPOB: '+b.mpob_license:null].filter(Boolean).join(' · ');
     }
     var sel=selectedBillingId===b.id?'selected':'';
-    html+='<div class="billing-saved-card '+sel+'" onclick="selectBilling(\''+b.id+'\')">'+'<div class="billing-saved-radio"></div>'+'<div class="billing-saved-info">'+'<div class="billing-saved-type">'+icon+' '+typeLabel+'</div>'+'<div class="billing-saved-name">'+b.name+'</div>'+(detail?'<div class="billing-saved-detail">'+detail+'</div>':'')+'</div>'+'</div>';
+    html+='<div class="billing-saved-card '+sel+'" onclick="selectBilling(\''+b.id+'\')">'+
+      '<div class="billing-saved-radio"></div>'+
+      '<div class="billing-saved-info">'+
+        '<div class="billing-saved-type">'+icon+' '+typeLabel+'</div>'+
+        '<div class="billing-saved-name">'+b.name+'</div>'+
+        (detail?'<div class="billing-saved-detail">'+detail+'</div>':'')+
+      '</div>'+
+    '</div>';
   });
   document.getElementById('billing-saved-list').innerHTML=html;
   // Auto-select first if none selected
@@ -811,7 +730,7 @@ async function placeOrder(){
 
   var subtotal=cart.reduce(function(s,c){return s+(c.price*c.qty);},0);
   var pointsValue=pointsUsed*0.01;
-  var finalTotal=Math.max(0,subtotal-promoTotal-voucherDiscount-pointsValue);
+  var finalTotal=Math.max(0,subtotal-voucherDiscount-pointsValue);
 
   // Get user session
   var session=await _sb.auth.getSession();
@@ -830,10 +749,6 @@ async function placeOrder(){
   if(userRemark)remarkParts.push(userRemark);
   remarkParts.push('Phone: '+phone);
   remarkParts.push('Payment: '+selectedPayMethod);
-  if(promoTotal>0){
-    var promoSummary=promoLines.map(function(p){return p.promo_title+' (-'+fmtRM(p.discount)+')';}).join(', ');
-    remarkParts.push('Promotions: '+promoSummary);
-  }
   if(voucherCode)remarkParts.push('Voucher: '+voucherCode+' (-'+fmtRM(voucherDiscount)+')');
   if(pointsUsed>0)remarkParts.push('Points: '+pointsUsed+' (-'+fmtRM(pointsValue)+')');
   if(billingAddr)remarkParts.push('Billing Addr: '+billingAddr);
@@ -854,7 +769,7 @@ async function placeOrder(){
   var order=null,error=null,orderNum='';
   for(var attempt=0;attempt<5;attempt++){
     orderNum=genOrderNumber();
-    var orderRow={
+    var result=await _sb.from('salesweb_customer_orders').insert([{
       order_number:orderNum,
       customer_id:userId,
       customer_name:contactName,
@@ -864,12 +779,8 @@ async function placeOrder(){
       shipping_address:'Self Collection — MJM Nursery Office, Niah Land District, Miri, 98000, Sarawak',
       customer_remark:remarkParts.join(' | '),
       billing_name:billingName,
-      billing_tax_id:billingTin||null,
-      payment_terms:isCredit?'credit':'cash',
-      credit_billing_period:creditPeriod
-    };
-    if(voucherCode){orderRow.coupon_code=voucherCode;orderRow.coupon_discount=voucherDiscount;}
-    var result=await _sb.from('salesweb_customer_orders').insert([orderRow]).select().single();
+      billing_tax_id:billingTin||null
+    }]).select().single();
     order=result.data;error=result.error;
     if(!error)break;
     if(error&&!error.message.includes('duplicate')&&!error.message.includes('unique')){break;}
@@ -877,70 +788,28 @@ async function placeOrder(){
 
   if(error){showToast('Error: '+error.message);btn.disabled=false;btn.textContent='Place Order';return;}
 
-  // Atomically commit the coupon redemption (writes ledger row + bumps
-  // usage_count). preview_coupon was called when the customer hit Apply,
-  // but we re-validate here against the *final* subtotal+items to close
-  // any race window — and so the redemption row is tied to a real order_id.
-  if(voucherCode){
-    try{
-      var rcItems=await buildCartItemsForRpc();
-      var{data:rcRes,error:rcErr}=await _sb.rpc('redeem_coupon',{
-        p_code:voucherCode,
-        p_customer_id:userId,
-        p_customer_email:email,
-        p_order_id:order.id,
-        p_subtotal:subtotal,
-        p_items:rcItems
-      });
-      if(rcErr){console.warn('redeem_coupon RPC error:',rcErr);}
-      else if(rcRes&&rcRes.ok===false){
-        // Edge case: coupon went invalid between Apply and Place Order
-        // (expired, hit usage limit, etc). Roll back the discount on the order.
-        console.warn('Coupon rejected at finalization:',rcRes.reason);
-        await _sb.from('salesweb_customer_orders').update({
-          coupon_code:null,coupon_discount:0,total:Math.max(0,subtotal-promoTotal-pointsValue)
-        }).eq('id',order.id);
-      }
-    }catch(e){console.warn('redeem_coupon failed:',e);}
-  }
-
-  // Create order items & hold stock
+  // Create order items & hold stock in PARALLEL
   var items=cart.map(function(c){
-    var promoForLine=promoLines.find(function(pl){return pl.product_id===c.id;});
-    var lineSubtotal=c.price*c.qty;
-    var row={order_id:order.id,product_id:c.id,product_name:c.name+(c.month?' — '+c.month:''),quantity:c.qty,unit_price:c.price,subtotal:lineSubtotal};
-    if(promoForLine){
-      row.promotion_id=promoForLine.promotion_id;
-      row.promotion_discount=promoForLine.discount;
-    }
-    return row;
+    return{order_id:order.id,product_id:c.id,product_name:c.name+(c.month?' — '+c.month:''),quantity:c.qty,unit_price:c.price,subtotal:c.price*c.qty};
   });
-  // First attempt with promotion fields; if the columns don't exist yet
-  // (migration not applied), retry without them so checkout still works.
-  var itemsRes=await _sb.from('salesweb_order_items').insert(items);
-  if(itemsRes.error&&/promotion_id|promotion_discount/.test(itemsRes.error.message||'')){
-    var fallback=items.map(function(r){return{order_id:r.order_id,product_id:r.product_id,product_name:r.product_name,quantity:r.quantity,unit_price:r.unit_price,subtotal:r.subtotal};});
-    await _sb.from('salesweb_order_items').insert(fallback);
-  }
 
-  // Deduct stock for each item (hold stock)
-  for(var i=0;i<cart.length;i++){
+  var stockHolds=cart.map(async function(c){
     try{
-      var{error:rpcErr}=await _sb.rpc('hold_product_stock',{p_product_id:cart[i].id,p_qty:cart[i].qty});
-      if(rpcErr){
-        // Fallback: direct stock_qty deduction
-        var{data:prod}=await _sb.from('salesweb_products').select('stock_qty').eq('id',cart[i].id).single();
-        if(prod){await _sb.from('salesweb_products').update({stock_qty:Math.max(0,(prod.stock_qty||0)-cart[i].qty),updated_at:new Date().toISOString()}).eq('id',cart[i].id);}
-      }
-    }catch(e){
-      // Fallback: direct stock_qty deduction
-      var{data:prod}=await _sb.from('salesweb_products').select('stock_qty').eq('id',cart[i].id).single();
-      if(prod){await _sb.from('salesweb_products').update({stock_qty:Math.max(0,(prod.stock_qty||0)-cart[i].qty),updated_at:new Date().toISOString()}).eq('id',cart[i].id);}
-    }
-  }
+      var{error:rpcErr}=await _sb.rpc('hold_product_stock',{p_product_id:c.id,p_qty:c.qty});
+      if(!rpcErr)return;
+    }catch(e){}
+    // Fallback: direct stock_qty deduction
+    var{data:prod}=await _sb.from('salesweb_products').select('stock_qty').eq('id',c.id).single();
+    if(prod){await _sb.from('salesweb_products').update({stock_qty:Math.max(0,(prod.stock_qty||0)-c.qty),updated_at:new Date().toISOString()}).eq('id',c.id);}
+  });
 
-  // Create timeline entry
-  await _sb.from('salesweb_order_timeline').insert([{order_id:order.id,status:'Order Placed',note:'Order placed by customer',changed_by:email}]);
+  await Promise.all([
+    _sb.from('salesweb_order_items').insert(items),
+    Promise.all(stockHolds)
+  ]);
+
+  // Timeline entry — fire and forget (audit log, doesn't need to block redirect)
+  _sb.from('salesweb_order_timeline').insert([{order_id:order.id,status:'Order Placed',note:'Order placed by customer',changed_by:email}]).then(function(){});
 
   // Clear cart
   sessionStorage.removeItem('mjm_cart');

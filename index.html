@@ -1,1 +1,27 @@
-__FILE_FROM_DISK__:/tmp/mjmnursery-sales-web/index.html
+<!--
+═══════════════════════════════════════════════════════════════
+  MJM NURSERY SALES WEB — FILE MAP & CODE GUIDE
+  ⚠️ AI: Read this map FIRST. Jump to the line number directly
+  instead of scanning the whole file. This saves tokens.
+═══════════════════════════════════════════════════════════════
+
+  📁 MJM-Nursery-Sales-Web/
+  │
+  ├── mjm_nursery_sales_web.html ← THIS FILE (main website, single-page app)
+  │
+  ├── auth.html                  ← Login page (email/password, email OTP, SMS OTP)
+  │   After login: admin → mjm_nursery_sales_web.html
+  │                customer → mjm_nursery_sales_web.html (My Account tab)
+  │
+  ├── customer-portal.html       ← Standalone portal (NOT used by main site)
+  ├── customer-portal-styles.css ← Standalone portal styles
+  ├── customer-portal-script.js  ← Standalone portal JS
+  │
+  └── admin.html                 ← Admin Portal (staff only)
+      • Auth: email/password → checks profiles.role = 'admin'
+      • Non-admin → silently redirect to sales web
+      • 5 modules: Orders, Customers, Products, Promotions, Coupons
+      • Supabase tables: customer_orders, order_items, products, promotions, coupons
+
+PLACEHOLDER_RESTORE_PENDING
+-->

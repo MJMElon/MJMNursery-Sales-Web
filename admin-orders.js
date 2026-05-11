@@ -19,6 +19,7 @@
   310   loadTimeline() — render vertical timeline
   340   issuePoints() — loyalty calculation
   350   deductStock() — reduce product stock on paid
+  ---   EDIT CUSTOMER / BILLING / ITEMS appended at bottom
 ═══════════════════════════════════════════════════
 */
 
@@ -105,27 +106,61 @@ async function viewOrder(id){
   ORDER_STATUSES.forEach(function(s){html+='<option'+(s===order.status?' selected':'')+'>'+s+'</option>';});
   html+='</select><button class="btn btn-primary btn-sm" onclick="updateOrderStatus(\''+id+'\')">Update</button></div></div>';
 
-  // ── Customer info ──
+  // ── Customer info (with edit) ──
   html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">';
-  html+='<div style="background:var(--bg);border-radius:10px;padding:1rem;"><div style="font-size:13px;font-weight:600;margin-bottom:.5rem;">Customer</div>';
+
+  // Customer card
+  html+='<div style="background:var(--bg);border-radius:10px;padding:1rem;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">';
+  html+='<div style="font-size:13px;font-weight:600;">Customer</div>';
+  html+='<button class="btn btn-outline btn-sm" onclick="toggleEditCustomer()" style="font-size:11px;padding:2px 8px;">✏️ Edit</button>';
+  html+='</div>';
+  html+='<div id="mo-customer-view">';
   html+='<div style="font-size:13px;"><strong>'+esc(order.customer_name||'—')+'</strong></div>';
   html+='<div style="font-size:12px;color:var(--ink3);">'+esc(order.customer_email||'—')+'</div>';
-  if(order.shipping_address)html+='<div style="font-size:12px;color:var(--ink3);margin-top:.3rem;">'+esc(order.shipping_address)+'</div>';
+  if(order.shipping_address)html+='<div style="font-size:12px;color:var(--ink3);margin-top:.3rem;white-space:pre-wrap;">'+esc(order.shipping_address)+'</div>';
   html+='</div>';
-  html+='<div style="background:var(--bg);border-radius:10px;padding:1rem;"><div style="font-size:13px;font-weight:600;margin-bottom:.5rem;">Billing / E-Invoice</div>';
+  html+='<div id="mo-customer-edit" style="display:none;">';
+  html+='<input class="form-input" id="mo-cust-name" placeholder="Customer name" value="'+esc(order.customer_name||'')+'" style="font-size:12px;padding:6px 10px;margin-bottom:.3rem;">';
+  html+='<input class="form-input" id="mo-cust-email" placeholder="Email" value="'+esc(order.customer_email||'')+'" style="font-size:12px;padding:6px 10px;margin-bottom:.3rem;">';
+  html+='<textarea class="form-input" id="mo-cust-address" placeholder="Shipping address" rows="2" style="font-size:12px;padding:6px 10px;margin-bottom:.3rem;">'+esc(order.shipping_address||'')+'</textarea>';
+  html+='<div style="display:flex;gap:.4rem;"><button class="btn btn-primary btn-sm" onclick="saveCustomerDetails(\''+id+'\')">Save</button><button class="btn btn-outline btn-sm" onclick="toggleEditCustomer()">Cancel</button></div>';
+  html+='</div>';
+  html+='</div>';
+
+  // Billing card
+  html+='<div style="background:var(--bg);border-radius:10px;padding:1rem;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">';
+  html+='<div style="font-size:13px;font-weight:600;">Billing / E-Invoice</div>';
+  html+='<button class="btn btn-outline btn-sm" onclick="toggleEditBilling()" style="font-size:11px;padding:2px 8px;">✏️ Edit</button>';
+  html+='</div>';
+  html+='<div id="mo-billing-view">';
   html+='<div style="font-size:12px;color:var(--ink3);">'+esc(order.billing_name||order.customer_name||'—')+'</div>';
   html+='<div style="font-size:12px;color:var(--ink3);">Tax ID: '+esc(order.billing_tax_id||'—')+'</div>';
   html+='<div style="font-size:12px;color:var(--ink3);">Points issued: '+(order.points_issued||0)+'</div>';
-  html+='</div></div>';
+  html+='</div>';
+  html+='<div id="mo-billing-edit" style="display:none;">';
+  html+='<input class="form-input" id="mo-bill-name" placeholder="Billing name" value="'+esc(order.billing_name||'')+'" style="font-size:12px;padding:6px 10px;margin-bottom:.3rem;">';
+  html+='<input class="form-input" id="mo-bill-tax" placeholder="Tax ID" value="'+esc(order.billing_tax_id||'')+'" style="font-size:12px;padding:6px 10px;margin-bottom:.3rem;">';
+  html+='<div style="display:flex;gap:.4rem;"><button class="btn btn-primary btn-sm" onclick="saveBillingDetails(\''+id+'\')">Save</button><button class="btn btn-outline btn-sm" onclick="toggleEditBilling()">Cancel</button></div>';
+  html+='</div>';
+  html+='</div>';
 
-  // ── Items table ──
-  html+='<div style="margin-bottom:1rem;"><div style="font-size:13px;font-weight:600;margin-bottom:.5rem;">Order Items</div>';
+  html+='</div>';
+
+  // ── Items table (with edit) ──
+  html+='<div style="margin-bottom:1rem;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">';
+  html+='<div style="font-size:13px;font-weight:600;">Order Items</div>';
+  html+='<button class="btn btn-outline btn-sm" onclick="renderItemsEditMode(\''+id+'\')" style="font-size:11px;padding:2px 8px;">✏️ Edit Items</button>';
+  html+='</div>';
+  html+='<div id="mo-items-container">';
   if(items.length){
     html+='<table class="data-table"><thead><tr><th>Product</th><th style="text-align:right;">Price</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Subtotal</th></tr></thead><tbody>';
     items.forEach(function(it){html+='<tr><td>'+esc(it.product_name||'—')+'</td><td style="text-align:right;">RM '+(it.unit_price||0).toFixed(2)+'</td><td style="text-align:right;">'+it.quantity+'</td><td style="text-align:right;font-weight:600;">RM '+(it.subtotal||0).toFixed(2)+'</td></tr>';});
     html+='</tbody></table>';
   } else html+='<div style="font-size:12px;color:var(--ink4);padding:.5rem 0;">No items</div>';
-  html+='</div>';
+  html+='</div></div>';
 
   // ── Financial summary ──
   var subtotal=items.reduce(function(s,it){return s+(it.subtotal||0);},0);
@@ -603,4 +638,209 @@ async function createALFromOrder(orderId,order){
     note:'Acknowledgement Letter '+alNumber+' auto-created in nursery system',
     changed_by:user
   }]);
+}
+
+// ═══════════════════════════════════════
+//  EDIT — CUSTOMER DETAILS
+// ═══════════════════════════════════════
+function toggleEditCustomer(){
+  var view=document.getElementById('mo-customer-view');
+  var edit=document.getElementById('mo-customer-edit');
+  if(!view||!edit)return;
+  var isEditing=edit.style.display!=='none';
+  view.style.display=isEditing?'':'none';
+  edit.style.display=isEditing?'none':'';
+}
+
+async function saveCustomerDetails(orderId){
+  var name=(document.getElementById('mo-cust-name').value||'').trim();
+  var email=(document.getElementById('mo-cust-email').value||'').trim();
+  var address=(document.getElementById('mo-cust-address').value||'').trim();
+  var{data:order}=await sb.from('salesweb_customer_orders').select('customer_name,customer_email,shipping_address,status').eq('id',orderId).single();
+  if(!order){toast('Order not found','error');return;}
+  var{error}=await sb.from('salesweb_customer_orders').update({customer_name:name,customer_email:email,shipping_address:address,updated_at:new Date().toISOString()}).eq('id',orderId);
+  if(error){toast('Error: '+error.message,'error');return;}
+  var changes=[];
+  if(name!==(order.customer_name||''))changes.push('name');
+  if(email!==(order.customer_email||''))changes.push('email');
+  if(address!==(order.shipping_address||''))changes.push('shipping address');
+  if(changes.length){
+    var session=await sb.auth.getSession();
+    var user=session?.data?.session?.user?.email||'admin';
+    await sb.from('salesweb_order_timeline').insert([{order_id:orderId,status:order.status,note:'Customer details updated ('+changes.join(', ')+')',changed_by:user}]);
+  }
+  toast('Customer details saved');
+  viewOrder(orderId);
+}
+
+// ═══════════════════════════════════════
+//  EDIT — BILLING DETAILS
+// ═══════════════════════════════════════
+function toggleEditBilling(){
+  var view=document.getElementById('mo-billing-view');
+  var edit=document.getElementById('mo-billing-edit');
+  if(!view||!edit)return;
+  var isEditing=edit.style.display!=='none';
+  view.style.display=isEditing?'':'none';
+  edit.style.display=isEditing?'none':'';
+}
+
+async function saveBillingDetails(orderId){
+  var name=(document.getElementById('mo-bill-name').value||'').trim();
+  var tax=(document.getElementById('mo-bill-tax').value||'').trim();
+  var{data:order}=await sb.from('salesweb_customer_orders').select('billing_name,billing_tax_id,status').eq('id',orderId).single();
+  if(!order){toast('Order not found','error');return;}
+  var{error}=await sb.from('salesweb_customer_orders').update({billing_name:name,billing_tax_id:tax,updated_at:new Date().toISOString()}).eq('id',orderId);
+  if(error){toast('Error: '+error.message,'error');return;}
+  var changes=[];
+  if(name!==(order.billing_name||''))changes.push('billing name');
+  if(tax!==(order.billing_tax_id||''))changes.push('tax ID');
+  if(changes.length){
+    var session=await sb.auth.getSession();
+    var user=session?.data?.session?.user?.email||'admin';
+    await sb.from('salesweb_order_timeline').insert([{order_id:orderId,status:order.status,note:'Billing details updated ('+changes.join(', ')+')',changed_by:user}]);
+  }
+  toast('Billing details saved');
+  viewOrder(orderId);
+}
+
+// ═══════════════════════════════════════
+//  EDIT — ORDER ITEMS (qty / price / add / delete)
+// ═══════════════════════════════════════
+async function renderItemsEditMode(orderId){
+  var{data:items}=await sb.from('salesweb_order_items').select('*').eq('order_id',orderId).order('id');
+  items=items||[];
+  window._editItems=items.map(function(it){return{id:it.id,product_id:it.product_id||null,product_name:it.product_name||'',unit_price:Number(it.unit_price)||0,quantity:Number(it.quantity)||0,_action:'keep'};});
+  drawItemsEditTable(orderId);
+}
+
+function drawItemsEditTable(orderId){
+  var all=window._editItems||[];
+  var rows=all.filter(function(r){return r._action!=='delete';});
+  var subtotalNow=rows.reduce(function(s,r){return s+(Number(r.unit_price)||0)*(Number(r.quantity)||0);},0);
+  var html='<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:.5rem .7rem;font-size:11px;color:#92400e;margin-bottom:.5rem;">⚠️ Editing items will recalculate the order total (discount and coupon are preserved). Click <strong>Save Changes</strong> when done.</div>';
+  html+='<table class="data-table"><thead><tr><th>Product</th><th style="text-align:right;width:110px;">Price (RM)</th><th style="text-align:right;width:80px;">Qty</th><th style="text-align:right;width:100px;">Subtotal</th><th style="width:40px;"></th></tr></thead><tbody>';
+  if(!rows.length){
+    html+='<tr><td colspan="5" style="text-align:center;font-size:12px;color:var(--ink4);padding:.6rem;">No items — add one below</td></tr>';
+  }
+  rows.forEach(function(r){
+    var idx=all.indexOf(r);
+    var rowSub=(Number(r.unit_price)||0)*(Number(r.quantity)||0);
+    html+='<tr>';
+    html+='<td><input class="form-input" type="text" value="'+esc(r.product_name)+'" oninput="updateEditItem('+idx+',\'product_name\',this.value)" style="font-size:12px;padding:4px 8px;width:100%;"></td>';
+    html+='<td style="text-align:right;"><input class="form-input" type="number" step="0.01" min="0" value="'+r.unit_price+'" oninput="updateEditItemNum('+idx+',\'unit_price\',this.value,\''+orderId+'\')" style="font-size:12px;padding:4px 8px;text-align:right;width:100%;"></td>';
+    html+='<td style="text-align:right;"><input class="form-input" type="number" min="0" step="1" value="'+r.quantity+'" oninput="updateEditItemNum('+idx+',\'quantity\',this.value,\''+orderId+'\')" style="font-size:12px;padding:4px 8px;text-align:right;width:100%;"></td>';
+    html+='<td style="text-align:right;font-weight:600;font-size:12px;">RM '+rowSub.toFixed(2)+'</td>';
+    html+='<td style="text-align:center;"><button class="btn btn-outline btn-sm" onclick="removeEditItem('+idx+',\''+orderId+'\')" title="Remove" style="color:var(--red);font-size:11px;padding:2px 6px;">✕</button></td>';
+    html+='</tr>';
+  });
+  html+='</tbody></table>';
+  // Add new row
+  html+='<div style="display:flex;gap:.4rem;margin-top:.6rem;align-items:center;flex-wrap:wrap;background:var(--bg);padding:.5rem;border-radius:8px;">';
+  html+='<input class="form-input" id="mo-new-item-name" placeholder="Product name" style="flex:1;min-width:160px;font-size:12px;padding:6px 10px;">';
+  html+='<input class="form-input" id="mo-new-item-price" type="number" step="0.01" min="0" placeholder="Price" style="width:90px;font-size:12px;padding:6px 10px;">';
+  html+='<input class="form-input" id="mo-new-item-qty" type="number" min="1" step="1" value="1" style="width:60px;font-size:12px;padding:6px 10px;">';
+  html+='<button class="btn btn-outline btn-sm" onclick="addEditItem(\''+orderId+'\')" style="font-size:11px;">+ Add Item</button>';
+  html+='</div>';
+  // Running subtotal
+  html+='<div style="display:flex;justify-content:space-between;margin-top:.6rem;font-size:12px;color:var(--ink3);"><span>New subtotal preview</span><span style="font-weight:600;color:var(--ink);">RM '+subtotalNow.toFixed(2)+'</span></div>';
+  // Save / Cancel
+  html+='<div style="display:flex;gap:.4rem;margin-top:.8rem;">';
+  html+='<button class="btn btn-primary btn-sm" onclick="saveOrderItems(\''+orderId+'\')">Save Changes</button>';
+  html+='<button class="btn btn-outline btn-sm" onclick="viewOrder(\''+orderId+'\')">Cancel</button>';
+  html+='</div>';
+  document.getElementById('mo-items-container').innerHTML=html;
+}
+
+function updateEditItem(idx,field,value){
+  if(!window._editItems||!window._editItems[idx])return;
+  window._editItems[idx][field]=value;
+  if(window._editItems[idx]._action==='keep')window._editItems[idx]._action='update';
+}
+
+function updateEditItemNum(idx,field,value,orderId){
+  if(!window._editItems||!window._editItems[idx])return;
+  var num=field==='quantity'?(parseInt(value)||0):(parseFloat(value)||0);
+  window._editItems[idx][field]=num;
+  if(window._editItems[idx]._action==='keep')window._editItems[idx]._action='update';
+  // Update subtotal cells + preview without full redraw
+  var rowSub=(Number(window._editItems[idx].unit_price)||0)*(Number(window._editItems[idx].quantity)||0);
+  var rows=document.querySelectorAll('#mo-items-container table tbody tr');
+  // Match visible row index to underlying idx
+  var visible=window._editItems.filter(function(r){return r._action!=='delete';});
+  var visibleIdx=visible.indexOf(window._editItems[idx]);
+  if(visibleIdx>-1&&rows[visibleIdx]){
+    var subCell=rows[visibleIdx].cells[3];
+    if(subCell)subCell.textContent='RM '+rowSub.toFixed(2);
+  }
+  // Recompute total subtotal
+  var subtotal=visible.reduce(function(s,r){return s+(Number(r.unit_price)||0)*(Number(r.quantity)||0);},0);
+  var spans=document.querySelectorAll('#mo-items-container span');
+  if(spans.length>=2){
+    spans[spans.length-1].textContent='RM '+subtotal.toFixed(2);
+  }
+}
+
+function removeEditItem(idx,orderId){
+  if(!window._editItems||!window._editItems[idx])return;
+  var it=window._editItems[idx];
+  if(it._action==='add'){window._editItems.splice(idx,1);}
+  else it._action='delete';
+  drawItemsEditTable(orderId);
+}
+
+function addEditItem(orderId){
+  var nameEl=document.getElementById('mo-new-item-name');
+  var priceEl=document.getElementById('mo-new-item-price');
+  var qtyEl=document.getElementById('mo-new-item-qty');
+  var name=(nameEl.value||'').trim();
+  var price=parseFloat(priceEl.value)||0;
+  var qty=parseInt(qtyEl.value)||0;
+  if(!name){toast('Enter product name','error');return;}
+  if(qty<=0){toast('Quantity must be > 0','error');return;}
+  window._editItems=window._editItems||[];
+  window._editItems.push({id:null,product_id:null,product_name:name,unit_price:price,quantity:qty,_action:'add'});
+  drawItemsEditTable(orderId);
+}
+
+async function saveOrderItems(orderId){
+  var items=window._editItems||[];
+  // Validate
+  for(var k=0;k<items.length;k++){
+    var r=items[k];
+    if(r._action==='delete')continue;
+    if(!r.product_name||!r.product_name.trim()){toast('Each item needs a product name','error');return;}
+    if((Number(r.quantity)||0)<=0){toast('Each item needs quantity > 0','error');return;}
+    if((Number(r.unit_price)||0)<0){toast('Price cannot be negative','error');return;}
+  }
+  // Apply DB changes
+  for(var i=0;i<items.length;i++){
+    var it=items[i];
+    var sub=(Number(it.unit_price)||0)*(Number(it.quantity)||0);
+    sub=Math.round(sub*100)/100;
+    if(it._action==='delete'&&it.id){
+      var{error:dErr}=await sb.from('salesweb_order_items').delete().eq('id',it.id);
+      if(dErr){toast('Delete failed: '+dErr.message,'error');return;}
+    } else if(it._action==='add'){
+      var{error:iErr}=await sb.from('salesweb_order_items').insert([{order_id:orderId,product_id:it.product_id||null,product_name:it.product_name,unit_price:Number(it.unit_price)||0,quantity:Number(it.quantity)||0,subtotal:sub}]);
+      if(iErr){toast('Insert failed: '+iErr.message,'error');return;}
+    } else if(it._action==='update'&&it.id){
+      var{error:uErr}=await sb.from('salesweb_order_items').update({product_name:it.product_name,unit_price:Number(it.unit_price)||0,quantity:Number(it.quantity)||0,subtotal:sub}).eq('id',it.id);
+      if(uErr){toast('Update failed: '+uErr.message,'error');return;}
+    }
+  }
+  // Recalculate total — preserve existing discount + coupon
+  var{data:freshItems}=await sb.from('salesweb_order_items').select('subtotal').eq('order_id',orderId);
+  var subtotal=(freshItems||[]).reduce(function(s,r){return s+(Number(r.subtotal)||0);},0);
+  var{data:order}=await sb.from('salesweb_customer_orders').select('discount_amount,coupon_discount,status').eq('id',orderId).single();
+  var total=Math.max(0,subtotal-(order?.discount_amount||0)-(order?.coupon_discount||0));
+  total=Math.round(total*100)/100;
+  await sb.from('salesweb_customer_orders').update({total:total,updated_at:new Date().toISOString()}).eq('id',orderId);
+  // Log to timeline
+  var session=await sb.auth.getSession();
+  var user=session?.data?.session?.user?.email||'admin';
+  await sb.from('salesweb_order_timeline').insert([{order_id:orderId,status:order?.status||'Updated',note:'Order items edited — new subtotal RM '+subtotal.toFixed(2)+', new total RM '+total.toFixed(2),changed_by:user}]);
+  window._editItems=null;
+  toast('Items saved');
+  viewOrder(orderId);
 }

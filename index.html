@@ -74,6 +74,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>MJM Nursery | MPOB Certified Oil Palm Seedlings</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&display=swap" rel="stylesheet">
 <style>
@@ -267,6 +270,7 @@
   .btn-cart:hover { background: var(--gold-light); }
   .hamburger { display: none; background: none; border: none; cursor: pointer; padding: .25rem; }
   .hamburger span { display: block; width: 22px; height: 2px; background: var(--white); margin: 4px 0; transition: .3s; }
+  .mobile-only-login { display: none; }
 
   /* ── PAGE HERO BANNER (for sub-pages) ── */
   .page-hero {
@@ -501,13 +505,17 @@
   .logo-fly-wrap img { width: 100%; height: 100%; object-fit: contain; }
   .logo-slogan-float {
     position: fixed; z-index: 10000; pointer-events: none;
-    white-space: nowrap;
+    white-space: nowrap; text-align: center;
     font-family: 'Cormorant Garamond', serif; font-size: 16px; font-weight: 600;
     color: var(--gold-light); letter-spacing: .18em; text-transform: uppercase;
     text-shadow: 0 2px 16px rgba(201,168,76,.5);
     opacity: 0; transition: opacity .5s ease .3s;
+    max-width: calc(100vw - 32px);
   }
   .logo-slogan-float.visible { opacity: 1; }
+  @media (max-width: 600px) {
+    .logo-slogan-float { white-space: normal; font-size: 12px; letter-spacing: .1em; line-height: 1.35; padding: 0 1rem; }
+  }
 
   /* ── (flip clock removed — merged into features strip) ── */
 
@@ -958,6 +966,11 @@
         <a onclick="showPage('join')">Join Our Team</a>
       </div>
     </li>
+    <li class="mobile-only-login">
+      <a href="#" id="mob-login-link" onclick="closeMobileMenu();openLoginModal('nav');return false;" style="font-weight:700;color:var(--gold-light);">Log In</a>
+      <a id="mob-myaccount" onclick="closeMobileMenu();showPage('portal');" style="display:none;cursor:pointer;font-weight:700;color:var(--gold-light);">My Account</a>
+      <a id="mob-signout" onclick="closeMobileMenu();portalSignOut();" style="display:none;cursor:pointer;font-size:12px;opacity:.7;">Sign Out</a>
+    </li>
   </ul>
   <div class="nav-actions">
     <a onclick="openLoginModal('nav')" id="nav-login-link" style="cursor:pointer;">Log In</a>
@@ -983,7 +996,7 @@
 <!-- LOGO FLY SYSTEM -->
 <div class="logo-backdrop" id="logoBackdrop" onclick="logoFlyBack()"></div>
 <div class="logo-fly-wrap" id="logoFlyWrap" style="display:none;"><img src="https://cdn.store-assets.com/s/1408881/f/16655641.png" alt="MJM Nursery"></div>
-<div class="logo-slogan-float" id="logoSlogan">The Gold Standard for Oil Palm Seedlings</div>
+<div class="logo-slogan-float" id="logoSlogan">The Golden Standard of Oil Palm Seedling</div>
 
 <!-- ═══════════════════════════════════════ HOME PAGE ═══════════════════════════════════════ -->
 <div class="page active" id="page-home">

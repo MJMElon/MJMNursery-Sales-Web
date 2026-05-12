@@ -165,7 +165,18 @@
   }
 
   .splash-center { display: flex; align-items: center; justify-content: center; gap: 1.5rem; margin: 1rem 0; position: relative; }
-  @media(max-width:600px) { .splash-center { flex-direction: column; gap: .5rem; } }
+  @media(max-width:600px) {
+    .splash-center { flex-direction: column; gap: .4rem; margin: .4rem 0; }
+    .splash-logo { height: 70px !important; margin-bottom: .25rem !important; }
+    .splash-seedling { height: 140px !important; }
+    .splash-glow { width: 180px !important; height: 180px !important; }
+    .splash-feature { flex: 0 0 auto !important; padding: .4rem .7rem !important; }
+    .splash-feature-icon { font-size: 1rem !important; margin-bottom: .15rem !important; }
+    .splash-feature-text { font-size: 11px !important; }
+    .splash-award { font-size: 11px !important; padding: .35rem 1rem !important; margin: .35rem auto .5rem !important; letter-spacing: .08em !important; }
+    .splash-title { margin-top: .25rem !important; }
+    .splash-rays { width: 100vw !important; height: 100vw !important; }
+  }
 
   /* Floating feature boxes */
   .splash-feature {
@@ -1750,22 +1761,39 @@ function switchPolicyTab(tab, btn) {
 // ── PRODUCTS ──
 let products = [];
 let cartCount = 0;
+let lastFetchDebug = null;
 
 // Fetch published products from Supabase
 async function fetchProducts() {
-  var { data, error } = await _sb.from('salesweb_products').select('*')
-    .eq('is_published', true).eq('is_active', true)
-    .order('sort_order', { ascending: true, nullsFirst: false }).order('sell_year', { ascending: true }).order('sell_month', { ascending: true });
-
-  // Fallback if sort_order column doesn't exist yet
-  if (error) {
-    var res = await _sb.from('salesweb_products').select('*')
+  var debug = { startedAt: new Date().toISOString(), step: 'start' };
+  try {
+    var { data, error } = await _sb.from('salesweb_products').select('*')
       .eq('is_published', true).eq('is_active', true)
-      .order('sell_year', { ascending: true }).order('sell_month', { ascending: true });
-    data = res.data; error = res.error;
-  }
+      .order('sort_order', { ascending: true, nullsFirst: false }).order('sell_year', { ascending: true }).order('sell_month', { ascending: true });
+    debug.firstError = error ? (error.message || String(error)) : null;
+    debug.firstCount = (data && data.length) || 0;
 
-  if (error || !data || !data.length) {
+    // Fallback if sort_order column doesn't exist yet
+    if (error) {
+      var res = await _sb.from('salesweb_products').select('*')
+        .eq('is_published', true).eq('is_active', true)
+        .order('sell_year', { ascending: true }).order('sell_month', { ascending: true });
+      data = res.data; error = res.error;
+      debug.fallbackError = error ? (error.message || String(error)) : null;
+      debug.fallbackCount = (data && data.length) || 0;
+    }
+
+    debug.step = 'done';
+    lastFetchDebug = debug;
+
+    if (error || !data || !data.length) {
+      products = [];
+      renderProducts();
+      return;
+    }
+  } catch (e) {
+    debug.step = 'threw'; debug.threw = (e && e.message) ? e.message : String(e);
+    lastFetchDebug = debug;
     products = [];
     renderProducts();
     return;
@@ -1830,7 +1858,22 @@ function renderProducts() {
   if (normalProducts.length) {
     gridEl.innerHTML = normalProducts.map(renderProductCard).join('');
   } else if (!promoProducts.length) {
+<<<<<<< Updated upstream
     gridEl.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--text-light);font-size:13px;">No products available at the moment.</div>';
+=======
+    var dbg = lastFetchDebug || {};
+    var dbgLine = 'count: ' + (dbg.firstCount || 0) + (dbg.fallbackCount !== undefined ? ' (fallback ' + dbg.fallbackCount + ')' : '');
+    if (dbg.firstError) dbgLine += ' · err: ' + dbg.firstError;
+    if (dbg.fallbackError) dbgLine += ' · fallback err: ' + dbg.fallbackError;
+    if (dbg.threw) dbgLine += ' · threw: ' + dbg.threw;
+    gridEl.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:3rem 1.5rem;background:#fff;border:1px dashed var(--green-pale);border-radius:16px;">'
+      + '<div style="font-size:42px;margin-bottom:.5rem;">&#127793;</div>'
+      + '<div style="font-family:\'Cormorant Garamond\',serif;font-size:1.4rem;color:var(--text-dark);margin-bottom:.4rem;">New seedlings coming soon</div>'
+      + '<div style="color:var(--text-light);font-size:13px;line-height:1.55;max-width:320px;margin:0 auto;">Our growers are preparing the next batch. Tap <strong style="color:var(--green-dark);">Book Seedling Collection</strong> to reserve a slot, or check back shortly.</div>'
+      + '<button onclick="fetchProducts()" style="margin-top:1rem;background:var(--green-dark);color:#fff;border:none;padding:.5rem 1.2rem;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Reload products</button>'
+      + '<div style="margin-top:.8rem;font-size:10px;color:#bbb;font-family:monospace;word-break:break-all;">' + dbgLine + '</div>'
+      + '</div>';
+>>>>>>> Stashed changes
   } else {
     gridEl.innerHTML = '';
   }

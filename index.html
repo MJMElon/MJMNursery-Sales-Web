@@ -501,13 +501,17 @@
   .logo-fly-wrap img { width: 100%; height: 100%; object-fit: contain; }
   .logo-slogan-float {
     position: fixed; z-index: 10000; pointer-events: none;
-    white-space: nowrap;
+    white-space: nowrap; text-align: center;
     font-family: 'Cormorant Garamond', serif; font-size: 16px; font-weight: 600;
     color: var(--gold-light); letter-spacing: .18em; text-transform: uppercase;
     text-shadow: 0 2px 16px rgba(201,168,76,.5);
     opacity: 0; transition: opacity .5s ease .3s;
+    max-width: calc(100vw - 32px);
   }
   .logo-slogan-float.visible { opacity: 1; }
+  @media (max-width: 600px) {
+    .logo-slogan-float { white-space: normal; font-size: 12px; letter-spacing: .1em; line-height: 1.35; padding: 0 1rem; }
+  }
 
   /* ── (flip clock removed — merged into features strip) ── */
 
@@ -982,7 +986,7 @@
 <!-- LOGO FLY SYSTEM -->
 <div class="logo-backdrop" id="logoBackdrop" onclick="logoFlyBack()"></div>
 <div class="logo-fly-wrap" id="logoFlyWrap" style="display:none;"><img src="https://cdn.store-assets.com/s/1408881/f/16655641.png" alt="MJM Nursery"></div>
-<div class="logo-slogan-float" id="logoSlogan">The Gold Standard for Oil Palm Seedlings</div>
+<div class="logo-slogan-float" id="logoSlogan">The Golden Standard of Oil Palm Seedling</div>
 
 <!-- ═══════════════════════════════════════ HOME PAGE ═══════════════════════════════════════ -->
 <div class="page active" id="page-home">

@@ -794,9 +794,16 @@
 
   /* ── MOBILE ── */
   @media (max-width: 900px) {
-    nav { padding: 0 1.5rem; }
+    nav { padding: 0 1rem; height: 72px; }
+    #nav-logo-img { height: 48px !important; }
     .nav-links { display: none; }
-    .nav-links.open { display: flex; flex-direction: column; position: fixed; top: 70px; left: 0; right: 0; background: var(--green-dark); padding: 1.5rem 2rem; gap: 1.5rem; z-index: 99; }
+    .nav-links.open { display: flex; flex-direction: column; position: fixed; top: 72px; left: 0; right: 0; background: var(--green-dark); padding: 1.5rem 2rem; gap: 1.5rem; z-index: 99; }
+    .nav-links.open .mobile-only-login { display: block; }
+    .nav-actions { gap: .6rem; }
+    /* Hide the duplicate desktop Log In / My Account / Sign Out — these are in the hamburger menu */
+    #nav-login-link, #nav-myaccount, #nav-signout { display: none !important; }
+    .btn-cart { padding: .45rem .7rem; font-size: 12px; gap: .3rem; }
+    .btn-cart .cart-label { display: none; }
     .hamburger { display: block; }
     .features-strip { grid-template-columns: repeat(2, 1fr); padding: 2rem 1.5rem; gap: 1rem; }
     .info-policies-grid { grid-template-columns: 1fr; }
@@ -1070,7 +1077,7 @@
     <div style="position:relative;">
       <button class="btn-cart" id="cartBtn" onclick="toggleCartDropdown()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
-        Cart (<span id="cartCount">0</span>)
+        <span class="cart-label">Cart&nbsp;</span>(<span id="cartCount">0</span>)
       </button>
       <div class="cart-dropdown" id="cartDropdown">
         <div class="cart-header"><span>Shopping Cart</span><button onclick="toggleCartDropdown()" style="background:none;border:none;font-size:16px;cursor:pointer;color:var(--text-mid);">✕</button></div>
@@ -1803,7 +1810,18 @@
 // ── SUPABASE ──
 var SUPA_URL='https://kibqjztozokohqmhqqqf.supabase.co';
 var SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpYnFqenRvem9rb2hxbWhxcXFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMzQzNjIsImV4cCI6MjA4OTgxMDM2Mn0.J7qJUZhWXYf5b9oey4wXJkjdi66jomEMw_NeV9NWF7M';
-var _sb=supabase.createClient(SUPA_URL,SUPA_KEY);
+// If the supabase-js CDN script failed to load (flaky mobile data, content
+// blocker, etc.) we MUST NOT throw here — that would kill the rest of this
+// inline script, leaving the hamburger, page nav, login modal etc. unbound.
+// Set _sb=null and let downstream callers fail their individual queries.
+var _sb = null;
+try {
+  if (typeof supabase !== 'undefined') {
+    _sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+  } else {
+    console.warn('supabase-js failed to load from CDN; live data disabled, UI still functional');
+  }
+} catch (e) { console.error('Supabase init failed:', e); }
 
 // ── PAGE NAVIGATION ──
 function showPage(page) {

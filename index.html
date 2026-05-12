@@ -267,6 +267,7 @@
   .btn-cart:hover { background: var(--gold-light); }
   .hamburger { display: none; background: none; border: none; cursor: pointer; padding: .25rem; }
   .hamburger span { display: block; width: 22px; height: 2px; background: var(--white); margin: 4px 0; transition: .3s; }
+  .mobile-only-login { display: none; }
 
   /* ── PAGE HERO BANNER (for sub-pages) ── */
   .page-hero {
@@ -956,7 +957,7 @@
         <a onclick="showPage('join')">Join Our Team</a>
       </div>
     </li>
-    <li class="mobile-only-login" style="display:none;">
+    <li class="mobile-only-login">
       <a href="#" id="mob-login-link" onclick="closeMobileMenu();openLoginModal();return false;" style="font-weight:700;color:var(--gold-light);">Log In</a>
       <a id="mob-myaccount" onclick="closeMobileMenu();showPage('portal');" style="display:none;cursor:pointer;font-weight:700;color:var(--gold-light);">My Account</a>
       <a id="mob-signout" onclick="closeMobileMenu();portalSignOut();" style="display:none;cursor:pointer;font-size:12px;opacity:.7;">Sign Out</a>

@@ -956,6 +956,86 @@
   </div>
 </div>
 
+<!--
+  Splash dismiss runs in its OWN script tag so it is completely independent
+  of supabase-js loading, fetchProducts, or any other later JS. If any of
+  those throw (e.g. CDN load failure on flaky mobile data), the splash
+  must still count down and dismiss — otherwise the user is stuck on the
+  intro forever.
+-->
+<script>
+(function() {
+  function showNav() {
+    var n = document.getElementById('navbar');
+    if (n) n.style.display = '';
+  }
+  function dismissSplash() {
+    var s = document.getElementById('splash-poster');
+    showNav();
+    if (s) {
+      s.classList.add('fade-out');
+      setTimeout(function() { if (s && s.parentNode) s.parentNode.removeChild(s); }, 1200);
+    }
+  }
+
+  try {
+    if (sessionStorage.getItem('mjm_splash_shown') || sessionStorage.getItem('mjm_last_page')) {
+      var s = document.getElementById('splash-poster');
+      if (s && s.parentNode) s.parentNode.removeChild(s);
+      showNav();
+      return;
+    }
+    sessionStorage.setItem('mjm_splash_shown', '1');
+  } catch (_) {}
+
+  try {
+    var raysEl = document.getElementById('splash-rays');
+    if (raysEl) {
+      for (var i = 0; i < 12; i++) {
+        var ray = document.createElement('div');
+        ray.className = 'splash-ray';
+        ray.style.transform = 'rotate(' + (i * 30) + 'deg)';
+        ray.style.opacity = (0.3 + Math.random() * 0.5).toFixed(2);
+        ray.style.animation = 'raysPulse ' + (2 + Math.random() * 2).toFixed(1) + 's ease-in-out infinite';
+        ray.style.animationDelay = (Math.random() * 2).toFixed(1) + 's';
+        raysEl.appendChild(ray);
+      }
+    }
+    var partEl = document.getElementById('splash-particles');
+    if (partEl) {
+      for (var j = 0; j < 20; j++) {
+        var p = document.createElement('div');
+        p.className = 'splash-particle';
+        p.style.left = (10 + Math.random() * 80) + '%';
+        p.style.top = (40 + Math.random() * 50) + '%';
+        p.style.width = (2 + Math.random() * 4) + 'px';
+        p.style.height = p.style.width;
+        p.style.animationDuration = (3 + Math.random() * 4) + 's';
+        p.style.animationDelay = (Math.random() * 4) + 's';
+        partEl.appendChild(p);
+      }
+    }
+  } catch (_) {}
+
+  var cdEl = document.getElementById('splash-cd');
+  var cdNum = 3;
+  var cdInterval = setInterval(function() {
+    cdNum--;
+    if (cdEl) cdEl.textContent = cdNum;
+    if (cdNum <= 0) clearInterval(cdInterval);
+  }, 1000);
+
+  setTimeout(dismissSplash, 3000);
+  setTimeout(function() {
+    var s = document.getElementById('splash-poster');
+    if (s && !s.classList.contains('fade-out')) dismissSplash();
+  }, 8000);
+
+  var splashEl = document.getElementById('splash-poster');
+  if (splashEl) splashEl.addEventListener('click', dismissSplash);
+})();
+</script>
+
 <!-- NAV (hidden during splash, revealed after) -->
 <nav id="navbar" style="display:none;">
   <div class="nav-logo" onclick="showPage('home')">
@@ -3204,84 +3284,8 @@ document.querySelectorAll('.portal-modal-overlay').forEach(function(m){
   m.addEventListener('click',function(e){if(e.target===m)m.classList.remove('open');});
 });
 
-// ── SPLASH POSTER — only on first visit per session ──
-(function() {
-  var splash = document.getElementById('splash-poster');
-  var nav = document.getElementById('navbar');
-
-  // Read sessionStorage defensively — iOS Safari Private mode can throw on access
-  var alreadyShown = false;
-  try {
-    alreadyShown = !!(sessionStorage.getItem('mjm_splash_shown') || sessionStorage.getItem('mjm_last_page'));
-  } catch (_) {}
-
-  // Skip splash if already shown, or if coming from login (mjm_last_page is set)
-  if (alreadyShown) {
-    if (splash) splash.remove();
-    if (nav) nav.style.display = '';
-    return;
-  }
-  try { sessionStorage.setItem('mjm_splash_shown', '1'); } catch (_) {}
-  function dismissSplash() {
-    var s = document.getElementById('splash-poster');
-    var n = document.getElementById('navbar');
-    if (n) n.style.display = '';
-    if (s) {
-      s.classList.add('fade-out');
-      setTimeout(function() { if (s && s.parentNode) s.remove(); }, 1200);
-    }
-  }
-
-  // Decorative rays + particles — wrapped so a failure here can't kill the timer
-  try {
-    var raysEl = document.getElementById('splash-rays');
-    if (raysEl) {
-      for (var i = 0; i < 12; i++) {
-        var ray = document.createElement('div');
-        ray.className = 'splash-ray';
-        ray.style.transform = 'rotate(' + (i * 30) + 'deg)';
-        ray.style.opacity = (0.3 + Math.random() * 0.5).toFixed(2);
-        ray.style.animation = 'raysPulse ' + (2 + Math.random() * 2).toFixed(1) + 's ease-in-out infinite';
-        ray.style.animationDelay = (Math.random() * 2).toFixed(1) + 's';
-        raysEl.appendChild(ray);
-      }
-    }
-    var partEl = document.getElementById('splash-particles');
-    if (partEl) {
-      for (var j = 0; j < 20; j++) {
-        var p = document.createElement('div');
-        p.className = 'splash-particle';
-        p.style.left = (10 + Math.random() * 80) + '%';
-        p.style.top = (40 + Math.random() * 50) + '%';
-        p.style.width = (2 + Math.random() * 4) + 'px';
-        p.style.height = p.style.width;
-        p.style.animationDuration = (3 + Math.random() * 4) + 's';
-        p.style.animationDelay = (Math.random() * 4) + 's';
-        partEl.appendChild(p);
-      }
-    }
-  } catch (_) {}
-
-  // Countdown 3 → 0
-  var cdEl = document.getElementById('splash-cd');
-  var cdNum = 3;
-  var cdInterval = setInterval(function() {
-    cdNum--;
-    if (cdEl) cdEl.textContent = cdNum;
-    if (cdNum <= 0) clearInterval(cdInterval);
-  }, 1000);
-
-  // Primary dismiss at 3s, plus a defensive fallback at 8s in case the page was
-  // backgrounded and the 3s timer was throttled away.
-  setTimeout(dismissSplash, 3000);
-  setTimeout(function() {
-    var s = document.getElementById('splash-poster');
-    if (s && !s.classList.contains('fade-out')) dismissSplash();
-  }, 8000);
-
-  // Tap-to-skip: if the user taps anywhere on the splash, dismiss immediately
-  if (splash) splash.addEventListener('click', function() { dismissSplash(); });
-})();
+// Splash dismiss lives in its own <script> block right after the splash
+// HTML so it cannot be killed by failures elsewhere in this script.
 </script>
 </body>
 </html>

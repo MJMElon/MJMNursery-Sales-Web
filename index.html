@@ -74,19 +74,102 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<script>
+// ── BUILD-VERSION CACHE BUSTER (defensive) ────────────────────────────────
+// Triggers a ONE-TIME hard reload via ?_v=<ts> when the cached HTML predates
+// the current build. Aggressively guarded so it CANNOT break a load:
+//   • Whole thing wrapped in a single outer try/catch.
+//   • Hot path (same build) returns immediately — zero side effects.
+//   • Skips entirely on first visit (prev=null) so brand-new users never
+//     trigger a reload.
+//   • Uses sessionStorage as an extra latch: max ONE auto-reload per tab
+//     session, so even a logic bug here can't infinite-loop.
+//   • Removed the synchronous caches.keys() call that was firing on every
+//     load — Safari WebKit was occasionally hanging on that promise during
+//     parse, leaving the page blank. Cache Storage clear is no longer
+//     attempted here; the HTTP-cache bypass via ?_v= is sufficient.
+// Bump MJM_BUILD on every meaningful deploy.
+(function() {
+  try {
+    var MJM_BUILD = '2026-05-13-fix-mobile-hero-gap';
+    var prev = null;
+    try { prev = localStorage.getItem('mjm_build'); } catch (_) { return; }
+    if (prev === MJM_BUILD) return;                // already on latest
+    try { localStorage.setItem('mjm_build', MJM_BUILD); } catch (_) {}
+    if (!prev) return;                              // first visit — no reload
+    // Single-shot latch: one reload per tab session, never more.
+    var reloaded = null;
+    try { reloaded = sessionStorage.getItem('mjm_cb_done'); } catch (_) { return; }
+    if (reloaded === '1') return;
+    try { sessionStorage.setItem('mjm_cb_done', '1'); } catch (_) {}
+    try {
+      var u = new URL(location.href);
+      u.searchParams.set('_v', String(Date.now()));
+      location.replace(u.href);
+    } catch (_) {}
+  } catch (_) {}
+})();
+</script>
+<script>
+// ── VISIBLE JS ERROR REPORTER ─────────────────────────────────────────────
+// Surfaces ANY uncaught JS error as a red banner at the top of the page so
+// we can finally see what's breaking on Safari/iOS. Without this, users on
+// non-Chrome browsers see a blank page with no clue. The banner only
+// appears if something throws — happy path is invisible.
+(function() {
+  function showErr(label, detail) {
+    try {
+      var b = document.getElementById('js-error-banner');
+      if (!b) {
+        b = document.createElement('div');
+        b.id = 'js-error-banner';
+        b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#dc2626;color:#fff;padding:.6rem 1rem;font:12px/1.4 -apple-system,BlinkMacSystemFont,sans-serif;text-align:left;box-shadow:0 4px 12px rgba(0,0,0,.3);white-space:pre-wrap;word-break:break-word;max-height:50vh;overflow-y:auto;';
+        (document.body || document.documentElement).appendChild(b);
+      }
+      // Append (don't replace) so multiple errors are all visible.
+      b.textContent = (b.textContent ? b.textContent + '\n\n' : '') + '⚠ ' + label + ': ' + detail;
+    } catch (_) {}
+  }
+  window.addEventListener('error', function(ev) {
+    var msg = (ev && (ev.message || (ev.error && ev.error.message))) || 'Unknown error';
+    var where = (ev && ev.filename) ? (' @ ' + ev.filename + ':' + (ev.lineno || '?') + ':' + (ev.colno || '?')) : '';
+    showErr('JS error', msg + where);
+  });
+  window.addEventListener('unhandledrejection', function(ev) {
+    var reason = ev && ev.reason;
+    var msg = (reason && (reason.message || String(reason))) || 'Unknown promise rejection';
+    showErr('Promise rejection', msg);
+  });
+})();
+</script>
 <title>MJM Nursery | MPOB Certified Oil Palm Seedlings</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  /* ── SPLASH POSTER ── */
+  /* ── SPLASH POSTER ──
+     Uses BOTH `inset:0` (modern Safari/Chrome) AND the legacy top/right/
+     bottom/left:0 quartet, so positioning still works on Safari < 14.5.
+     The keyframe `splashAutoFade` is a CSS-only safety net: even if every
+     line of JS on this page dies, the splash will visibly fade and stop
+     blocking the user's clicks 5 seconds after page load. */
   #splash-poster {
-    position: fixed; inset: 0; z-index: 9999;
+    position: fixed;
+    top: 0; right: 0; bottom: 0; left: 0;
+    inset: 0; z-index: 9999;
     background: linear-gradient(160deg, #1a1608 0%, #2c2210 30%, #3d321a 60%, #1a1608 100%);
     display: flex; align-items: center; justify-content: center;
     transition: opacity 1.2s ease-out;
     overflow: hidden;
+    /* CSS-only fade safety net — kicks in 4s after page load and runs for
+       1.5s. If JS dismiss fires first (normal happy path) the .fade-out
+       class wins via higher specificity + opacity:0 already. */
+    animation: splashAutoFade 1.5s ease-out 4s forwards;
   }
+  @keyframes splashAutoFade { to { opacity: 0; pointer-events: none; visibility: hidden; } }
   #splash-poster.fade-out { opacity: 0; pointer-events: none; }
 
   .splash-countdown {
@@ -162,7 +245,18 @@
   }
 
   .splash-center { display: flex; align-items: center; justify-content: center; gap: 1.5rem; margin: 1rem 0; position: relative; }
-  @media(max-width:600px) { .splash-center { flex-direction: column; gap: .5rem; } }
+  @media(max-width:600px) {
+    .splash-center { flex-direction: column; gap: .4rem; margin: .4rem 0; }
+    .splash-logo { height: 124px !important; margin-bottom: .25rem !important; }
+    .splash-seedling { height: 140px !important; }
+    .splash-glow { width: 180px !important; height: 180px !important; }
+    .splash-feature { flex: 0 0 auto !important; padding: .4rem .7rem !important; }
+    .splash-feature-icon { font-size: 1rem !important; margin-bottom: .15rem !important; }
+    .splash-feature-text { font-size: 11px !important; }
+    .splash-award { font-size: 11px !important; padding: .35rem 1rem !important; margin: .35rem auto .5rem !important; letter-spacing: .08em !important; }
+    .splash-title { margin-top: .25rem !important; }
+    .splash-rays { width: 100vw !important; height: 100vw !important; }
+  }
 
   /* Floating feature boxes */
   .splash-feature {
@@ -267,6 +361,7 @@
   .btn-cart:hover { background: var(--gold-light); }
   .hamburger { display: none; background: none; border: none; cursor: pointer; padding: .25rem; }
   .hamburger span { display: block; width: 22px; height: 2px; background: var(--white); margin: 4px 0; transition: .3s; }
+  .mobile-only-login { display: none; }
 
   /* ── PAGE HERO BANNER (for sub-pages) ── */
   .page-hero {
@@ -379,6 +474,18 @@
   .btn-add { background: var(--green-dark); color: var(--white); border: none; border-radius: 6px; padding: .45rem .9rem; font-size: 12px; font-weight: 500; cursor: pointer; transition: background .2s; display: flex; align-items: center; gap: .3rem; font-family: 'DM Sans', sans-serif; }
   .btn-add:hover { background: var(--green-mid); }
   .btn-add:disabled { background: #ccc; cursor: not-allowed; }
+
+  /* In-card qty + Add controls (main page can add to cart without opening popup) */
+  .card-qty-row { display:flex; align-items:center; justify-content:center; gap:.4rem; margin: .7rem 0 .5rem; }
+  .card-qty-btn { width:28px; height:28px; border-radius:6px; border:1.5px solid var(--green-pale); background:#fff; color:var(--green-dark); font-size:1rem; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; line-height:1; font-family:inherit; user-select:none; transition: all .15s; }
+  .card-qty-btn:hover { background: var(--green-pale); }
+  .card-qty-btn:active { transform: scale(.95); }
+  .card-qty-input { width:54px; height:28px; text-align:center; border:1.5px solid var(--green-pale); border-radius:6px; font-size:13px; font-weight:700; color: var(--text-dark); font-family: 'DM Sans', sans-serif; outline:none; padding:0 4px; }
+  .card-qty-input:focus { border-color: var(--green-mid); }
+  .card-add-btn { width:100%; justify-content:center; padding: .55rem .9rem; font-size: 13px; font-weight: 600; border-radius: 8px; }
+  .special-showcase .card-qty-btn { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.25); color: var(--gold-light); }
+  .special-showcase .card-qty-btn:hover { background: rgba(255,255,255,.18); }
+  .special-showcase .card-qty-input { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.2); color: #fff; }
 
   /* ── (about section removed — merged into features strip) ── */
 
@@ -501,13 +608,17 @@
   .logo-fly-wrap img { width: 100%; height: 100%; object-fit: contain; }
   .logo-slogan-float {
     position: fixed; z-index: 10000; pointer-events: none;
-    white-space: nowrap;
+    white-space: nowrap; text-align: center;
     font-family: 'Cormorant Garamond', serif; font-size: 16px; font-weight: 600;
     color: var(--gold-light); letter-spacing: .18em; text-transform: uppercase;
     text-shadow: 0 2px 16px rgba(201,168,76,.5);
     opacity: 0; transition: opacity .5s ease .3s;
+    max-width: calc(100vw - 32px);
   }
   .logo-slogan-float.visible { opacity: 1; }
+  @media (max-width: 600px) {
+    .logo-slogan-float { white-space: normal; font-size: 12px; letter-spacing: .1em; line-height: 1.35; padding: 0 1rem; }
+  }
 
   /* ── (flip clock removed — merged into features strip) ── */
 
@@ -591,6 +702,8 @@
   .social-btn.fb { background: #1877F2; color: white; }
   .social-btn.ig { background: linear-gradient(135deg,#E1306C,#833AB4); color: white; }
   .social-btn.wa { background: #25D366; color: white; }
+  .social-btn.tt { background: #000; color: white; }
+  .social-btn.li { background: #0A66C2; color: white; }
   .social-btn svg { width: 16px; height: 16px; fill: currentColor; }
   .contact-form-block { background: var(--white); border-radius: 16px; padding: 2.5rem; border: 1px solid rgba(0,0,0,.06); }
   .contact-form-block h3 { font-family: 'Cormorant Garamond', serif; font-size: 24px; font-weight: 600; color: var(--text-dark); margin-bottom: 1.5rem; }
@@ -722,23 +835,60 @@
   .cl-otp-verify{padding:12px 18px;background:var(--green-dark);color:#fff;font-weight:700;font-size:12px;border:none;border-radius:10px;cursor:pointer;white-space:nowrap;font-family:'DM Sans',sans-serif;}
   .cl-otp-verify:hover{background:var(--green-mid);}
   .cl-hint{font-size:10px;color:var(--text-light);margin-top:.25rem;padding-left:.2rem;}
+  /* ── Login modal overlay ── */
+  .login-modal-overlay{display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:1.5rem;}
+  .login-modal-overlay.open{display:flex;}
+  .login-modal-card{background:var(--cream);border-radius:24px;padding:0;width:100%;max-width:420px;position:relative;box-shadow:0 30px 60px rgba(0,0,0,.25);animation:modalPop .25s ease-out;max-height:90vh;overflow-y:auto;overflow-x:hidden;}
+  @keyframes modalPop{from{transform:scale(.93);opacity:0;}to{transform:scale(1);opacity:1;}}
+  .login-modal-close{position:absolute;top:.85rem;right:.85rem;background:rgba(255,255,255,.15);border:none;font-size:1.1rem;cursor:pointer;color:#fff;line-height:1;padding:4px 9px;border-radius:50%;transition:background .15s;z-index:2;}
+  .login-modal-close:hover{background:rgba(255,255,255,.3);}
+  .login-modal-hero{background:linear-gradient(135deg,var(--green-dark) 0%,var(--green-mid) 100%);padding:1.6rem 2rem 1.3rem;text-align:center;position:relative;}
+  .login-modal-hero::after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:24px;background:var(--cream);border-radius:24px 24px 0 0;}
+  .login-modal-logo{text-align:center;margin-bottom:.6rem;position:relative;z-index:1;}
+  .login-modal-logo img{height:72px;filter:drop-shadow(0 2px 8px rgba(0,0,0,.25));}
+  .login-modal-title{font-family:'Cormorant Garamond',serif;font-size:1.5rem;font-weight:400;color:#fff;text-align:center;margin-bottom:.2rem;position:relative;z-index:1;}
+  .login-modal-sub{font-size:12.5px;color:rgba(255,255,255,.85);text-align:center;position:relative;z-index:1;}
+  .login-modal-body{padding:1.6rem 2rem 2rem;}
+  /* Login mode tabs */
+  .lm-tabs{display:flex;gap:.4rem;background:#fff;border:1px solid var(--green-pale);border-radius:12px;padding:4px;margin-bottom:1.1rem;}
+  .lm-tab{flex:1;background:none;border:none;padding:.55rem .6rem;font-size:12px;font-weight:600;color:var(--text-mid);cursor:pointer;border-radius:9px;transition:all .15s;font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:.35rem;}
+  .lm-tab.active{background:var(--green-dark);color:#fff;box-shadow:0 2px 6px rgba(45,74,48,.25);}
+  .lm-tab:not(.active):hover{color:var(--green-dark);background:rgba(45,74,48,.05);}
+  .lm-pane{display:none;}
+  .lm-pane.active{display:block;animation:lmFade .2s ease;}
+  @keyframes lmFade{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+  .lm-otp-channels{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.3rem;}
+  .lm-channel-btn{padding:11px 8px;background:#fff;border:1.5px solid var(--green-pale);color:var(--green-dark);font-weight:700;font-size:11.5px;border-radius:10px;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:.35rem;letter-spacing:.02em;}
+  .lm-channel-btn:hover{border-color:var(--green-mid);background:var(--green-pale);}
+  .lm-channel-btn:disabled{opacity:.4;cursor:not-allowed;}
+  .lm-channel-btn.wa{border-color:#25D366;color:#0c6e3a;}
+  .lm-channel-btn.wa:hover{background:rgba(37,211,102,.1);border-color:#25D366;}
+  .lm-helper{font-size:11px;color:var(--text-mid);background:rgba(45,74,48,.05);border-left:3px solid var(--green-mid);border-radius:6px;padding:.5rem .65rem;margin-bottom:.85rem;line-height:1.45;}
 
   /* Product popup */
   .product-popup-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300;align-items:center;justify-content:center;padding:1rem;}
   .product-popup-overlay.open{display:flex;}
-  .product-popup{background:#fff;border-radius:18px;width:100%;max-width:420px;box-shadow:0 20px 60px rgba(0,0,0,.2);animation:cartIn .2s ease;overflow:hidden;}
-
-  /* Login modal */
-  .login-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:400;align-items:center;justify-content:center;padding:1rem;backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);}
-  .login-modal-overlay.open{display:flex;}
-  .login-modal-box{background:#fff;border-radius:20px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.25);animation:cartIn .22s ease;position:relative;padding:2.2rem 2rem 1.6rem;max-height:92vh;overflow-y:auto;}
-  .login-modal-close{position:absolute;top:.55rem;right:.85rem;background:none;border:none;font-size:1.6rem;color:var(--text-mid);cursor:pointer;padding:0;line-height:1;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:background .15s;}
-  .login-modal-close:hover{background:var(--green-pale);color:var(--text-dark);}
-  .pp-img{height:200px;background:var(--green-pale);display:flex;align-items:center;justify-content:center;overflow:hidden;}
-  .pp-img img{width:100%;height:100%;object-fit:cover;}
-  .pp-body{padding:1.3rem 1.5rem;}
-  .pp-name{font-family:'Cormorant Garamond',serif;font-size:1.4rem;font-weight:400;color:var(--text-dark);margin-bottom:.3rem;}
-  .pp-desc{font-size:12px;color:var(--text-mid);line-height:1.5;margin-bottom:.8rem;}
+  /* Horizontal layout — image on the left, info on the right. Uses object-fit
+     contain so the full product photo shows (not cropped). max-height/width
+     tuned so everything fits a typical phone viewport without scrolling. */
+  .product-popup{background:#fff;border-radius:18px;width:100%;max-width:760px;max-height:88vh;box-shadow:0 20px 60px rgba(0,0,0,.2);animation:cartIn .2s ease;overflow:hidden;display:flex;flex-direction:row;}
+  .pp-img{flex:0 0 45%;background:#f3eee5;display:flex;align-items:center;justify-content:center;overflow:hidden;min-height:300px;padding:1rem;}
+  .pp-img img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;}
+  .pp-body{padding:1.2rem 1.4rem;flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:.4rem;}
+  .pp-name{font-family:'Cormorant Garamond',serif;font-size:1.35rem;font-weight:500;color:var(--text-dark);line-height:1.2;}
+  .pp-desc{font-size:13px;color:var(--text-mid);line-height:1.5;flex:1;}
+  .pp-price{font-size:1.25rem;font-weight:700;color:var(--green-dark);}
+  .pp-stock{font-size:12px;color:var(--text-light);}
+  /* Phones ≤560px: stack vertically, smaller image, tighter typography so
+     the entire card fits an average phone screen without scroll. */
+  @media (max-width: 560px) {
+    .product-popup{flex-direction:column;max-width:380px;max-height:90vh;}
+    .pp-img{flex:0 0 auto;height:42vh;min-height:0;padding:.6rem;}
+    .pp-body{padding:.9rem 1rem;gap:.3rem;}
+    .pp-name{font-size:1.15rem;}
+    .pp-desc{font-size:12px;line-height:1.45;}
+    .pp-price{font-size:1.1rem;}
+  }
   .pp-price{font-size:1.1rem;font-weight:600;color:var(--green-dark);margin-bottom:.3rem;}
   .pp-stock{font-size:11px;color:var(--text-light);margin-bottom:1rem;}
   .pp-qty-row{display:flex;align-items:center;gap:.8rem;margin-bottom:1rem;}
@@ -753,9 +903,16 @@
 
   /* ── MOBILE ── */
   @media (max-width: 900px) {
-    nav { padding: 0 1.5rem; }
+    nav { padding: 0 1rem; height: 72px; }
+    #nav-logo-img { height: 48px !important; }
     .nav-links { display: none; }
-    .nav-links.open { display: flex; flex-direction: column; position: fixed; top: 70px; left: 0; right: 0; background: var(--green-dark); padding: 1.5rem 2rem; gap: 1.5rem; z-index: 99; }
+    .nav-links.open { display: flex; flex-direction: column; position: fixed; top: 72px; left: 0; right: 0; background: var(--green-dark); padding: 1.5rem 2rem; gap: 1.5rem; z-index: 99; }
+    .nav-links.open .mobile-only-login { display: block; }
+    .nav-actions { gap: .6rem; }
+    /* Hide the duplicate desktop Log In / My Account / Sign Out — these are in the hamburger menu */
+    #nav-login-link, #nav-myaccount, #nav-signout { display: none !important; }
+    .btn-cart { padding: .45rem .7rem; font-size: 12px; gap: .3rem; }
+    .btn-cart .cart-label { display: none; }
     .hamburger { display: block; }
     .features-strip { grid-template-columns: repeat(2, 1fr); padding: 2rem 1.5rem; gap: 1rem; }
     .info-policies-grid { grid-template-columns: 1fr; }
@@ -767,7 +924,7 @@
     section { padding: 3.5rem 1.5rem; }
     .info-policies { padding: 3rem 1.5rem; }
     .partners { padding: 3rem 1.5rem; }
-    .page-hero { padding: 2rem 1.5rem; height: 220px; }
+    .page-hero { padding: 2rem 1.5rem; height: 220px; margin-top: 72px; }
   }
   @media (max-width: 600px) {
     .features-strip { grid-template-columns: 1fr; padding: 1.5rem 1rem; gap: 1rem; }
@@ -915,10 +1072,99 @@
   </div>
 </div>
 
-<!-- NAV (hidden during splash, revealed after) -->
-<nav id="navbar" style="display:none;">
+<!--
+  Splash dismiss runs in its OWN script tag so it is completely independent
+  of supabase-js loading, fetchProducts, or any other later JS. If any of
+  those throw (e.g. CDN load failure on flaky mobile data), the splash
+  must still count down and dismiss — otherwise the user is stuck on the
+  intro forever.
+-->
+<script>
+(function() {
+  // showNav() used to flip navbar.style.display from 'none' → ''; the navbar
+  // no longer starts hidden so this is a no-op kept for compatibility with
+  // any old cached scripts that might still call it.
+  function showNav() {}
+  function dismissSplash() {
+    var s = document.getElementById('splash-poster');
+    showNav();
+    if (s) {
+      s.classList.add('fade-out');
+      setTimeout(function() { if (s && s.parentNode) s.parentNode.removeChild(s); }, 1200);
+    }
+  }
+
+  try {
+    if (sessionStorage.getItem('mjm_splash_shown') || sessionStorage.getItem('mjm_last_page')) {
+      var s = document.getElementById('splash-poster');
+      if (s && s.parentNode) s.parentNode.removeChild(s);
+      showNav();
+      return;
+    }
+    sessionStorage.setItem('mjm_splash_shown', '1');
+  } catch (_) {}
+
+  try {
+    var raysEl = document.getElementById('splash-rays');
+    if (raysEl) {
+      for (var i = 0; i < 12; i++) {
+        var ray = document.createElement('div');
+        ray.className = 'splash-ray';
+        ray.style.transform = 'rotate(' + (i * 30) + 'deg)';
+        ray.style.opacity = (0.3 + Math.random() * 0.5).toFixed(2);
+        ray.style.animation = 'raysPulse ' + (2 + Math.random() * 2).toFixed(1) + 's ease-in-out infinite';
+        ray.style.animationDelay = (Math.random() * 2).toFixed(1) + 's';
+        raysEl.appendChild(ray);
+      }
+    }
+    var partEl = document.getElementById('splash-particles');
+    if (partEl) {
+      for (var j = 0; j < 20; j++) {
+        var p = document.createElement('div');
+        p.className = 'splash-particle';
+        p.style.left = (10 + Math.random() * 80) + '%';
+        p.style.top = (40 + Math.random() * 50) + '%';
+        p.style.width = (2 + Math.random() * 4) + 'px';
+        p.style.height = p.style.width;
+        p.style.animationDuration = (3 + Math.random() * 4) + 's';
+        p.style.animationDelay = (Math.random() * 4) + 's';
+        partEl.appendChild(p);
+      }
+    }
+  } catch (_) {}
+
+  var cdEl = document.getElementById('splash-cd');
+  var cdNum = 3;
+  var cdInterval = setInterval(function() {
+    cdNum--;
+    if (cdEl) cdEl.textContent = cdNum;
+    if (cdNum <= 0) clearInterval(cdInterval);
+  }, 1000);
+
+  setTimeout(dismissSplash, 3000);
+  setTimeout(function() {
+    var s = document.getElementById('splash-poster');
+    if (s && !s.classList.contains('fade-out')) dismissSplash();
+  }, 8000);
+
+  var splashEl = document.getElementById('splash-poster');
+  if (splashEl) splashEl.addEventListener('click', dismissSplash);
+})();
+</script>
+
+<!-- NAV — Always present in the DOM. The splash overlay (z-index 9999, full
+     viewport) covers it visually until dismissed; no JS-controlled
+     display:none, so even if the splash script fails to run for ANY reason
+     (rare browser, parser bug, CSP, content blocker), the user still sees a
+     working header once the splash fades. -->
+<nav id="navbar">
   <div class="nav-logo" onclick="showPage('home')">
-    <img id="nav-logo-img" src="https://cdn.store-assets.com/s/1408881/f/16655641.png" alt="MJM Nursery" style="height:140px;cursor:pointer;transition:transform .3s ease;" onmouseenter="showLogoOverlay()" onclick="event.stopPropagation();">
+    <!-- The img used to have onclick="event.stopPropagation();" which killed
+         the parent <div>'s click handler on mobile (because the img fills the
+         entire div, every tap hit the img first). Removed so tapping the
+         logo on phones now navigates home as expected. Hover overlay still
+         fires on desktop via onmouseenter. -->
+    <img id="nav-logo-img" src="https://cdn.store-assets.com/s/1408881/f/16655641.png" alt="MJM Nursery" style="height:140px;cursor:pointer;transition:transform .3s ease;pointer-events:none;" onmouseenter="showLogoOverlay()">
   </div>
   <ul class="nav-links" id="navLinks">
     <li><a onclick="showPage('home'); scrollToSection('salesweb_products')" id="nav-shop" style="font-weight:700;">Shop</a></li>
@@ -936,15 +1182,20 @@
         <a onclick="showPage('join')">Join Our Team</a>
       </div>
     </li>
+    <li class="mobile-only-login">
+      <a href="#" id="mob-login-link" onclick="closeMobileMenu();openLoginModal('nav');return false;" style="font-weight:700;color:var(--gold-light);">Log In</a>
+      <a id="mob-myaccount" onclick="closeMobileMenu();showPage('portal');" style="display:none;cursor:pointer;font-weight:700;color:var(--gold-light);">My Account</a>
+      <a id="mob-signout" onclick="closeMobileMenu();portalSignOut();" style="display:none;cursor:pointer;font-size:12px;opacity:.7;">Sign Out</a>
+    </li>
   </ul>
   <div class="nav-actions">
-    <a href="#" id="nav-login-link" onclick="openLoginModal();return false;">Log In</a>
+    <a onclick="openLoginModal('nav')" id="nav-login-link" style="cursor:pointer;">Log In</a>
     <a onclick="showPage('portal')" id="nav-myaccount" style="display:none;cursor:pointer;">My Account</a>
     <a onclick="portalSignOut()" id="nav-signout" style="display:none;cursor:pointer;font-size:11px;opacity:.6;">Sign Out</a>
     <div style="position:relative;">
       <button class="btn-cart" id="cartBtn" onclick="toggleCartDropdown()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
-        Cart (<span id="cartCount">0</span>)
+        <span class="cart-label">Cart&nbsp;</span>(<span id="cartCount">0</span>)
       </button>
       <div class="cart-dropdown" id="cartDropdown">
         <div class="cart-header"><span>Shopping Cart</span><button onclick="toggleCartDropdown()" style="background:none;border:none;font-size:16px;cursor:pointer;color:var(--text-mid);">✕</button></div>
@@ -952,8 +1203,16 @@
         <div class="cart-footer" id="cartFooter"></div>
       </div>
     </div>
-    <button class="hamburger" id="hamburger" aria-label="Menu">
-      <span></span><span></span><span></span>
+    <!-- Hamburger: ontouchend fires immediately on mobile (no 300ms tap
+         delay) and stopPropagation prevents the same tap from being
+         re-handled by the document-level outside-click closer. onclick
+         remains for desktop / accessibility / keyboard activation. The
+         inner <span>s have pointer-events:none so taps always hit the
+         button itself, never bubble through a stripe. -->
+    <button class="hamburger" id="hamburger" aria-label="Menu"
+            onclick="var l=document.getElementById('navLinks');if(l)l.classList.toggle('open');"
+            ontouchend="event.preventDefault();event.stopPropagation();var l=document.getElementById('navLinks');if(l)l.classList.toggle('open');">
+      <span style="pointer-events:none;"></span><span style="pointer-events:none;"></span><span style="pointer-events:none;"></span>
     </button>
   </div>
 </nav>
@@ -961,7 +1220,7 @@
 <!-- LOGO FLY SYSTEM -->
 <div class="logo-backdrop" id="logoBackdrop" onclick="logoFlyBack()"></div>
 <div class="logo-fly-wrap" id="logoFlyWrap" style="display:none;"><img src="https://cdn.store-assets.com/s/1408881/f/16655641.png" alt="MJM Nursery"></div>
-<div class="logo-slogan-float" id="logoSlogan">The Gold Standard for Oil Palm Seedlings</div>
+<div class="logo-slogan-float" id="logoSlogan">The Golden Standard of Oil Palm Seedling</div>
 
 <!-- ═══════════════════════════════════════ HOME PAGE ═══════════════════════════════════════ -->
 <div class="page active" id="page-home">
@@ -971,8 +1230,7 @@
   <!-- Special For You section -->
   <section class="salesweb_products" id="salesweb_products" style="padding-top:3rem;">
     <div style="text-align:center;margin-bottom:2rem;">
-      <span class="section-label">Handpicked For You</span>
-      <h2 class="section-title">Special <em>For You</em></h2>
+      <h2 class="section-title">Handpicked <em>Special For You</em></h2>
     </div>
     <div class="special-showcase" id="specialGrid"></div>
   </section>
@@ -1028,7 +1286,7 @@
   <section class="rewards">
     <h2 class="section-title">Earn Points for<br>Every <em style="color:var(--gold-light)">Purchase</em></h2>
     <p>Sign up today and start earning reward points. More exciting rewards coming soon.</p>
-    <a href="#" class="rewards-btn" onclick="openLoginModal(true);return false;">Sign Up Now</a>
+    <a href="salesweb_auth.html" class="rewards-btn">Sign Up Now</a>
   </section>
 
 </div><!-- /page-home -->
@@ -1211,8 +1469,12 @@
         <div class="contact-card">
           <div class="cc-icon"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div>
           <div>
-            <div class="cc-label">Bank</div>
-            <div class="cc-value">HLBB 027-00-11609-6<br><span style="font-size:12px;color:var(--text-light)">All payments to Mega Jutamas Sdn Bhd</span></div>
+            <div class="cc-label">Bank Transfer</div>
+            <div class="cc-value">
+              <strong>Mega Jutamas Sdn Bhd</strong><br>
+              <span style="font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;letter-spacing:.04em;">027-00-11609-6</span><br>
+              <span style="font-size:12px;color:var(--text-light)">Hong Leong Bank</span>
+            </div>
           </div>
         </div>
 
@@ -1231,6 +1493,16 @@
               <svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
               WhatsApp
             </a>
+            <a class="social-btn tt" href="https://www.tiktok.com/@mjmgroup1234" target="_blank" rel="noopener">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5.8 20.1a6.34 6.34 0 0 0 10.86-4.43V8.69a8.16 8.16 0 0 0 4.77 1.52v-3.43a4.85 4.85 0 0 1-1.84-.09z"/></svg>
+              TikTok
+            </a>
+            <!-- LinkedIn slot — replace href when URL is confirmed:
+            <a class="social-btn li" href="https://www.linkedin.com/company/REPLACE-ME" target="_blank" rel="noopener">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 2h-17A1.5 1.5 0 0 0 2 3.5v17A1.5 1.5 0 0 0 3.5 22h17a1.5 1.5 0 0 0 1.5-1.5v-17A1.5 1.5 0 0 0 20.5 2zM8 19H5v-9h3zM6.5 8.25A1.75 1.75 0 1 1 8.3 6.5a1.78 1.78 0 0 1-1.8 1.75zM19 19h-3v-4.74c0-1.42-.6-1.93-1.38-1.93a1.74 1.74 0 0 0-1.62 1.93V19h-3v-9h2.9v1.3a3.11 3.11 0 0 1 2.7-1.4c1.55 0 3.36.86 3.36 3.66z"/></svg>
+              LinkedIn
+            </a>
+            -->
           </div>
         </div>
       </div>
@@ -1534,41 +1806,64 @@
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════ LOGIN MODAL ═══════════════════════════════════════ -->
-<div class="login-modal-overlay" id="login-modal" onclick="if(event.target===this)closeLoginModal()">
-  <div class="login-modal-box">
-    <button class="login-modal-close" onclick="closeLoginModal()" aria-label="Close">&times;</button>
-    <div class="checkout-login-title">Welcome</div>
-    <div class="checkout-login-sub" id="cl-modal-sub">Sign in or create an account</div>
+<!-- ═══════════════════════════════════════ CHECKOUT LOGIN PAGE ═══════════════════════════════════════ -->
+<div class="page" id="page-checkout-login">
+  <!-- Checkout login uses the shared login modal. This page is just a router
+       target — showPage() opens the modal when this page becomes active. The
+       previous inline `<script>openLoginModal('checkout');</script>` here
+       fired at HTML parse time, BEFORE the function was defined → caused
+       a ReferenceError that surfaced in the diagnostic banner on Safari. -->
+</div>
 
-    <div class="cl-status" id="cl-status"></div>
+<!-- ═══ LOGIN MODAL ═══ -->
+<div class="login-modal-overlay" id="login-modal-overlay" onclick="if(event.target===this)closeLoginModal()">
+  <div class="login-modal-card" id="login-modal-card">
+    <button class="login-modal-close" onclick="closeLoginModal()" aria-label="Close">✕</button>
 
-    <div id="cl-form-main">
-      <div style="display:flex;flex-direction:column;gap:.65rem;">
-        <div id="cl-signup-fields" style="display:none;">
-          <input type="text" id="cl-signup-name" class="cl-input" placeholder="Full Name" style="margin-bottom:.65rem;">
-        </div>
-
-        <input type="text" id="cl-identity" class="cl-input" placeholder="Email or Phone Number" oninput="clDetectInput()">
-        <div class="cl-hint" id="cl-hint"></div>
-
-        <input type="password" id="cl-password" class="cl-input" placeholder="Password">
-
-        <button class="cl-btn" id="cl-btn-login" onclick="clLoginPassword()">Sign In</button>
-
-        <div class="cl-divider"><span>or</span></div>
-
-        <button class="cl-otp-btn" id="cl-btn-otp" onclick="clSendOTP()">Email me a 6-digit code</button>
-
-        <div class="cl-otp-row" id="cl-otp-row">
-          <input type="text" id="cl-otp-code" class="cl-input" placeholder="Enter 6-digit code" maxlength="6" inputmode="numeric">
-          <button class="cl-otp-verify" onclick="clVerifyOTP()">Verify</button>
-        </div>
+    <div class="login-modal-hero">
+      <div class="login-modal-logo">
+        <img src="https://cdn.store-assets.com/s/1408881/f/16655641.png" alt="MJM Nursery">
       </div>
+      <div class="login-modal-title">Welcome</div>
+      <div class="login-modal-sub" id="lm-sub">Sign in to your account</div>
+    </div>
 
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.8rem;">
-        <button class="cl-link" onclick="clForgotPassword()">Forgot Password?</button>
-        <button class="cl-link" id="cl-btn-toggle" onclick="clToggleSignup()">Create Account</button>
+    <div class="login-modal-body">
+      <div class="cl-status" id="cl-status"></div>
+
+      <!--
+        Phone OTP (SMS / WhatsApp) is intentionally hidden until a phone-number
+        sender is registered with Twilio. Re-add the .lm-tabs block + the
+        #lm-pane-phone div when ready.
+      -->
+
+      <!-- ── EMAIL PANE (only mode for now) ── -->
+      <div class="lm-pane active" id="lm-pane-email">
+        <div style="display:flex;flex-direction:column;gap:.65rem;">
+          <div id="cl-signup-fields" style="display:none;">
+            <input type="text" id="cl-signup-name" class="cl-input" placeholder="Full Name" style="margin-bottom:.65rem;">
+          </div>
+
+          <input type="email" id="cl-identity" class="cl-input" placeholder="Email Address" autocomplete="email">
+
+          <input type="password" id="cl-password" class="cl-input" placeholder="Password" autocomplete="current-password">
+
+          <button class="cl-btn" id="cl-btn-login" onclick="clLoginPassword()">Sign In</button>
+
+          <div class="cl-divider"><span>or no password?</span></div>
+
+          <button class="cl-otp-btn" id="cl-btn-otp" onclick="clSendOTP('email')">Send Email OTP Code</button>
+
+          <div class="cl-otp-row" id="cl-otp-row">
+            <input type="text" id="cl-otp-code" class="cl-input" placeholder="Enter 6-digit code" maxlength="6" inputmode="numeric">
+            <button class="cl-otp-verify" onclick="clVerifyOTP('email')">Verify</button>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.8rem;">
+          <button class="cl-link" onclick="clForgotPassword()">Forgot Password?</button>
+          <button class="cl-link" id="cl-btn-toggle" onclick="clToggleSignup('email')">Create Account</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1582,11 +1877,13 @@
   <div class="footer-inner">
     <div class="footer-title">Social Media</div>
     <div class="footer-social">
-      <a href="#" target="_blank" title="Facebook"><svg viewBox="0 0 24 24"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg></a>
-      <a href="#" target="_blank" title="Instagram"><svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg></a>
-      <a href="#" target="_blank" title="TikTok"><svg viewBox="0 0 24 24"><path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5"/></svg></a>
-      <a href="#" target="_blank" title="Threads"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3v2.5c0 .83-.67 1.5-1.5 1.5S12 11.33 12 10.5V8a1 1 0 0 0-2 0v4c0 2.76 2.24 5 5 5s5-2.24 5-5"/></svg></a>
-      <a href="#" target="_blank" title="LinkedIn"><svg viewBox="0 0 24 24"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg></a>
+      <a href="https://www.facebook.com/theMJMGroup" target="_blank" rel="noopener" title="Facebook"><svg viewBox="0 0 24 24"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg></a>
+      <a href="https://www.instagram.com/themjmgroup/" target="_blank" rel="noopener" title="Instagram"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg></a>
+      <a href="https://wa.me/601129337889?text=Hello,%20I%20would%20like%20to%20enquire%20about%20oil%20palm%20seedlings." target="_blank" rel="noopener" title="WhatsApp"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></a>
+      <a href="https://www.tiktok.com/@mjmgroup1234" target="_blank" rel="noopener" title="TikTok"><svg viewBox="0 0 24 24"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5.8 20.1a6.34 6.34 0 0 0 10.86-4.43V8.69a8.16 8.16 0 0 0 4.77 1.52v-3.43a4.85 4.85 0 0 1-1.84-.09z"/></svg></a>
+      <!-- LinkedIn placeholder — drop in the URL once confirmed
+      <a href="https://www.linkedin.com/company/REPLACE-ME" target="_blank" rel="noopener" title="LinkedIn"><svg viewBox="0 0 24 24"><path d="M20.5 2h-17A1.5 1.5 0 0 0 2 3.5v17A1.5 1.5 0 0 0 3.5 22h17a1.5 1.5 0 0 0 1.5-1.5v-17A1.5 1.5 0 0 0 20.5 2zM8 19H5v-9h3zM6.5 8.25A1.75 1.75 0 1 1 8.3 6.5a1.78 1.78 0 0 1-1.8 1.75zM19 19h-3v-4.74c0-1.42-.6-1.93-1.38-1.93a1.74 1.74 0 0 0-1.62 1.93V19h-3v-9h2.9v1.3a3.11 3.11 0 0 1 2.7-1.4c1.55 0 3.36.86 3.36 3.66z"/></svg></a>
+      -->
     </div>
   </div>
 </footer>
@@ -1594,23 +1891,18 @@
   <p>&copy; 2026 Mega Jutamas Sdn Bhd. All rights reserved.</p>
 </div>
 
-<!-- Product Popup -->
+<!-- Product Popup — read-only detail view (photo + description). Quantity
+     selection + Add to Cart live on the main page product card. -->
 <div class="product-popup-overlay" id="productPopup" onclick="if(event.target===this)closeProductPopup()">
   <div class="product-popup">
     <div class="pp-img" id="ppImg"></div>
     <div class="pp-body">
       <div class="pp-name" id="ppName"></div>
-      <div class="pp-desc" id="ppDesc"></div>
+      <div class="pp-desc" id="ppDesc" style="white-space:pre-wrap;line-height:1.55;"></div>
       <div class="pp-price" id="ppPrice"></div>
       <div class="pp-stock" id="ppStock"></div>
-      <div class="pp-qty-row">
-        <button class="pp-qty-btn" onclick="changePopupQty(-1)">−</button>
-        <input type="text" class="pp-qty-val" id="ppQty" value="1" onblur="setPopupQty(this.value);this.value=popupQty" onkeydown="if(event.key==='Enter'){this.blur();}" style="width:100px;text-align:center;border:1.5px solid var(--green-pale);border-radius:10px;font-size:1.2rem;font-weight:700;padding:8px;font-family:'DM Sans',sans-serif;outline:none;">
-        <button class="pp-qty-btn" onclick="changePopupQty(1)">+</button>
-      </div>
-      <div class="pp-actions">
-        <button class="pp-close-btn" onclick="closeProductPopup()">Cancel</button>
-        <button class="pp-add-btn" id="ppAddBtn" onclick="addPopupToCart()">Add to Cart</button>
+      <div class="pp-actions" style="margin-top:1rem;">
+        <button class="pp-close-btn" onclick="closeProductPopup()" style="width:100%;">Close</button>
       </div>
     </div>
   </div>
@@ -1623,12 +1915,132 @@
   </a>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-// ── SUPABASE ──
+// Global mobile-menu close helper — inline onclicks in the mobile nav drawer
+// (Log In, My Account, Sign Out) call this. Defining it here, BEFORE the
+// main storefront <script>, guarantees the symbol exists even if a later
+// script errors out partway through. A missing closeMobileMenu used to
+// throw ReferenceError on tap, which halted execution and left the
+// product grid empty.
+function closeMobileMenu(){var l=document.getElementById('navLinks');if(l)l.classList.remove('open');}
+</script>
+<script>
+// Previous build loaded @supabase/supabase-js from jsDelivr in the <head>
+// and called supabase.createClient() inline. On Safari/iOS that pipeline
+// was failing as cross-origin "Script error." with no detail — most
+// likely the auto-resolved jsDelivr URL serving a CJS or ESM bundle
+// Safari refused to execute as a classic script. The page rendered
+// blank because anything depending on `_sb` (fetchProducts, passion
+// section, portal init) silently broke.
+//
+// New approach: the public storefront NO LONGER needs supabase-js at all.
+// Product fetch, passion section, and any other read-only API call now
+// uses `sbFetch()`, a tiny raw-fetch wrapper around Supabase's REST API.
+// The supabase-js SDK only gets loaded LAZILY (on demand) when the user
+// actually opens the login modal or the My Account page — those features
+// need auth.signInWithPassword(), realtime, etc.
+//
+// Result: even with a total CDN outage, the public storefront still
+// renders products. The cross-origin Script error from the SDK can no
+// longer take down the whole page.
 var SUPA_URL='https://kibqjztozokohqmhqqqf.supabase.co';
 var SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpYnFqenRvem9rb2hxbWhxcXFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMzQzNjIsImV4cCI6MjA4OTgxMDM2Mn0.J7qJUZhWXYf5b9oey4wXJkjdi66jomEMw_NeV9NWF7M';
-var _sb=supabase.createClient(SUPA_URL,SUPA_KEY);
+var _sb = null;
+var _sbLoadPromise = null;
+
+// Raw fetch wrapper that talks directly to Supabase's REST API. No SDK,
+// no CDN dependency, works in every browser that has fetch() (IE11 is
+// the only modern browser without it — out of scope).
+// Pull the logged-in user's JWT out of supabase-js's localStorage entry.
+// The SDK key format for v2 is `sb-<projectRef>-auth-token`; the value is
+// JSON. By reading it directly we don't need the SDK to be loaded yet.
+function getStoredJwt() {
+  try {
+    var key = 'sb-' + (SUPA_URL.replace('https://','').split('.')[0]) + '-auth-token';
+    var raw = localStorage.getItem(key);
+    if (!raw) return null;
+    var p = JSON.parse(raw);
+    if (p && p.access_token) return p.access_token;
+    if (p && p.currentSession && p.currentSession.access_token) return p.currentSession.access_token;
+    if (Array.isArray(p) && p[0]) return p[0];   // some SDK versions store [token, ...]
+    return null;
+  } catch (_) { return null; }
+}
+
+async function sbFetch(table, params) {
+  var url = SUPA_URL + '/rest/v1/' + table;
+  if (params) {
+    var qs = [];
+    for (var k in params) {
+      if (Object.prototype.hasOwnProperty.call(params, k) && params[k] != null) {
+        qs.push(encodeURIComponent(k) + '=' + encodeURIComponent(params[k]));
+      }
+    }
+    if (qs.length) url += '?' + qs.join('&');
+  }
+  // If the user is logged in, send their access token as Authorization so
+  // PostgREST resolves them as `authenticated` role (broader RLS access)
+  // instead of `anon`. Falls back to the anon key if nobody is signed in.
+  var jwt = getStoredJwt();
+  var bearer = jwt || SUPA_KEY;
+  window._lastSbUrl = url;
+  window._lastSbAuth = jwt ? 'user-jwt' : 'anon';
+  var res = await fetch(url, {
+    headers: {
+      'apikey': SUPA_KEY,
+      'Authorization': 'Bearer ' + bearer,
+      'Accept': 'application/json'
+    }
+  });
+  window._lastSbStatus = res.status;
+  if (!res.ok) {
+    var body = '';
+    try { body = (await res.text()).slice(0, 200); } catch (_) {}
+    throw new Error('sbFetch ' + table + ' → HTTP ' + res.status + (body ? ' · ' + body : ''));
+  }
+  return await res.json();
+}
+
+// Lazy-load the supabase-js SDK ONLY when something genuinely needs auth
+// or realtime. Returns the supabase client or null if the load fails.
+// Cached so subsequent callers reuse the same promise.
+function loadSupabaseSdk() {
+  if (_sb) return Promise.resolve(_sb);
+  if (_sbLoadPromise) return _sbLoadPromise;
+  _sbLoadPromise = new Promise(function(resolve) {
+    var s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js';
+    s.crossOrigin = 'anonymous';
+    s.async = true;
+    s.onload = function() {
+      try {
+        if (typeof supabase !== 'undefined') {
+          _sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+        }
+      } catch (e) { console.error('Supabase init failed:', e); }
+      resolve(_sb);
+    };
+    s.onerror = function() {
+      // Try unpkg fallback
+      var s2 = document.createElement('script');
+      s2.src = 'https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js';
+      s2.crossOrigin = 'anonymous';
+      s2.async = true;
+      s2.onload = function() {
+        try {
+          if (typeof supabase !== 'undefined') {
+            _sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+          }
+        } catch (e) { console.error('Supabase init failed:', e); }
+        resolve(_sb);
+      };
+      s2.onerror = function() { resolve(null); };
+      document.head.appendChild(s2);
+    };
+    document.head.appendChild(s);
+  });
+  return _sbLoadPromise;
+}
 
 // ── PAGE NAVIGATION ──
 function showPage(page) {
@@ -1638,6 +2050,11 @@ function showPage(page) {
   document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
   const navMap = { home: 'nav-shop', information: 'nav-information', contact: 'nav-contact', join: 'nav-join', portal: 'nav-myaccount', 'checkout-login': null };
   if (page === 'portal') { setTimeout(function(){ try { initPortal(); } catch(e) { console.error('Portal init error:', e); } }, 50); }
+  if (page === 'checkout-login') {
+    // The checkout-login page is a router target only — it opens the login
+    // modal then hands control back to whichever page was last active.
+    setTimeout(function(){ try { openLoginModal('checkout'); } catch(e) { console.error('Checkout login modal error:', e); } }, 0);
+  }
   if (navMap[page]) document.getElementById(navMap[page]).classList.add('active');
   // Close mobile menu
   document.getElementById('navLinks').classList.remove('open');
@@ -1666,29 +2083,85 @@ function switchPolicyTab(tab, btn) {
 // ── PRODUCTS ──
 let products = [];
 let cartCount = 0;
+let lastFetchDebug = null;
 
-// Fetch published products from Supabase
+// Fetch published products via raw fetch — no supabase-js SDK needed, so a
+// CDN outage or Safari Script-error on the SDK cannot break the storefront.
 async function fetchProducts() {
-  var { data, error } = await _sb.from('salesweb_products').select('*')
-    .eq('is_published', true).eq('is_active', true)
-    .order('sort_order', { ascending: true, nullsFirst: false }).order('sell_year', { ascending: true }).order('sell_month', { ascending: true });
-
-  // Fallback if sort_order column doesn't exist yet
-  if (error) {
-    var res = await _sb.from('salesweb_products').select('*')
-      .eq('is_published', true).eq('is_active', true)
-      .order('sell_year', { ascending: true }).order('sell_month', { ascending: true });
-    data = res.data; error = res.error;
+  var debug = { startedAt: new Date().toISOString(), step: 'start' };
+  var data = null;
+  // Try 1 — full query with sort_order
+  try {
+    data = await sbFetch('salesweb_products', {
+      'select': '*',
+      'is_published': 'eq.true',
+      'is_active': 'eq.true',
+      'order': 'sort_order.asc.nullslast,sell_year.asc,sell_month.asc'
+    });
+    debug.firstCount = (data && data.length) || 0;
+    debug.step = 'done';
+  } catch (e) {
+    debug.firstError = (e && e.message) ? e.message : String(e);
   }
-
-  if (error || !data || !data.length) {
+  // Try 2 — drop sort_order (older deployments)
+  if (!data || !data.length) {
+    try {
+      data = await sbFetch('salesweb_products', {
+        'select': '*',
+        'is_published': 'eq.true',
+        'is_active': 'eq.true',
+        'order': 'sell_year.asc,sell_month.asc'
+      });
+      debug.fallbackCount = (data && data.length) || 0;
+      debug.step = 'done-fallback';
+    } catch (e2) {
+      debug.fallbackError = (e2 && e2.message) ? e2.message : String(e2);
+    }
+  }
+  // Try 3 — boolean filter syntax variant (`is.true` instead of `eq.true`).
+  // PostgREST treats these subtly differently; if RLS or some quirk is
+  // hiding rows under one syntax it may not under the other.
+  if (!data || !data.length) {
+    try {
+      data = await sbFetch('salesweb_products', {
+        'select': '*',
+        'is_published': 'is.true',
+        'is_active': 'is.true'
+      });
+      debug.is2Count = (data && data.length) || 0;
+      debug.step = 'done-is';
+    } catch (e3) {
+      debug.is2Error = (e3 && e3.message) ? e3.message : String(e3);
+    }
+  }
+  // Try 4 (final, ANON-READ probe) — no filters, just a limit. If THIS
+  // returns rows we know RLS/auth is fine and the bug is in our filter
+  // syntax. If THIS returns 0 too, then RLS is blocking anon SELECT and
+  // we need a policy fix in Supabase, not a code fix here.
+  if (!data || !data.length) {
+    try {
+      var probe = await sbFetch('salesweb_products', { 'select': 'id,name,is_published,is_active', 'limit': '5' });
+      debug.probeCount = (probe && probe.length) || 0;
+      debug.probeSample = (probe && probe[0]) ? JSON.stringify(probe[0]).slice(0, 200) : null;
+    } catch (e4) {
+      debug.probeError = (e4 && e4.message) ? e4.message : String(e4);
+    }
+  }
+  // Capture the last URL + status so the diagnostic banner shows it.
+  debug.lastUrl = window._lastSbUrl || null;
+  debug.lastStatus = window._lastSbStatus || null;
+  lastFetchDebug = debug;
+  if (!data || !data.length) {
     products = [];
     renderProducts();
     return;
   }
 
   products = data.map(function(p) {
-    var sellLabel = (p.sell_month && p.sell_year) ? p.sell_month + ' ' + p.sell_year : (p.description || '');
+    // Only include the actual sell month/year here — DO NOT fall back to
+    // the description field, since description is reserved for the product
+    // popup and must never bleed onto the main card.
+    var sellLabel = (p.sell_month && p.sell_year) ? p.sell_month + ' ' + p.sell_year : '';
     var status = 'available';
     var badge = null;
     if (p.stock_qty <= 0) { status = 'sold-out'; badge = 'Sold Out'; }
@@ -1703,6 +2176,7 @@ async function fetchProducts() {
       id: p.id,
       name: p.name,
       month: sellLabel,
+      description: p.description || '',
       price: priceHtml,
       priceNum: p.price || 0,
       stock: p.stock_qty || 0,
@@ -1717,14 +2191,38 @@ async function fetchProducts() {
 
 function renderProductCard(p) {
   var bc = p.status === 'sold-out' ? 'sold-out' : p.status === 'coming-soon' ? 'coming-soon' : '';
-  var badge = p.badge ? '<div class="product-badge ' + bc + '">' + p.badge + '</div>' : '';
+  var badge = p.badge ? '<div class="product-badge ' + bc + '">' + esc(p.badge) + '</div>' : '';
   var canAdd = p.status === 'available' || p.status === 'promo';
-  var btnLabel = p.status === 'sold-out' ? 'Sold Out' : p.status === 'coming-soon' ? 'Coming Soon' : 'Add';
   var imgHtml = p.image_url
-    ? '<img src="' + p.image_url + '" style="width:100%;height:100%;object-fit:cover;" alt="' + p.name + '">'
+    ? '<img src="' + esc(p.image_url) + '" loading="lazy" decoding="async" fetchpriority="low" style="width:100%;height:100%;object-fit:cover;" alt="' + esc(p.name) + '">'
     : '<svg viewBox="0 0 80 100" fill="none"><path d="M40 85 Q25 65 25 50 Q25 30 40 15 Q55 30 55 50 Q55 65 40 85Z" fill="#6A9B6E" opacity=".4"/><path d="M40 85 Q20 70 18 55 Q16 38 30 25" stroke="#3E6B42" stroke-width="1.5" fill="none" opacity=".5"/><path d="M40 85 Q60 70 62 55 Q64 38 50 25" stroke="#3E6B42" stroke-width="1.5" fill="none" opacity=".5"/><rect x="32" y="85" width="16" height="12" rx="2" fill="#2D4A30" opacity=".6"/></svg>';
   var idx = products.indexOf(p);
-  return '<div class="product-card"><div class="product-img">' + badge + imgHtml + '</div><div class="product-info"><div class="product-name">' + p.name + '</div><div class="product-month">' + p.month + '</div><div class="product-footer"><div><div class="product-price">' + p.price + '</div><div class="product-stock">' + (p.stock > 0 ? p.stock.toLocaleString() + ' left' : 'Out of stock') + '</div></div><button class="btn-add" ' + (!canAdd ? 'disabled' : '') + ' onclick="openProductPopup(' + idx + ')">' + (canAdd ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>' : '') + btnLabel + '</button></div></div></div>';
+
+  // Main page card: image + name open the popup (read-only product detail).
+  // Qty +/-, qty input, and Add-to-Cart are clickable directly on the card —
+  // stopPropagation prevents those clicks from bubbling up to the popup
+  // opener. Description NEVER renders on the card by spec.
+  var qtyRow = canAdd
+    ? '<div class="card-qty-row" onclick="event.stopPropagation();">'
+      + '<button class="card-qty-btn" type="button" onclick="event.stopPropagation();changeCardQty(' + idx + ',-1)" aria-label="Decrease quantity">−</button>'
+      + '<input type="text" class="card-qty-input" id="cardQty-' + idx + '" value="1" inputmode="numeric" onclick="event.stopPropagation()" onkeydown="if(event.key===\'Enter\')this.blur();" onblur="setCardQty(' + idx + ',this.value)">'
+      + '<button class="card-qty-btn" type="button" onclick="event.stopPropagation();changeCardQty(' + idx + ',1)" aria-label="Increase quantity">+</button>'
+      + '</div>'
+    : '';
+  var addLabel = p.status === 'sold-out' ? 'Sold Out' : p.status === 'coming-soon' ? 'Coming Soon' : 'Add to Cart';
+  var addBtn = '<button class="btn-add card-add-btn" type="button" ' + (canAdd ? '' : 'disabled ') + 'onclick="event.stopPropagation();addCardToCart(' + idx + ')">' + addLabel + '</button>';
+
+  return '<div class="product-card" onclick="openProductPopup(' + idx + ')">'
+       +   '<div class="product-img">' + badge + imgHtml + '</div>'
+       +   '<div class="product-info">'
+       +     '<div class="product-name">' + esc(p.name) + '</div>'
+       +     (p.month ? '<div class="product-month">' + esc(p.month) + '</div>' : '')
+       +     '<div class="product-price" style="margin-top:.3rem;">' + esc(p.price) + '</div>'
+       +     '<div class="product-stock">' + (p.stock > 0 ? p.stock.toLocaleString() + ' left' : 'Out of stock') + '</div>'
+       +     qtyRow
+       +     addBtn
+       +   '</div>'
+       + '</div>';
 }
 
 function renderProducts() {
@@ -1746,7 +2244,28 @@ function renderProducts() {
   if (normalProducts.length) {
     gridEl.innerHTML = normalProducts.map(renderProductCard).join('');
   } else if (!promoProducts.length) {
-    gridEl.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--text-light);font-size:13px;">No products available at the moment.</div>';
+    var dbg = lastFetchDebug || {};
+    var dbgLine = 'step:' + (dbg.step || '?')
+      + ' · first:' + (dbg.firstCount || 0)
+      + (dbg.fallbackCount !== undefined ? ' · fb:' + dbg.fallbackCount : '')
+      + (dbg.is2Count !== undefined ? ' · is:' + dbg.is2Count : '')
+      + (dbg.probeCount !== undefined ? ' · probe:' + dbg.probeCount : '');
+    if (dbg.firstError) dbgLine += ' · firstErr:' + dbg.firstError;
+    if (dbg.fallbackError) dbgLine += ' · fbErr:' + dbg.fallbackError;
+    if (dbg.is2Error) dbgLine += ' · isErr:' + dbg.is2Error;
+    if (dbg.probeError) dbgLine += ' · probeErr:' + dbg.probeError;
+    if (dbg.probeSample) dbgLine += ' · sample:' + dbg.probeSample;
+    if (dbg.threw) dbgLine += ' · threw:' + dbg.threw;
+    if (dbg.lastStatus) dbgLine += ' · HTTP ' + dbg.lastStatus;
+    if (window._lastSbAuth) dbgLine += ' · auth:' + window._lastSbAuth;
+    if (dbg.lastUrl) dbgLine += '\nURL: ' + dbg.lastUrl;
+    gridEl.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:3rem 1.5rem;background:#fff;border:1px dashed var(--green-pale);border-radius:16px;">'
+      + '<div style="font-size:42px;margin-bottom:.5rem;">&#127793;</div>'
+      + '<div style="font-family:\'Cormorant Garamond\',serif;font-size:1.4rem;color:var(--text-dark);margin-bottom:.4rem;">New seedlings coming soon</div>'
+      + '<div style="color:var(--text-light);font-size:13px;line-height:1.55;max-width:320px;margin:0 auto;">Our growers are preparing the next batch. Tap <strong style="color:var(--green-dark);">Book Seedling Collection</strong> to reserve a slot, or check back shortly.</div>'
+      + '<button onclick="fetchProducts()" style="margin-top:1rem;background:var(--green-dark);color:#fff;border:none;padding:.5rem 1.2rem;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Reload products</button>'
+      + '<div style="margin-top:.8rem;font-size:10px;color:#bbb;font-family:monospace;word-break:break-all;white-space:pre-wrap;text-align:left;max-width:520px;margin-left:auto;margin-right:auto;">' + esc(dbgLine) + '</div>'
+      + '</div>';
   } else {
     gridEl.innerHTML = '';
   }
@@ -1762,23 +2281,30 @@ var popupQty = 1;
 function fmtRM(n) { return 'RM ' + n.toLocaleString('en-MY', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
 function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
-// Product popup
+// Product popup — read-only product detail (photo + description). Qty input
+// and Add-to-Cart now live on the main page card, not in the popup.
 function openProductPopup(idx) {
   var p = products[idx];
   if (!p) return;
   popupProductIdx = idx;
   popupQty = 1;
 
-  // Image
   var imgEl = document.getElementById('ppImg');
-  if (p.image_url) imgEl.innerHTML = '<img src="' + p.image_url + '">';
+  if (p.image_url) imgEl.innerHTML = '<img src="' + esc(p.image_url) + '">';
   else imgEl.innerHTML = '<div style="font-size:3rem;">🌱</div>';
 
   document.getElementById('ppName').textContent = p.name + (p.month ? ' — ' + p.month : '');
-  document.getElementById('ppDesc').textContent = p.month || '';
+  // ppDesc now shows the REAL product description (or a graceful fallback).
+  var descEl = document.getElementById('ppDesc');
+  if (p.description) {
+    descEl.textContent = p.description;
+    descEl.style.display = '';
+  } else {
+    descEl.textContent = '';
+    descEl.style.display = 'none';
+  }
   document.getElementById('ppPrice').textContent = 'RM ' + (p.priceNum || 0).toFixed(2);
   document.getElementById('ppStock').textContent = p.stock > 0 ? p.stock.toLocaleString() + ' available' : 'Out of stock';
-  document.getElementById('ppQty').value = 1;
   document.getElementById('productPopup').classList.add('open');
 }
 
@@ -1787,18 +2313,49 @@ function closeProductPopup() {
   popupProductIdx = -1;
 }
 
-function changePopupQty(delta) {
-  var p = products[popupProductIdx];
+// ── In-card quantity + Add to Cart (main page) ─────────────────────────────
+function changeCardQty(idx, delta) {
+  var p = products[idx];
   if (!p) return;
-  popupQty = Math.max(1, Math.min(p.stock || 999, popupQty + delta));
-  document.getElementById('ppQty').value = popupQty;
+  var input = document.getElementById('cardQty-' + idx);
+  if (!input) return;
+  var cur = parseInt(input.value) || 1;
+  var next = cur + delta;
+  next = Math.max(1, Math.min(p.stock || 999, next));
+  input.value = next;
 }
 
-function setPopupQty(val) {
-  var p = products[popupProductIdx];
+function setCardQty(idx, val) {
+  var p = products[idx];
   if (!p) return;
+  var input = document.getElementById('cardQty-' + idx);
+  if (!input) return;
   var n = parseInt(val) || 1;
-  popupQty = Math.max(1, Math.min(p.stock || 999, n));
+  n = Math.max(1, Math.min(p.stock || 999, n));
+  input.value = n;
+}
+
+function addCardToCart(idx) {
+  var p = products[idx];
+  if (!p) return;
+  if (p.status !== 'available' && p.status !== 'promo') return;
+  var input = document.getElementById('cardQty-' + idx);
+  var qty = parseInt(input ? input.value : '1') || 1;
+  qty = Math.max(1, Math.min(p.stock || 999, qty));
+  var priceNum = p.priceNum || 0;
+  var existing = cart.find(function(c) { return c.id === p.id; });
+  if (existing) {
+    existing.qty = Math.min((existing.qty || 0) + qty, p.stock || 999);
+  } else {
+    cart.push({
+      id: p.id, name: p.name, month: p.month || '',
+      price: priceNum, priceHtml: p.price, qty: qty,
+      image_url: p.image_url || null, stock: p.stock || 0
+    });
+  }
+  updateCartUI();
+  if (typeof showPortalToast === 'function') showPortalToast(p.name + ' × ' + qty + ' added to cart');
+  if (input) input.value = 1;
 }
 
 function addPopupToCart() {
@@ -1903,42 +2460,18 @@ function removeCartItem(idx) {
   updateCartUI();
 }
 
-// ── LOGIN MODAL ──
-var pendingCheckout = false;
-function openLoginModal(asSignup, fromCheckout) {
-  pendingCheckout = !!fromCheckout;
-  var sub = document.getElementById('cl-modal-sub');
-  if (sub) sub.textContent = fromCheckout
-    ? 'Sign in or create an account to complete your order'
-    : 'Sign in or create an account';
-  document.getElementById('login-modal').classList.add('open');
-  document.body.style.overflow = 'hidden';
-  if (asSignup && typeof clIsSignUp !== 'undefined' && !clIsSignUp && typeof clToggleSignup === 'function') {
-    clToggleSignup();
-  }
-  setTimeout(function(){ var f=document.getElementById('cl-identity'); if(f) f.focus(); }, 50);
-}
-function closeLoginModal() {
-  document.getElementById('login-modal').classList.remove('open');
-  document.body.style.overflow = '';
-  pendingCheckout = false;
-}
-document.addEventListener('keydown', function(e){
-  if (e.key === 'Escape') {
-    var m = document.getElementById('login-modal');
-    if (m && m.classList.contains('open')) closeLoginModal();
-  }
-});
-
 function proceedToCheckout() {
   if (!cart.length) return;
   saveCart();
+  // Check if user is logged in
   var userName = sessionStorage.getItem('mjm_user_name');
   if (userName) {
+    // Already logged in — go straight to payment
     window.location.href = 'payment.html';
   } else {
+    // Not logged in — open login modal (stays on current page)
     toggleCartDropdown();
-    openLoginModal(false, true);
+    openLoginModal('checkout');
   }
 }
 
@@ -2038,6 +2571,19 @@ fetchProducts();
 updateCartUI();
 loadPassionSection();
 
+// Preload the supabase SDK in the background (non-blocking). By the time
+// the user clicks Login or My Account, it's usually already loaded. If the
+// load fails on Safari/iOS, the storefront still works — only portal
+// features will be unavailable.
+(function preloadSdkIdle() {
+  function go() { try { loadSupabaseSdk(); } catch (_) {} }
+  if (typeof requestIdleCallback === 'function') {
+    requestIdleCallback(go, { timeout: 4000 });
+  } else {
+    setTimeout(go, 2500);
+  }
+})();
+
 // ── Load passion section (fast: metadata first, images lazy-loaded individually) ──
 var _passionPlaceholderBg = {
   plantation: 'linear-gradient(135deg, #2e7d32, #4caf50)',
@@ -2059,10 +2605,15 @@ async function loadPassionSection() {
   var container = document.getElementById('passionFlow');
   if (!container) return;
 
-  // Step 1: Fetch metadata only (no image_url) — instant
+  // Step 1: Fetch metadata only (no image_url) — instant. Raw fetch so no
+  // dependency on supabase-js SDK loading first.
   var items = _passionDefaults;
   try {
-    var { data } = await _sb.from('salesweb_site_content').select('id,key,label,description,sort_order').eq('section','passion').order('sort_order');
+    var data = await sbFetch('salesweb_site_content', {
+      'select': 'id,key,label,description,sort_order',
+      'section': 'eq.passion',
+      'order': 'sort_order.asc'
+    });
     if (data && data.length > 0) items = data;
   } catch(e) { /* use defaults */ }
 
@@ -2091,7 +2642,11 @@ async function loadPassionSection() {
 
 async function loadPassionPanelImg(id, key) {
   try {
-    var { data } = await _sb.from('salesweb_site_content').select('image_url').eq('id', id).single();
+    var rows = await sbFetch('salesweb_site_content', {
+      'select': 'image_url',
+      'id': 'eq.' + id
+    });
+    var data = rows && rows[0];
     if (data && data.image_url) {
       var panel = document.getElementById('pp-' + id);
       if (!panel) return;
@@ -2129,8 +2684,14 @@ var P_POINTS = {balance:0,tier:'Bronze',totalEarned:0,redeemed:0,tiers:[{name:'B
 var pConsentSigned={}, pRatings={}, pVtab='active', pRatingOrderId=null, pRatingVal=0;
 var portalUser = null;
 
+// Strip the " — <month>" suffix that payment.html appends to product_name
+// when an item has a sell month. Display layer only — the DB row keeps the
+// full string for back-office cross-reference.
+function stripMonth(name){ return String(name||'').replace(/\s+—\s+.*$/, '').trim(); }
+
 function pBadge(s){return{
-  'Order Confirmed':'p-badge-green','Pending Payment':'p-badge-amber','Ready-to-Collect':'p-badge-teal',
+  'Paid':'p-badge-green','Order Confirmed':'p-badge-green',
+  'Pending Payment':'p-badge-amber','Ready-to-Collect':'p-badge-teal',
   'Collecting':'p-badge-orange','Order Completed':'p-badge-grey'
 }[s]||'p-badge-grey';}
 
@@ -2155,6 +2716,10 @@ async function saveProfileDetails(){
 }
 
 async function initPortal(){
+  // Portal needs the supabase SDK (auth.getSession, etc.) — make sure it's
+  // loaded before any _sb.* call below. Safe to await even if already loaded.
+  await loadSupabaseSdk();
+  if (!_sb) { console.warn('Portal: supabase SDK unavailable'); return; }
   portalUser = sessionStorage.getItem('mjm_user_name')||'Customer';
   var nameEl=document.getElementById('pf-name2');if(nameEl)nameEl.value=portalUser;
   var emailEl=document.getElementById('pf-email2');if(emailEl)emailEl.value=sessionStorage.getItem('mjm_user_email')||'';
@@ -2224,7 +2789,7 @@ async function loadCustomerOrders(){
   P_ORDERS=orders.map(function(o){
     var oItems=itemsByOrder[o.id]||[];
     var totalQty=oItems.reduce(function(s,it){return s+it.quantity;},0);
-    var variety=oItems.length?oItems.map(function(it){return it.product_name;}).join(', '):'Order';
+    var variety=oItems.length?oItems.map(function(it){return stripMonth(it.product_name);}).join(', '):'Order';
     var d=new Date(o.created_at);
     var orderDate=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
     // Parse remark for individual fields
@@ -2326,31 +2891,34 @@ function pOrderCard(o){
   if(o.items&&o.items.length){
     o.items.forEach(function(it){
       itemsHtml+='<div style="display:flex;justify-content:space-between;align-items:center;padding:.25rem 0;font-size:12px;border-bottom:1px solid #f5f5f0;">'+
-        '<span style="color:var(--text-dark);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+it.product_name+'</span>'+
+        '<span style="color:var(--text-dark);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(stripMonth(it.product_name))+'</span>'+
         '<span style="color:var(--text-mid);white-space:nowrap;margin-left:.5rem;">x '+it.quantity.toLocaleString()+'</span>'+
       '</div>';
     });
   } else {
-    itemsHtml='<div style="font-size:12px;color:var(--text-mid);">'+o.variety+'</div>';
+    itemsHtml='<div style="font-size:12px;color:var(--text-mid);">'+esc(o.variety)+'</div>';
   }
 
-  // Action button
+  // Action button — fullId / id are UUIDs but escape defensively for the JS
+  // string literals (single-quote injection would break out of the onclick).
+  var fullIdJs = String(o.fullId || '').replace(/[\\'"<>]/g, '');
+  var idJs     = String(o.id     || '').replace(/[\\'"<>]/g, '');
   var actionHtml='';
   if(isPending){
-    actionHtml='<button class="p-btn" style="background:var(--gold);color:var(--green-dark);font-size:11px;padding:.4rem .8rem;" onclick="event.stopPropagation();goPayOrder(\''+o.fullId+'\','+o.total+')">Pay Now / Upload Payment</button>'+
-      '<button class="p-btn" style="background:#fee2e2;color:#b91c1c;font-size:11px;padding:.4rem .8rem;border:1px solid #fca5a5;" onclick="event.stopPropagation();pCancelOrder(\''+o.fullId+'\')">Cancel Order</button>';
+    actionHtml='<button class="p-btn" style="background:var(--gold);color:var(--green-dark);font-size:11px;padding:.4rem .8rem;" onclick="event.stopPropagation();goPayOrder(\''+fullIdJs+'\','+o.total+')">Pay Now / Upload Payment</button>';
   } else if(isComp){
-    actionHtml=pRatings[o.id]?'<span style="font-size:11px;color:var(--gold);">'+('⭐'.repeat(pRatings[o.id]))+' Reviewed</span>':'<button class="p-btn" onclick="event.stopPropagation();pOpenRating(\''+o.id+'\')">⭐ Review</button>';
+    actionHtml=pRatings[o.id]?'<span style="font-size:11px;color:var(--gold);">'+('⭐'.repeat(pRatings[o.id]))+' Reviewed</span>':'<button class="p-btn" onclick="event.stopPropagation();pOpenRating(\''+idJs+'\')">⭐ Review</button>';
   }
 
-  return '<div class="p-order" style="cursor:pointer;" onclick="openOrderDetail(\''+o.id+'\')">'+
+  return '<div class="p-order" style="cursor:pointer;" onclick="openOrderDetail(\''+idJs+'\')">'+
     '<div class="p-order-head">'+
-      '<div><div class="p-order-id">#'+o.id+'</div><div class="p-order-date">Ordered '+o.orderDate+'</div></div>'+
-      '<span class="p-badge '+pBadge(o.status)+'">'+o.status+'</span>'+
+      '<div><div class="p-order-id">#'+esc(o.id)+'</div><div class="p-order-date">Ordered '+esc(o.orderDate)+'</div></div>'+
+      '<span class="p-badge '+pBadge(o.status)+'">'+esc(o.status)+'</span>'+
     '</div>'+
     '<div class="p-order-body">'+
-      '<div class="p-order-row"><span class="p-order-row-l">Bill To</span><span class="p-order-row-v">'+o.billingName+'</span></div>'+
+      '<div class="p-order-row"><span class="p-order-row-l">Bill To</span><span class="p-order-row-v">'+esc(o.billingName)+'</span></div>'+
       '<div style="padding:.4rem 0;"><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.3rem;">Items</div>'+itemsHtml+'</div>'+
+      '<div class="p-order-row"><span class="p-order-row-l">Collection</span><span class="p-order-row-v">'+esc(o.collectionStatus)+'</span></div>'+
     '</div>'+
     // DOs section
     (o.dos&&o.dos.length?
@@ -2360,8 +2928,8 @@ function pOrderCard(o){
           var doDate=d.delivery_date?new Date(d.delivery_date).toLocaleDateString('en-MY',{day:'2-digit',month:'short',year:'numeric'}):'—';
           var doStatusCls=d.status==='Delivered'?'color:#15803d;':'color:var(--gold);';
           return '<div style="display:flex;justify-content:space-between;align-items:center;padding:.25rem 0;font-size:12px;border-bottom:1px solid #f0f5ec;">'+
-            '<div><span style="font-weight:600;">DO #'+(d.do_number||'—')+'</span><span style="color:var(--text-light);margin-left:.5rem;">'+doDate+'</span></div>'+
-            '<div><span style="margin-right:.5rem;">Qty: '+d.total_qty+'</span><span style="font-weight:600;'+doStatusCls+'">'+d.status+'</span></div>'+
+            '<div><span style="font-weight:600;">DO #'+esc(d.do_number||'—')+'</span><span style="color:var(--text-light);margin-left:.5rem;">'+doDate+'</span></div>'+
+            '<div><span style="margin-right:.5rem;">Qty: '+(parseInt(d.total_qty)||0)+'</span><span style="font-weight:600;'+doStatusCls+'">'+esc(d.status)+'</span></div>'+
           '</div>';
         }).join('')+
       '</div>':'')+
@@ -2371,7 +2939,7 @@ function pOrderCard(o){
         '<div style="font-size:10px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.4rem;">Documents</div>'+
         o.attachments.map(function(a){
           return '<div style="padding:.2rem 0;font-size:12px;">'+
-            '<a href="'+a.file_url+'" target="_blank" style="color:var(--green-mid);text-decoration:none;font-weight:500;">📎 '+esc(a.file_name)+'</a>'+
+            '<a href="'+esc(a.file_url)+'" target="_blank" rel="noopener noreferrer" style="color:var(--green-mid);text-decoration:none;font-weight:500;">📎 '+esc(a.file_name)+'</a>'+
           '</div>';
         }).join('')+
       '</div>':'')+
@@ -2386,17 +2954,6 @@ function goPayOrder(orderId,total){
   sessionStorage.setItem('mjm_pay_order_id',orderId);
   sessionStorage.setItem('mjm_pay_order_total',total);
   window.location.href='payment-proof.html';
-}
-
-async function pCancelOrder(orderId){
-  if(!confirm('Cancel this order? This cannot be undone.'))return;
-  var sess=await _sb.auth.getSession();
-  var email=sess?.data?.session?.user?.email||'customer';
-  var{error}=await _sb.from('salesweb_customer_orders').update({status:'Cancelled',updated_at:new Date().toISOString()}).eq('id',orderId);
-  if(error){alert('Could not cancel: '+error.message);return;}
-  await _sb.from('salesweb_order_timeline').insert([{order_id:orderId,status:'Cancelled',note:'Order cancelled by customer',changed_by:email}]);
-  if(typeof loadCustomerOrders==='function')await loadCustomerOrders();
-  else location.reload();
 }
 
 function _odLabel(label,val){return'<div style="color:var(--text-light);font-size:11px;">'+label+'</div><div style="font-weight:600;font-size:12px;">'+esc(val||'—')+'</div>';}
@@ -2433,7 +2990,7 @@ function openOrderDetail(ordNum){
   if(o.items&&o.items.length){
     o.items.forEach(function(it){
       subtotal+=(it.subtotal||it.unit_price*it.quantity);
-      h+='<tr style="border-bottom:1px solid #f0f0ec;"><td style="padding:.3rem;">'+esc(it.product_name)+'</td><td style="padding:.3rem;text-align:right;">RM '+(it.unit_price||0).toFixed(2)+'</td><td style="padding:.3rem;text-align:right;">'+it.quantity.toLocaleString()+'</td><td style="padding:.3rem;text-align:right;font-weight:600;">RM '+(it.subtotal||it.unit_price*it.quantity).toFixed(2)+'</td></tr>';
+      h+='<tr style="border-bottom:1px solid #f0f0ec;"><td style="padding:.3rem;">'+esc(stripMonth(it.product_name))+'</td><td style="padding:.3rem;text-align:right;">RM '+(it.unit_price||0).toFixed(2)+'</td><td style="padding:.3rem;text-align:right;">'+it.quantity.toLocaleString()+'</td><td style="padding:.3rem;text-align:right;font-weight:600;">RM '+(it.subtotal||it.unit_price*it.quantity).toFixed(2)+'</td></tr>';
     });
   }
   h+='</tbody></table>';
@@ -2527,20 +3084,21 @@ function openOrderDetail(ordNum){
     });
   }
 
-  // Sort by date — newest first
+  // Sort by date — newest first so the latest status is always on top
   tlEntries.sort(function(a,b){return new Date(b.date||0)-new Date(a.date||0);});
 
   if(!tlEntries.length){
     h+='<div style="font-size:12px;color:var(--text-light);padding:.5rem 0;">No timeline events yet.</div>';
   } else {
     tlEntries.forEach(function(t,i){
-      var isLast=i===tlEntries.length-1;
+      var isLatest=i===0;
       var dt=t.date?new Date(t.date).toLocaleString('en-MY',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';
-      var dotColor=t.type==='do'?'#15803d':t.type==='ba'?'var(--gold)':isLast?'var(--green-mid)':'var(--green-pale)';
+      var dotColor=isLatest?'var(--green-mid)':t.type==='do'?'#15803d':t.type==='ba'?'var(--gold)':'var(--green-pale)';
       var icon=t.type==='do'?'📦 ':t.type==='ba'?'📋 ':'';
-      h+='<div style="position:relative;padding-bottom:.6rem;margin-bottom:.2rem;">';
-      h+='<div style="position:absolute;left:-20px;top:3px;width:10px;height:10px;border-radius:50%;background:'+dotColor+';border:2px solid #fff;box-shadow:0 0 0 1px '+dotColor+';"></div>';
-      h+='<div style="font-size:12px;font-weight:600;color:var(--text-dark);">'+icon+esc(t.label)+'</div>';
+      var latestBadge=isLatest?' <span style="display:inline-block;font-size:9px;font-weight:700;color:#fff;background:var(--green-mid);padding:1px 6px;border-radius:10px;letter-spacing:.05em;text-transform:uppercase;vertical-align:middle;margin-left:.3rem;">Latest</span>':'';
+      h+='<div style="position:relative;padding-bottom:.6rem;margin-bottom:.2rem;'+(isLatest?'background:rgba(62,107,66,.05);border-radius:8px;padding:.45rem .6rem .55rem;margin-left:-.6rem;':'')+'">';
+      h+='<div style="position:absolute;left:'+(isLatest?'-14px':'-20px')+';top:'+(isLatest?'.55rem':'3px')+';width:'+(isLatest?'12px':'10px')+';height:'+(isLatest?'12px':'10px')+';border-radius:50%;background:'+dotColor+';border:2px solid #fff;box-shadow:0 0 0 '+(isLatest?'2px':'1px')+' '+dotColor+';"></div>';
+      h+='<div style="font-size:12px;font-weight:'+(isLatest?'700':'600')+';color:var(--text-dark);">'+icon+esc(t.label)+latestBadge+'</div>';
       if(t.note)h+='<div style="font-size:11px;color:var(--text-mid);">'+esc(t.note)+'</div>';
       h+='<div style="font-size:10px;color:var(--text-light);">'+dt+'</div>';
       h+='</div>';
@@ -2630,30 +3188,93 @@ function pSubmitRating(){if(!pRatingOrderId||!pRatingVal)return;pRatings[pRating
 //  CHECKOUT LOGIN (inline)
 // ═══════════════════════════════════════
 var clIsSignUp = false;
-var clInputType = 'email';
+var clInputType = 'phone';        // 'phone' or 'email' — driven by active tab
+var clLoginContext = 'nav';       // 'nav' or 'checkout'
+var clOtpChannel = 'sms';         // 'sms' or 'whatsapp' — for phone OTP
 
-function clDetectInput() {
-  var val = document.getElementById('cl-identity').value.trim();
-  var hint = document.getElementById('cl-hint');
-  var otpBtn = document.getElementById('cl-btn-otp');
-  if (val.startsWith('+') || /^\d{8,}$/.test(val)) {
-    clInputType = 'phone';
-    hint.textContent = '\u260e Phone detected — OTP will be sent via SMS';
-    otpBtn.textContent = 'Send SMS OTP';
-  } else if (val.includes('@')) {
-    clInputType = 'email';
-    hint.textContent = '\u2709 Email detected — OTP will be sent to your inbox';
-    otpBtn.textContent = 'Send Email OTP';
-  } else {
-    clInputType = 'email'; hint.textContent = ''; otpBtn.textContent = 'Send OTP Code';
+function openLoginModal(context) {
+  // Login needs supabase-js for auth.signInWithPassword etc — kick off the
+  // SDK load now (no await, so the modal opens instantly; auth.* calls below
+  // already await _sb internally via the lazy guard).
+  loadSupabaseSdk();
+  clLoginContext = context || 'nav';
+  // Reset form state
+  clIsSignUp = false;
+  ['cl-signup-fields','cl-signup-fields-phone'].forEach(function(id){
+    var el = document.getElementById(id); if (el) el.style.display = 'none';
+  });
+  var btnTog = document.getElementById('cl-btn-toggle');
+  if (btnTog) btnTog.textContent = 'Create Account';
+  var btnTogP = document.getElementById('cl-btn-toggle-phone');
+  if (btnTogP) btnTogP.textContent = 'First time? Create Account';
+  var btnLogin = document.getElementById('cl-btn-login');
+  if (btnLogin) btnLogin.textContent = 'Sign In';
+  var statusEl = document.getElementById('cl-status');
+  if (statusEl) { statusEl.textContent = ''; statusEl.className = 'cl-status'; }
+  ['cl-otp-row','cl-otp-row-phone'].forEach(function(id){
+    var el = document.getElementById(id); if (el) el.classList.remove('show');
+  });
+  // Default to phone tab
+  clSwitchMode('email');
+  // Update subtitle
+  var subEl = document.getElementById('lm-sub');
+  if (subEl) subEl.textContent = context === 'checkout'
+    ? 'Sign in to complete your order'
+    : 'Sign in to your account';
+  // Show overlay
+  var overlay = document.getElementById('login-modal-overlay');
+  overlay.classList.add('open');
+  document.body.style.overflow = 'hidden';
+  // Focus phone field
+  setTimeout(function() {
+    var inp = document.getElementById('cl-phone');
+    if (inp) inp.focus();
+  }, 100);
+}
+
+function closeLoginModal() {
+  var overlay = document.getElementById('login-modal-overlay');
+  overlay.classList.remove('open');
+  document.body.style.overflow = '';
+  // If we were on checkout-login page, go back to home
+  if (document.getElementById('page-checkout-login').classList.contains('active')) {
+    showPage('home');
   }
 }
 
-function clToggleSignup() {
+// Escape key closes login modal
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    var overlay = document.getElementById('login-modal-overlay');
+    if (overlay && overlay.classList.contains('open')) closeLoginModal();
+  }
+});
+
+function clSwitchMode(mode) {
+  clInputType = mode;
+  var tabPhone = document.getElementById('lm-tab-phone');
+  var tabEmail = document.getElementById('lm-tab-email');
+  var paneP = document.getElementById('lm-pane-phone');
+  var paneE = document.getElementById('lm-pane-email');
+  if (tabPhone) tabPhone.classList.toggle('active', mode === 'phone');
+  if (tabEmail) tabEmail.classList.toggle('active', mode === 'email');
+  if (paneP) paneP.classList.toggle('active', mode === 'phone');
+  if (paneE) paneE.classList.toggle('active', mode === 'email');
+  var statusEl = document.getElementById('cl-status');
+  if (statusEl) { statusEl.textContent = ''; statusEl.className = 'cl-status'; }
+}
+function clToggleSignup(pane) {
   clIsSignUp = !clIsSignUp;
-  document.getElementById('cl-signup-fields').style.display = clIsSignUp ? 'block' : 'none';
-  document.getElementById('cl-btn-login').textContent = clIsSignUp ? 'Create Account' : 'Sign In';
-  document.getElementById('cl-btn-toggle').textContent = clIsSignUp ? 'Back to Sign In' : 'Create Account';
+  if (pane === 'phone' || (!pane && clInputType === 'phone')) {
+    var sf = document.getElementById('cl-signup-fields-phone');
+    var btnP = document.getElementById('cl-btn-toggle-phone');
+    if (sf) sf.style.display = clIsSignUp ? 'block' : 'none';
+    if (btnP) btnP.textContent = clIsSignUp ? 'Back to Sign In' : 'First time? Create Account';
+  } else {
+    document.getElementById('cl-signup-fields').style.display = clIsSignUp ? 'block' : 'none';
+    document.getElementById('cl-btn-login').textContent = clIsSignUp ? 'Create Account' : 'Sign In';
+    document.getElementById('cl-btn-toggle').textContent = clIsSignUp ? 'Back to Sign In' : 'Create Account';
+  }
 }
 
 function clShowStatus(msg, type) { var el = document.getElementById('cl-status'); el.textContent = msg; el.className = 'cl-status ' + type; }
@@ -2661,31 +3282,49 @@ function clClearStatus() { document.getElementById('cl-status').className = 'cl-
 
 async function clPostLogin(session) {
   if (!session) { clShowStatus('Login failed.', 'error'); return; }
-  clShowStatus('Welcome! Redirecting to checkout...', 'success');
-  sessionStorage.setItem('mjm_user_email', session.user.email || '');
-  sessionStorage.setItem('mjm_user_name', session.user.user_metadata?.full_name || session.user.email || session.user.phone || '');
-  // Update nav
   var name = session.user.user_metadata?.full_name || session.user.email || session.user.phone || '';
-  document.getElementById('nav-login-link').style.display = 'none';
-  document.getElementById('nav-myaccount').style.display = 'inline';
-  document.getElementById('nav-myaccount').textContent = 'Hi, ' + name.split(' ')[0];
-  document.getElementById('nav-signout').style.display = 'inline';
-  // Check role
-  var { data: profile } = await _sb.from('shared_profiles').select('role').eq('id', session.user.id).single();
-  var role = (profile && profile.role) || 'customer';
-  if (role === 'admin') {
-    setTimeout(function() { window.location.href = 'admin.html'; }, 800);
-  } else if (pendingCheckout) {
-    setTimeout(function() { window.location.href = 'payment.html'; }, 600);
+  sessionStorage.setItem('mjm_user_email', session.user.email || '');
+  sessionStorage.setItem('mjm_user_name', name);
+  // Update nav (desktop + mobile)
+  setLoggedInUi(name);
+  // Check role + permissions
+  var { data: profile } = await _sb.from('shared_profiles').select('role, permissions').eq('id', session.user.id).single();
+  var swLevel = (profile && profile.permissions && profile.permissions.modules && profile.permissions.modules.salesweb) || 'none';
+  var isAdmin = swLevel === 'admin' || swLevel === 'normal' || (profile && profile.role === 'admin');
+
+  if (isAdmin) {
+    clShowStatus('Welcome, admin! Redirecting...', 'success');
+    setTimeout(function() { window.location.href = 'admin.html'; }, 700);
+  } else if (clLoginContext === 'checkout') {
+    clShowStatus('Welcome! Redirecting to checkout...', 'success');
+    setTimeout(function() { window.location.href = 'payment.html'; }, 700);
   } else {
-    setTimeout(function() { closeLoginModal(); }, 500);
+    // nav login — show customer portal inline
+    clShowStatus('Welcome! Opening your account...', 'success');
+    setTimeout(function() {
+      closeLoginModal();
+      showPage('portal');
+      initPortal();
+    }, 500);
   }
+}
+
+// Normalise phone to E.164 (Malaysia default if no country code)
+function clNormalisePhone(raw) {
+  var v = (raw || '').replace(/[\s\-\(\)]/g, '');
+  if (!v) return '';
+  if (v.startsWith('+')) return v;
+  // Local Malaysian format starting with 0 (e.g. 0123456789) -> +60123456789
+  if (v.startsWith('0')) return '+60' + v.substring(1);
+  // Already country-code with no plus
+  if (/^\d{10,}$/.test(v)) return '+' + v;
+  return v;
 }
 
 async function clLoginPassword() {
   var identity = document.getElementById('cl-identity').value.trim();
   var pw = document.getElementById('cl-password').value;
-  if (!identity || !pw) { clShowStatus('Please enter email/phone and password.', 'error'); return; }
+  if (!identity || !pw) { clShowStatus('Please enter email and password.', 'error'); return; }
   if (clIsSignUp) {
     var name = document.getElementById('cl-signup-name').value.trim();
     if (!name) { clShowStatus('Please enter your full name.', 'error'); return; }
@@ -2693,11 +3332,9 @@ async function clLoginPassword() {
     clShowStatus('Creating account...', 'success');
     var { data: signUpData, error } = await _sb.auth.signUp({ email: identity, password: pw, options: { data: { full_name: name, user_type: 'customer' } } });
     if (error) {
-      // If trigger error, try without metadata then create profile manually
       if (error.message.toLowerCase().includes('database')) {
         var { data: retryData, error: retryErr } = await _sb.auth.signUp({ email: identity, password: pw });
         if (retryErr) { clShowStatus(retryErr.message, 'error'); return; }
-        // Manually create profile row
         if (retryData && retryData.user) {
           await _sb.from('shared_profiles').upsert({ id: retryData.user.id, email: identity, full_name: name, role: 'customer', user_type: 'customer' }, { onConflict: 'id' });
         }
@@ -2705,54 +3342,117 @@ async function clLoginPassword() {
         clShowStatus(error.message, 'error'); return;
       }
     } else if (signUpData && signUpData.user) {
-      // Ensure profile exists (trigger may or may not have created it)
       await _sb.from('shared_profiles').upsert({ id: signUpData.user.id, email: identity, full_name: name, role: 'customer', user_type: 'customer' }, { onConflict: 'id' });
     }
     clShowStatus('Account created! You can now sign in.', 'success');
-    clToggleSignup();
+    clToggleSignup('email');
     return;
   }
   clShowStatus('Signing in...', 'success');
-  var creds = clInputType === 'phone' ? { phone: identity, password: pw } : { email: identity, password: pw };
-  var { data, error } = await _sb.auth.signInWithPassword(creds);
+  var { data, error } = await _sb.auth.signInWithPassword({ email: identity, password: pw });
   if (error) { clShowStatus(error.message, 'error'); return; }
   await clPostLogin(data.session);
 }
 
-async function clSendOTP() {
-  var identity = document.getElementById('cl-identity').value.trim();
-  if (!identity) { clShowStatus('Please enter your email or phone number.', 'error'); return; }
-  var btn = document.getElementById('cl-btn-otp');
-  btn.disabled = true; btn.textContent = 'Sending...';
-  var opts = clInputType === 'phone' ? { phone: identity } : { email: identity };
+// Send OTP via SMS, WhatsApp, or Email.
+//   channel: 'sms' | 'whatsapp' | 'email'
+async function clSendOTP(channel) {
+  channel = channel || (clInputType === 'phone' ? 'sms' : 'email');
+  clOtpChannel = channel;
+  var isPhone = channel === 'sms' || channel === 'whatsapp';
+
+  // Pick the right input
+  var identity = isPhone
+    ? clNormalisePhone(document.getElementById('cl-phone').value)
+    : document.getElementById('cl-identity').value.trim();
+  if (!identity) {
+    clShowStatus(isPhone ? 'Please enter your phone number.' : 'Please enter your email address.', 'error');
+    return;
+  }
+
+  // Optional sign-up name capture
+  var signupName = '';
+  if (clIsSignUp) {
+    var nameEl = document.getElementById(isPhone ? 'cl-signup-name-phone' : 'cl-signup-name');
+    signupName = nameEl ? nameEl.value.trim() : '';
+    if (!signupName) { clShowStatus('Please enter your full name.', 'error'); return; }
+  }
+
+  // Disable the channel button for this transaction
+  var btnIds = isPhone ? ['cl-btn-sms', 'cl-btn-wa'] : ['cl-btn-otp'];
+  btnIds.forEach(function(id){ var b = document.getElementById(id); if (b) b.disabled = true; });
+  var clickedBtn = document.getElementById(channel === 'whatsapp' ? 'cl-btn-wa' : channel === 'sms' ? 'cl-btn-sms' : 'cl-btn-otp');
+  var origLabel = clickedBtn ? clickedBtn.textContent : '';
+  if (clickedBtn) clickedBtn.textContent = 'Sending...';
+
+  var opts;
+  if (isPhone) {
+    opts = { phone: identity, options: { channel: channel } };
+    if (clIsSignUp && signupName) opts.options.data = { full_name: signupName, user_type: 'customer' };
+  } else {
+    opts = { email: identity };
+    if (clIsSignUp && signupName) opts.options = { data: { full_name: signupName, user_type: 'customer' } };
+  }
+
   var { error } = await _sb.auth.signInWithOtp(opts);
   if (error) {
     clShowStatus(error.message, 'error');
-    btn.disabled = false; btn.textContent = clInputType === 'phone' ? 'Send SMS OTP' : 'Send Email OTP';
+    btnIds.forEach(function(id){ var b = document.getElementById(id); if (b) b.disabled = false; });
+    if (clickedBtn) clickedBtn.textContent = origLabel;
     return;
   }
-  var dest = clInputType === 'phone' ? 'SMS sent to ' + identity : 'Code sent to ' + identity;
-  clShowStatus(dest, 'success');
-  document.getElementById('cl-otp-row').classList.add('show');
-  document.getElementById('cl-otp-code').focus();
-  btn.textContent = 'Sent';
+  var destLabel = channel === 'whatsapp' ? 'WhatsApp message sent to ' : channel === 'sms' ? 'SMS sent to ' : 'Code sent to ';
+  clShowStatus(destLabel + identity, 'success');
+
+  // Show the right OTP row + focus
+  var otpRowId = isPhone ? 'cl-otp-row-phone' : 'cl-otp-row';
+  var otpInputId = isPhone ? 'cl-otp-code-phone' : 'cl-otp-code';
+  document.getElementById(otpRowId).classList.add('show');
+  document.getElementById(otpInputId).focus();
+
+  // Cooldown only on the clicked button; sibling stays usable for fallback channel
+  if (clickedBtn) clickedBtn.textContent = 'Sent';
   var cd = 30;
   var t = setInterval(function() {
-    cd--; btn.textContent = 'Resend (' + cd + ')';
-    if (cd <= 0) { clearInterval(t); btn.disabled = false; btn.textContent = clInputType === 'phone' ? 'Resend SMS' : 'Resend Code'; }
+    cd--;
+    if (clickedBtn) clickedBtn.textContent = 'Resend (' + cd + ')';
+    if (cd <= 0) {
+      clearInterval(t);
+      btnIds.forEach(function(id){ var b = document.getElementById(id); if (b) b.disabled = false; });
+      if (clickedBtn) clickedBtn.textContent = origLabel;
+    }
   }, 1000);
 }
 
-async function clVerifyOTP() {
-  var identity = document.getElementById('cl-identity').value.trim();
-  var otp = document.getElementById('cl-otp-code').value.trim();
+async function clVerifyOTP(pane) {
+  pane = pane || clInputType;
+  var isPhone = pane === 'phone';
+  var identity = isPhone
+    ? clNormalisePhone(document.getElementById('cl-phone').value)
+    : document.getElementById('cl-identity').value.trim();
+  var otp = (isPhone
+    ? document.getElementById('cl-otp-code-phone').value
+    : document.getElementById('cl-otp-code').value).trim();
   if (!identity || !otp) { clShowStatus('Please enter the 6-digit code.', 'error'); return; }
   clShowStatus('Verifying...', 'success');
-  var opts = clInputType === 'phone'
+  // For Supabase verifyOtp, the type is 'sms' for both SMS and WhatsApp channels.
+  var opts = isPhone
     ? { phone: identity, token: otp, type: 'sms' }
     : { email: identity, token: otp, type: 'email' };
   var { data, error } = await _sb.auth.verifyOtp(opts);
   if (error) { clShowStatus(error.message, 'error'); return; }
+  // For first-time phone signups, ensure profile row exists with full_name
+  if (isPhone && data && data.user) {
+    var fullName = data.user.user_metadata?.full_name || '';
+    var phoneVal = data.user.phone || identity;
+    await _sb.from('shared_profiles').upsert({
+      id: data.user.id,
+      phone: phoneVal,
+      full_name: fullName || phoneVal,
+      role: 'customer',
+      user_type: 'customer'
+    }, { onConflict: 'id' });
+  }
   await clPostLogin(data.session);
 }
 
@@ -2764,11 +3464,13 @@ async function clForgotPassword() {
   clShowStatus('Reset link sent! Check your inbox.', 'success');
 }
 
-// Enter key support for checkout login
+// Enter key support for login modal
 document.addEventListener('keydown', function(e) {
   if (e.key !== 'Enter') return;
-  if (e.target.id === 'cl-otp-code') clVerifyOTP();
+  if (e.target.id === 'cl-otp-code') clVerifyOTP('email');
+  else if (e.target.id === 'cl-otp-code-phone') clVerifyOTP('phone');
   else if (e.target.id === 'cl-identity' || e.target.id === 'cl-password') clLoginPassword();
+  else if (e.target.id === 'cl-phone') clSendOTP('sms');
 });
 
 // Sign out
@@ -2776,11 +3478,36 @@ async function portalSignOut(){
   Object.keys(localStorage).forEach(function(k){if(k.startsWith('sb-'))localStorage.removeItem(k);});
   sessionStorage.clear();
   try{await _sb.auth.signOut({scope:'local'});}catch(e){}
-  document.getElementById('nav-login-link').style.display='inline';
-  document.getElementById('nav-myaccount').style.display='none';
-  document.getElementById('nav-signout').style.display='none';
+  setLoggedOutUi();
   showPage('home');
   showPortalToast('Signed out');
+}
+
+// Sync the desktop + mobile nav into the logged-in / logged-out state.
+// The mobile menu has its own duplicate set (mob-*) that used to drift
+// out of sync — making the user think Shop signed them out.
+function setLoggedInUi(name){
+  var first = (name||'').split(' ')[0] || 'Account';
+  var set = function(id, disp, txt){
+    var el = document.getElementById(id); if (!el) return;
+    el.style.display = disp;
+    if (typeof txt === 'string') el.textContent = txt;
+  };
+  set('nav-login-link', 'none');
+  set('nav-myaccount',  'inline', 'Hi, ' + first);
+  set('nav-signout',    'inline');
+  set('mob-login-link', 'none');
+  set('mob-myaccount',  'inline', 'Hi, ' + first);
+  set('mob-signout',    'inline');
+}
+function setLoggedOutUi(){
+  var set = function(id, disp){ var el = document.getElementById(id); if (!el) return; el.style.display = disp; };
+  set('nav-login-link', 'inline');
+  set('nav-myaccount',  'none');
+  set('nav-signout',    'none');
+  set('mob-login-link', 'inline');
+  set('mob-myaccount',  'none');
+  set('mob-signout',    'none');
 }
 
 // Password eye toggle
@@ -2892,11 +3619,17 @@ async function loadBillingFromDb(){
   }
 }
 
+// SECURITY: previously persisted full billing PII (names, phones, addresses,
+// TIN/MPOB/registration numbers) into localStorage where they were readable
+// by any XSS payload. We now keep them in-memory only — they are re-fetched
+// from the DB by loadBillingForUser() when a logged-in customer opens the
+// page, and forgotten when the tab closes. We also proactively clear any
+// stale entries left by older versions of the page.
 function saveBillingToStorage(){
-  try{localStorage.setItem('mjm_billing',JSON.stringify(billingEntries));}catch(e){}
+  try{localStorage.removeItem('mjm_billing');}catch(e){}
 }
 function loadBillingFromStorage(){
-  try{var d=localStorage.getItem('mjm_billing');if(d)billingEntries=JSON.parse(d);}catch(e){}
+  try{localStorage.removeItem('mjm_billing');}catch(e){}
 }
 function closeAddBilling(){document.getElementById('billing-add-form').style.display='none';editingBillingId=null;}
 
@@ -2942,15 +3675,10 @@ function renderBillingEntries(){
 // Consent
 function portalSignConsent(){document.getElementById('p-consent-modal').classList.remove('open');showPortalToast('✅ Consent signed!');}
 
-// Check if user is logged in — show My Account link
+// Check if user is logged in — sync both desktop AND mobile nav.
 (function(){
   var name=sessionStorage.getItem('mjm_user_name');
-  if(name){
-    document.getElementById('nav-login-link').style.display='none';
-    document.getElementById('nav-myaccount').style.display='inline';
-    document.getElementById('nav-myaccount').textContent='Hi, '+name.split(' ')[0];
-    document.getElementById('nav-signout').style.display='inline';
-  }
+  if(name) setLoggedInUi(name);
 })();
 
 // Modal overlay click to close
@@ -2958,65 +3686,8 @@ document.querySelectorAll('.portal-modal-overlay').forEach(function(m){
   m.addEventListener('click',function(e){if(e.target===m)m.classList.remove('open');});
 });
 
-// ── SPLASH POSTER — only on first visit per session ──
-(function() {
-  var splash = document.getElementById('splash-poster');
-  // Skip splash if already shown, or if coming from login (mjm_last_page is set)
-  if (sessionStorage.getItem('mjm_splash_shown') || sessionStorage.getItem('mjm_last_page')) {
-    if (splash) splash.remove();
-    var nav = document.getElementById('navbar');
-    if (nav) nav.style.display = '';
-    return;
-  }
-  sessionStorage.setItem('mjm_splash_shown', '1');
-  // Generate god rays
-  var raysEl = document.getElementById('splash-rays');
-  if (raysEl) {
-    for (var i = 0; i < 12; i++) {
-      var ray = document.createElement('div');
-      ray.className = 'splash-ray';
-      ray.style.transform = 'rotate(' + (i * 30) + 'deg)';
-      ray.style.opacity = (0.3 + Math.random() * 0.5).toFixed(2);
-      ray.style.animation = 'raysPulse ' + (2 + Math.random() * 2).toFixed(1) + 's ease-in-out infinite';
-      ray.style.animationDelay = (Math.random() * 2).toFixed(1) + 's';
-      raysEl.appendChild(ray);
-    }
-  }
-  // Generate floating particles
-  var partEl = document.getElementById('splash-particles');
-  if (partEl) {
-    for (var j = 0; j < 20; j++) {
-      var p = document.createElement('div');
-      p.className = 'splash-particle';
-      p.style.left = (10 + Math.random() * 80) + '%';
-      p.style.top = (40 + Math.random() * 50) + '%';
-      p.style.width = (2 + Math.random() * 4) + 'px';
-      p.style.height = p.style.width;
-      p.style.animationDuration = (3 + Math.random() * 4) + 's';
-      p.style.animationDelay = (Math.random() * 4) + 's';
-      partEl.appendChild(p);
-    }
-  }
-  // Countdown 5 to 1
-  var cdEl = document.getElementById('splash-cd');
-  var cdNum = 3;
-  var cdInterval = setInterval(function() {
-    cdNum--;
-    if (cdEl) cdEl.textContent = cdNum;
-    if (cdNum <= 0) clearInterval(cdInterval);
-  }, 1000);
-
-  // Fade after 3 seconds, show nav
-  setTimeout(function() {
-    var splash = document.getElementById('splash-poster');
-    var nav = document.getElementById('navbar');
-    if (nav) nav.style.display = '';
-    if (splash) {
-      splash.classList.add('fade-out');
-      setTimeout(function() { splash.remove(); }, 1200);
-    }
-  }, 3000);
-})();
+// Splash dismiss lives in its own <script> block right after the splash
+// HTML so it cannot be killed by failures elsewhere in this script.
 </script>
 </body>
 </html>

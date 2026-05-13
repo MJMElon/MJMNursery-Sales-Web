@@ -94,7 +94,7 @@
 // Bump MJM_BUILD on every meaningful deploy.
 (function() {
   try {
-    var MJM_BUILD = '2026-05-13-fix-closemobilemenu';
+    var MJM_BUILD = '2026-05-13-fix-mobile-hero-gap';
     var prev = null;
     try { prev = localStorage.getItem('mjm_build'); } catch (_) { return; }
     if (prev === MJM_BUILD) return;                // already on latest
@@ -924,7 +924,7 @@
     section { padding: 3.5rem 1.5rem; }
     .info-policies { padding: 3rem 1.5rem; }
     .partners { padding: 3rem 1.5rem; }
-    .page-hero { padding: 2rem 1.5rem; height: 220px; }
+    .page-hero { padding: 2rem 1.5rem; height: 220px; margin-top: 72px; }
   }
   @media (max-width: 600px) {
     .features-strip { grid-template-columns: 1fr; padding: 1.5rem 1rem; gap: 1rem; }

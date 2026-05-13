@@ -686,16 +686,41 @@ async function loadTimeline(orderId){
 // ═══════════════════════════════════════
 //  LOYALTY POINTS (on Paid)
 // ═══════════════════════════════════════
-async function issuePoints(orderId,totalAmount){
-  // 1 point per RM 100
-  var points=Math.floor(totalAmount/100);
-  if(points<=0)return;
-  await sb.from('salesweb_customer_orders').update({points_issued:points}).eq('id',orderId);
+// Points formula is configurable from admin → Points Settings (stored as
+// JSON in salesweb_app_settings.key='points_config'):
+//
+//   points = floor(total / earn_rm) * earn_pts
+//
+// The number we save on the order is a SNAPSHOT — later changes to the
+// rate won't retroactively recalculate past orders (matches the spec).
+async function issuePoints(orderId, totalAmount) {
+  // Read configurable earn rate, fall back to RM1=1pt if no row.
+  var earnRm = 1, earnPts = 1;
+  try {
+    var { data } = await sb.from('salesweb_app_settings')
+      .select('value').eq('key', 'points_config').maybeSingle();
+    if (data && data.value) {
+      var cfg = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+      if (cfg && cfg.earn_rm)  earnRm  = Math.max(0.01, Number(cfg.earn_rm)  || 1);
+      if (cfg && cfg.earn_pts !== undefined) earnPts = Math.max(0, Number(cfg.earn_pts) || 0);
+    }
+  } catch (e) { console.warn('[points] config load failed, using defaults:', e); }
 
-  // Log
-  var session=await sb.auth.getSession();
-  var user=session?.data?.session?.user?.email||'admin';
-  await sb.from('salesweb_order_timeline').insert([{order_id:orderId,status:'Points Issued',note:points+' loyalty points issued (RM '+totalAmount.toFixed(2)+' @ 1pt/RM100)',changed_by:user}]);
+  var amt    = Number(totalAmount) || 0;
+  var points = Math.floor(amt / earnRm) * earnPts;
+  if (points <= 0) return;
+
+  await sb.from('salesweb_customer_orders')
+    .update({ points_issued: points }).eq('id', orderId);
+
+  var session = await sb.auth.getSession();
+  var user = session?.data?.session?.user?.email || 'admin';
+  await sb.from('salesweb_order_timeline').insert([{
+    order_id: orderId,
+    status: 'Points Issued',
+    note: points + ' loyalty points issued (RM ' + amt.toFixed(2) + ' @ ' + earnPts + ' pt per RM ' + earnRm + ')',
+    changed_by: user
+  }]);
 }
 
 // ═══════════════════════════════════════

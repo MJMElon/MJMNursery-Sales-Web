@@ -94,7 +94,7 @@
 // Bump MJM_BUILD on every meaningful deploy.
 (function() {
   try {
-    var MJM_BUILD = '2026-05-13-mobile-logo-108px';
+    var MJM_BUILD = '2026-05-13-login-modal-spacing';
     var prev = null;
     try { prev = localStorage.getItem('mjm_build'); } catch (_) { return; }
     if (prev === MJM_BUILD) return;                // already on latest
@@ -842,13 +842,13 @@
   @keyframes modalPop{from{transform:scale(.93);opacity:0;}to{transform:scale(1);opacity:1;}}
   .login-modal-close{position:absolute;top:.85rem;right:.85rem;background:rgba(255,255,255,.15);border:none;font-size:1.1rem;cursor:pointer;color:#fff;line-height:1;padding:4px 9px;border-radius:50%;transition:background .15s;z-index:2;}
   .login-modal-close:hover{background:rgba(255,255,255,.3);}
-  .login-modal-hero{background:linear-gradient(135deg,var(--green-dark) 0%,var(--green-mid) 100%);padding:1.6rem 2rem 1.3rem;text-align:center;position:relative;}
+  .login-modal-hero{background:linear-gradient(135deg,var(--green-dark) 0%,var(--green-mid) 100%);padding:2.2rem 2rem 2rem;text-align:center;position:relative;}
   .login-modal-hero::after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:24px;background:var(--cream);border-radius:24px 24px 0 0;}
-  .login-modal-logo{text-align:center;margin-bottom:.6rem;position:relative;z-index:1;}
+  .login-modal-logo{text-align:center;margin-bottom:1rem;position:relative;z-index:1;}
   .login-modal-logo img{height:72px;filter:drop-shadow(0 2px 8px rgba(0,0,0,.25));}
-  .login-modal-title{font-family:'Cormorant Garamond',serif;font-size:1.5rem;font-weight:400;color:#fff;text-align:center;margin-bottom:.2rem;position:relative;z-index:1;}
-  .login-modal-sub{font-size:12.5px;color:rgba(255,255,255,.85);text-align:center;position:relative;z-index:1;}
-  .login-modal-body{padding:1.6rem 2rem 2rem;}
+  .login-modal-title{font-family:'Cormorant Garamond',serif;font-size:1.5rem;font-weight:400;color:#fff;text-align:center;margin-bottom:.45rem;position:relative;z-index:1;line-height:1.15;}
+  .login-modal-sub{font-size:12.5px;color:rgba(255,255,255,.85);text-align:center;position:relative;z-index:1;line-height:1.3;}
+  .login-modal-body{padding:1.1rem 2rem 1.8rem;}
   /* Login mode tabs */
   .lm-tabs{display:flex;gap:.4rem;background:#fff;border:1px solid var(--green-pale);border-radius:12px;padding:4px;margin-bottom:1.1rem;}
   .lm-tab{flex:1;background:none;border:none;padding:.55rem .6rem;font-size:12px;font-weight:600;color:var(--text-mid);cursor:pointer;border-radius:9px;transition:all .15s;font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:.35rem;}

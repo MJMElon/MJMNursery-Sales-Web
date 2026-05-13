@@ -94,7 +94,7 @@
 // Bump MJM_BUILD on every meaningful deploy.
 (function() {
   try {
-    var MJM_BUILD = '2026-05-13-no-sdk-storefront';
+    var MJM_BUILD = '2026-05-13-fix-openlogin-ref';
     var prev = null;
     try { prev = localStorage.getItem('mjm_build'); } catch (_) { return; }
     if (prev === MJM_BUILD) return;                // already on latest
@@ -1776,10 +1776,11 @@
 
 <!-- ═══════════════════════════════════════ CHECKOUT LOGIN PAGE ═══════════════════════════════════════ -->
 <div class="page" id="page-checkout-login">
-  <!-- Checkout login now uses the shared login modal. This page is kept for
-       the showPage router but is never visually displayed — it opens the modal
-       immediately and switches back to whichever page was last active. -->
-  <script>openLoginModal('checkout');</script>
+  <!-- Checkout login uses the shared login modal. This page is just a router
+       target — showPage() opens the modal when this page becomes active. The
+       previous inline `<script>openLoginModal('checkout');</script>` here
+       fired at HTML parse time, BEFORE the function was defined → caused
+       a ReferenceError that surfaced in the diagnostic banner on Safari. -->
 </div>
 
 <!-- ═══ LOGIN MODAL ═══ -->
@@ -1979,6 +1980,11 @@ function showPage(page) {
   document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
   const navMap = { home: 'nav-shop', information: 'nav-information', contact: 'nav-contact', join: 'nav-join', portal: 'nav-myaccount', 'checkout-login': null };
   if (page === 'portal') { setTimeout(function(){ try { initPortal(); } catch(e) { console.error('Portal init error:', e); } }, 50); }
+  if (page === 'checkout-login') {
+    // The checkout-login page is a router target only — it opens the login
+    // modal then hands control back to whichever page was last active.
+    setTimeout(function(){ try { openLoginModal('checkout'); } catch(e) { console.error('Checkout login modal error:', e); } }, 0);
+  }
   if (navMap[page]) document.getElementById(navMap[page]).classList.add('active');
   // Close mobile menu
   document.getElementById('navLinks').classList.remove('open');

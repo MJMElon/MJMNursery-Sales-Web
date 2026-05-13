@@ -78,39 +78,38 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <script>
-// ── BUILD-VERSION CACHE BUSTER ────────────────────────────────────────────
-// GitHub Pages + Android Chrome can stubbornly serve a stale cached index.html
-// even when the meta no-cache tags are present. This tiny IIFE runs before
-// anything else: if the cached HTML predates the version we last saw on a
-// successful visit, we bypass the HTTP cache once via a ?_v=<ts> query and
-// drop any service-worker caches that might be holding old responses.
+// ── BUILD-VERSION CACHE BUSTER (defensive) ────────────────────────────────
+// Triggers a ONE-TIME hard reload via ?_v=<ts> when the cached HTML predates
+// the current build. Aggressively guarded so it CANNOT break a load:
+//   • Whole thing wrapped in a single outer try/catch.
+//   • Hot path (same build) returns immediately — zero side effects.
+//   • Skips entirely on first visit (prev=null) so brand-new users never
+//     trigger a reload.
+//   • Uses sessionStorage as an extra latch: max ONE auto-reload per tab
+//     session, so even a logic bug here can't infinite-loop.
+//   • Removed the synchronous caches.keys() call that was firing on every
+//     load — Safari WebKit was occasionally hanging on that promise during
+//     parse, leaving the page blank. Cache Storage clear is no longer
+//     attempted here; the HTTP-cache bypass via ?_v= is sufficient.
 // Bump MJM_BUILD on every meaningful deploy.
 (function() {
-  var MJM_BUILD = '2026-05-13-card-qty-add';
   try {
-    if (window.caches && caches.keys) {
-      caches.keys().then(function(keys) {
-        keys.forEach(function(k) { try { caches.delete(k); } catch (_) {} });
-      }).catch(function(){});
-    }
+    var MJM_BUILD = '2026-05-13-popup-horizontal';
     var prev = null;
-    try { prev = localStorage.getItem('mjm_build'); } catch (_) {}
-    if (prev && prev !== MJM_BUILD) {
-      try { localStorage.setItem('mjm_build', MJM_BUILD); } catch (_) {}
-      // First visit on a new build → reload once, bypassing the cache, so
-      // the browser fetches fresh assets. Guard against an infinite loop
-      // by only doing it if we don't already carry a recent ?_v stamp.
-      var url = new URL(location.href);
-      var carried = url.searchParams.get('_v');
-      var now = Date.now();
-      if (!carried || (now - Number(carried)) > 60000) {
-        url.searchParams.set('_v', String(now));
-        location.replace(url.href);
-        return;
-      }
-    } else if (!prev) {
-      try { localStorage.setItem('mjm_build', MJM_BUILD); } catch (_) {}
-    }
+    try { prev = localStorage.getItem('mjm_build'); } catch (_) { return; }
+    if (prev === MJM_BUILD) return;                // already on latest
+    try { localStorage.setItem('mjm_build', MJM_BUILD); } catch (_) {}
+    if (!prev) return;                              // first visit — no reload
+    // Single-shot latch: one reload per tab session, never more.
+    var reloaded = null;
+    try { reloaded = sessionStorage.getItem('mjm_cb_done'); } catch (_) { return; }
+    if (reloaded === '1') return;
+    try { sessionStorage.setItem('mjm_cb_done', '1'); } catch (_) {}
+    try {
+      var u = new URL(location.href);
+      u.searchParams.set('_v', String(Date.now()));
+      location.replace(u.href);
+    } catch (_) {}
   } catch (_) {}
 })();
 </script>
@@ -823,12 +822,20 @@
   /* Product popup */
   .product-popup-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300;align-items:center;justify-content:center;padding:1rem;}
   .product-popup-overlay.open{display:flex;}
-  .product-popup{background:#fff;border-radius:18px;width:100%;max-width:420px;box-shadow:0 20px 60px rgba(0,0,0,.2);animation:cartIn .2s ease;overflow:hidden;}
-  .pp-img{height:200px;background:var(--green-pale);display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  /* Horizontal layout — image on the left, info on the right, so the whole
+     thing fits a phone viewport without scrolling and works well on laptop. */
+  .product-popup{background:#fff;border-radius:18px;width:100%;max-width:760px;max-height:90vh;box-shadow:0 20px 60px rgba(0,0,0,.2);animation:cartIn .2s ease;overflow:hidden;display:flex;flex-direction:row;}
+  .pp-img{flex:0 0 45%;background:var(--green-pale);display:flex;align-items:center;justify-content:center;overflow:hidden;min-height:280px;}
   .pp-img img{width:100%;height:100%;object-fit:cover;}
-  .pp-body{padding:1.3rem 1.5rem;}
+  .pp-body{padding:1.4rem 1.5rem;flex:1;overflow-y:auto;display:flex;flex-direction:column;}
   .pp-name{font-family:'Cormorant Garamond',serif;font-size:1.4rem;font-weight:400;color:var(--text-dark);margin-bottom:.3rem;}
-  .pp-desc{font-size:12px;color:var(--text-mid);line-height:1.5;margin-bottom:.8rem;}
+  .pp-desc{font-size:13px;color:var(--text-mid);line-height:1.55;margin-bottom:.8rem;flex:1;}
+  /* On narrow phones, stack vertically so neither image nor text gets squashed */
+  @media (max-width: 560px) {
+    .product-popup{flex-direction:column;max-width:420px;}
+    .pp-img{flex:0 0 auto;height:200px;min-height:0;}
+    .pp-body{padding:1.1rem 1.2rem;}
+  }
   .pp-price{font-size:1.1rem;font-weight:600;color:var(--green-dark);margin-bottom:.3rem;}
   .pp-stock{font-size:11px;color:var(--text-light);margin-bottom:1rem;}
   .pp-qty-row{display:flex;align-items:center;gap:.8rem;margin-bottom:1rem;}
@@ -1157,8 +1164,7 @@
   <!-- Special For You section -->
   <section class="salesweb_products" id="salesweb_products" style="padding-top:3rem;">
     <div style="text-align:center;margin-bottom:2rem;">
-      <span class="section-label">Curated Selection</span>
-      <h2 class="section-title">All Seedling Handpicked <em>Special For You</em></h2>
+      <h2 class="section-title">Handpicked <em>Special For You</em></h2>
     </div>
     <div class="special-showcase" id="specialGrid"></div>
   </section>

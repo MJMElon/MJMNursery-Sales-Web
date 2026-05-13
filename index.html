@@ -94,7 +94,7 @@
 // Bump MJM_BUILD on every meaningful deploy.
 (function() {
   try {
-    var MJM_BUILD = '2026-05-13-safari-diag';
+    var MJM_BUILD = '2026-05-13-no-sdk-storefront';
     var prev = null;
     try { prev = localStorage.getItem('mjm_build'); } catch (_) { return; }
     if (prev === MJM_BUILD) return;                // already on latest
@@ -1447,8 +1447,12 @@
         <div class="contact-card">
           <div class="cc-icon"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div>
           <div>
-            <div class="cc-label">Bank</div>
-            <div class="cc-value">HLBB 027-00-11609-6<br><span style="font-size:12px;color:var(--text-light)">All payments to Mega Jutamas Sdn Bhd</span></div>
+            <div class="cc-label">Bank Transfer</div>
+            <div class="cc-value">
+              <strong>Mega Jutamas Sdn Bhd</strong><br>
+              <span style="font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;letter-spacing:.04em;">027-00-11609-6</span><br>
+              <span style="font-size:12px;color:var(--text-light)">Hong Leong Bank</span>
+            </div>
           </div>
         </div>
 
@@ -1876,30 +1880,96 @@
   </a>
 </div>
 
-<!-- Pin supabase-js to the explicit UMD build so the browser gets a real
-     script (not the ESM build that some CDN auto-resolutions point to,
-     which fails silently as a classic <script src>). If jsDelivr returns
-     a bad response, the second tag tries unpkg as a fallback. The main
-     script below guards with `typeof supabase !== 'undefined'` so even
-     a complete CDN outage leaves the rest of the page running. -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
-<script>if (typeof supabase === 'undefined') { document.write('\x3Cscript src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" crossorigin="anonymous">\x3C/script>'); }</script>
 <script>
-// ── SUPABASE ──
+// ── SUPABASE — ZERO-DEPENDENCY STOREFRONT MODE ────────────────────────────
+// Previous build loaded @supabase/supabase-js from jsDelivr in the <head>
+// and called supabase.createClient() inline. On Safari/iOS that pipeline
+// was failing as cross-origin "Script error." with no detail — most
+// likely the auto-resolved jsDelivr URL serving a CJS or ESM bundle
+// Safari refused to execute as a classic script. The page rendered
+// blank because anything depending on `_sb` (fetchProducts, passion
+// section, portal init) silently broke.
+//
+// New approach: the public storefront NO LONGER needs supabase-js at all.
+// Product fetch, passion section, and any other read-only API call now
+// uses `sbFetch()`, a tiny raw-fetch wrapper around Supabase's REST API.
+// The supabase-js SDK only gets loaded LAZILY (on demand) when the user
+// actually opens the login modal or the My Account page — those features
+// need auth.signInWithPassword(), realtime, etc.
+//
+// Result: even with a total CDN outage, the public storefront still
+// renders products. The cross-origin Script error from the SDK can no
+// longer take down the whole page.
 var SUPA_URL='https://kibqjztozokohqmhqqqf.supabase.co';
 var SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpYnFqenRvem9rb2hxbWhxcXFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMzQzNjIsImV4cCI6MjA4OTgxMDM2Mn0.J7qJUZhWXYf5b9oey4wXJkjdi66jomEMw_NeV9NWF7M';
-// If the supabase-js CDN script failed to load (flaky mobile data, content
-// blocker, etc.) we MUST NOT throw here — that would kill the rest of this
-// inline script, leaving the hamburger, page nav, login modal etc. unbound.
-// Set _sb=null and let downstream callers fail their individual queries.
 var _sb = null;
-try {
-  if (typeof supabase !== 'undefined') {
-    _sb = supabase.createClient(SUPA_URL, SUPA_KEY);
-  } else {
-    console.warn('supabase-js failed to load from CDN; live data disabled, UI still functional');
+var _sbLoadPromise = null;
+
+// Raw fetch wrapper that talks directly to Supabase's REST API. No SDK,
+// no CDN dependency, works in every browser that has fetch() (IE11 is
+// the only modern browser without it — out of scope).
+async function sbFetch(table, params) {
+  var url = SUPA_URL + '/rest/v1/' + table;
+  if (params) {
+    var qs = [];
+    for (var k in params) {
+      if (Object.prototype.hasOwnProperty.call(params, k) && params[k] != null) {
+        qs.push(encodeURIComponent(k) + '=' + encodeURIComponent(params[k]));
+      }
+    }
+    if (qs.length) url += '?' + qs.join('&');
   }
-} catch (e) { console.error('Supabase init failed:', e); }
+  var res = await fetch(url, {
+    headers: {
+      'apikey': SUPA_KEY,
+      'Authorization': 'Bearer ' + SUPA_KEY,
+      'Accept': 'application/json'
+    }
+  });
+  if (!res.ok) throw new Error('sbFetch ' + table + ' → HTTP ' + res.status);
+  return await res.json();
+}
+
+// Lazy-load the supabase-js SDK ONLY when something genuinely needs auth
+// or realtime. Returns the supabase client or null if the load fails.
+// Cached so subsequent callers reuse the same promise.
+function loadSupabaseSdk() {
+  if (_sb) return Promise.resolve(_sb);
+  if (_sbLoadPromise) return _sbLoadPromise;
+  _sbLoadPromise = new Promise(function(resolve) {
+    var s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js';
+    s.crossOrigin = 'anonymous';
+    s.async = true;
+    s.onload = function() {
+      try {
+        if (typeof supabase !== 'undefined') {
+          _sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+        }
+      } catch (e) { console.error('Supabase init failed:', e); }
+      resolve(_sb);
+    };
+    s.onerror = function() {
+      // Try unpkg fallback
+      var s2 = document.createElement('script');
+      s2.src = 'https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js';
+      s2.crossOrigin = 'anonymous';
+      s2.async = true;
+      s2.onload = function() {
+        try {
+          if (typeof supabase !== 'undefined') {
+            _sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+          }
+        } catch (e) { console.error('Supabase init failed:', e); }
+        resolve(_sb);
+      };
+      s2.onerror = function() { resolve(null); };
+      document.head.appendChild(s2);
+    };
+    document.head.appendChild(s);
+  });
+  return _sbLoadPromise;
+}
 
 // ── PAGE NAVIGATION ──
 function showPage(page) {
@@ -1939,37 +2009,38 @@ let products = [];
 let cartCount = 0;
 let lastFetchDebug = null;
 
-// Fetch published products from Supabase
+// Fetch published products via raw fetch — no supabase-js SDK needed, so a
+// CDN outage or Safari Script-error on the SDK cannot break the storefront.
 async function fetchProducts() {
   var debug = { startedAt: new Date().toISOString(), step: 'start' };
+  var data = null;
   try {
-    var { data, error } = await _sb.from('salesweb_products').select('*')
-      .eq('is_published', true).eq('is_active', true)
-      .order('sort_order', { ascending: true, nullsFirst: false }).order('sell_year', { ascending: true }).order('sell_month', { ascending: true });
-    debug.firstError = error ? (error.message || String(error)) : null;
+    data = await sbFetch('salesweb_products', {
+      'select': '*',
+      'is_published': 'eq.true',
+      'is_active': 'eq.true',
+      'order': 'sort_order.asc.nullslast,sell_year.asc,sell_month.asc'
+    });
     debug.firstCount = (data && data.length) || 0;
-
-    // Fallback if sort_order column doesn't exist yet
-    if (error) {
-      var res = await _sb.from('salesweb_products').select('*')
-        .eq('is_published', true).eq('is_active', true)
-        .order('sell_year', { ascending: true }).order('sell_month', { ascending: true });
-      data = res.data; error = res.error;
-      debug.fallbackError = error ? (error.message || String(error)) : null;
-      debug.fallbackCount = (data && data.length) || 0;
-    }
-
     debug.step = 'done';
-    lastFetchDebug = debug;
-
-    if (error || !data || !data.length) {
-      products = [];
-      renderProducts();
-      return;
-    }
   } catch (e) {
-    debug.step = 'threw'; debug.threw = (e && e.message) ? e.message : String(e);
-    lastFetchDebug = debug;
+    // sort_order column might not exist on older deployments — retry without it
+    debug.firstError = (e && e.message) ? e.message : String(e);
+    try {
+      data = await sbFetch('salesweb_products', {
+        'select': '*',
+        'is_published': 'eq.true',
+        'is_active': 'eq.true',
+        'order': 'sell_year.asc,sell_month.asc'
+      });
+      debug.fallbackCount = (data && data.length) || 0;
+      debug.step = 'done-fallback';
+    } catch (e2) {
+      debug.step = 'threw'; debug.threw = (e2 && e2.message) ? e2.message : String(e2);
+    }
+  }
+  lastFetchDebug = debug;
+  if (!data || !data.length) {
     products = [];
     renderProducts();
     return;
@@ -2379,6 +2450,19 @@ fetchProducts();
 updateCartUI();
 loadPassionSection();
 
+// Preload the supabase SDK in the background (non-blocking). By the time
+// the user clicks Login or My Account, it's usually already loaded. If the
+// load fails on Safari/iOS, the storefront still works — only portal
+// features will be unavailable.
+(function preloadSdkIdle() {
+  function go() { try { loadSupabaseSdk(); } catch (_) {} }
+  if (typeof requestIdleCallback === 'function') {
+    requestIdleCallback(go, { timeout: 4000 });
+  } else {
+    setTimeout(go, 2500);
+  }
+})();
+
 // ── Load passion section (fast: metadata first, images lazy-loaded individually) ──
 var _passionPlaceholderBg = {
   plantation: 'linear-gradient(135deg, #2e7d32, #4caf50)',
@@ -2400,10 +2484,15 @@ async function loadPassionSection() {
   var container = document.getElementById('passionFlow');
   if (!container) return;
 
-  // Step 1: Fetch metadata only (no image_url) — instant
+  // Step 1: Fetch metadata only (no image_url) — instant. Raw fetch so no
+  // dependency on supabase-js SDK loading first.
   var items = _passionDefaults;
   try {
-    var { data } = await _sb.from('salesweb_site_content').select('id,key,label,description,sort_order').eq('section','passion').order('sort_order');
+    var data = await sbFetch('salesweb_site_content', {
+      'select': 'id,key,label,description,sort_order',
+      'section': 'eq.passion',
+      'order': 'sort_order.asc'
+    });
     if (data && data.length > 0) items = data;
   } catch(e) { /* use defaults */ }
 
@@ -2432,7 +2521,11 @@ async function loadPassionSection() {
 
 async function loadPassionPanelImg(id, key) {
   try {
-    var { data } = await _sb.from('salesweb_site_content').select('image_url').eq('id', id).single();
+    var rows = await sbFetch('salesweb_site_content', {
+      'select': 'image_url',
+      'id': 'eq.' + id
+    });
+    var data = rows && rows[0];
     if (data && data.image_url) {
       var panel = document.getElementById('pp-' + id);
       if (!panel) return;
@@ -2497,6 +2590,10 @@ async function saveProfileDetails(){
 }
 
 async function initPortal(){
+  // Portal needs the supabase SDK (auth.getSession, etc.) — make sure it's
+  // loaded before any _sb.* call below. Safe to await even if already loaded.
+  await loadSupabaseSdk();
+  if (!_sb) { console.warn('Portal: supabase SDK unavailable'); return; }
   portalUser = sessionStorage.getItem('mjm_user_name')||'Customer';
   var nameEl=document.getElementById('pf-name2');if(nameEl)nameEl.value=portalUser;
   var emailEl=document.getElementById('pf-email2');if(emailEl)emailEl.value=sessionStorage.getItem('mjm_user_email')||'';
@@ -2970,6 +3067,10 @@ var clLoginContext = 'nav';       // 'nav' or 'checkout'
 var clOtpChannel = 'sms';         // 'sms' or 'whatsapp' — for phone OTP
 
 function openLoginModal(context) {
+  // Login needs supabase-js for auth.signInWithPassword etc — kick off the
+  // SDK load now (no await, so the modal opens instantly; auth.* calls below
+  // already await _sb internally via the lazy guard).
+  loadSupabaseSdk();
   clLoginContext = context || 'nav';
   // Reset form state
   clIsSignUp = false;

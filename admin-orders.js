@@ -19,6 +19,7 @@
   310   loadTimeline() — render vertical timeline
   340   issuePoints() — loyalty calculation
   350   deductStock() — reduce product stock on paid
+  ---   EDIT CUSTOMER / BILLING / ITEMS appended at bottom
 ═══════════════════════════════════════════════════
 */
 
@@ -43,26 +44,37 @@ async function loadOrders(){
   var paid=all.filter(function(o){return o.status==='Paid';}).length;
   var completed=all.filter(function(o){return o.status==='Completed';}).length;
   var revenue=all.filter(function(o){return o.status!=='Cancelled';}).reduce(function(s,o){return s+(o.total||0);},0);
+  var creditOutstanding=all.filter(function(o){return o.payment_terms==='credit'&&!o.credit_billed_at&&o.status!=='Cancelled';}).reduce(function(s,o){return s+(o.total||0);},0);
   document.getElementById('order-stats').innerHTML=
     '<div class="stat-box"><div class="stat-label">Total Orders</div><div class="stat-val">'+all.length+'</div></div>'+
     '<div class="stat-box"><div class="stat-label">Pending Payment</div><div class="stat-val" style="color:var(--amber)">'+pending+'</div></div>'+
     '<div class="stat-box"><div class="stat-label">Paid</div><div class="stat-val" style="color:var(--blue)">'+paid+'</div></div>'+
     '<div class="stat-box"><div class="stat-label">Completed</div><div class="stat-val green">'+completed+'</div></div>'+
+    '<div class="stat-box"><div class="stat-label">Credit Outstanding</div><div class="stat-val" style="color:#a16207;">RM '+creditOutstanding.toLocaleString('en-MY',{minimumFractionDigits:2})+'</div></div>'+
     '<div class="stat-box"><div class="stat-label">Revenue</div><div class="stat-val">RM '+revenue.toLocaleString('en-MY',{minimumFractionDigits:2})+'</div></div>';
 
   if(!orders.length){document.getElementById('orders-table').innerHTML='<div class="loading">No orders found</div>';return;}
-  var html='<table class="data-table"><thead><tr><th>Order</th><th>Customer</th><th>Date</th><th>Items</th><th>Total</th><th>Status</th><th>Action</th></tr></thead><tbody>';
+  var html='<table class="data-table"><thead><tr><th>Order</th><th>Customer</th><th>Date</th><th>Terms</th><th>Items</th><th>Total</th><th>Status</th><th>Action</th></tr></thead><tbody>';
   orders.forEach(function(o){
     var statusCls=orderBadgeCls(o.status);
     var shortId=o.order_number||o.id.substring(0,8).toUpperCase();
-    html+='<tr onclick="viewOrder(\''+o.id+'\')" style="cursor:pointer;">'+
-      '<td style="font-weight:600;">#'+shortId+'</td>'+
+    var idJs=String(o.id||'').replace(/[\\'"<>]/g,'');
+    var termsBadge;
+    if(o.payment_terms==='credit'){
+      var billed=o.credit_billed_at?' · billed':' · unbilled';
+      termsBadge='<span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;" title="'+esc(o.credit_billing_period||'')+billed+'">💳 Credit</span>';
+    } else {
+      termsBadge='<span class="badge badge-grey">💵 Cash</span>';
+    }
+    html+='<tr onclick="viewOrder(\''+idJs+'\')" style="cursor:pointer;">'+
+      '<td style="font-weight:600;">#'+esc(shortId)+'</td>'+
       '<td>'+esc(o.customer_name||'—')+'<div style="font-size:11px;color:var(--ink4);">'+esc(o.customer_email||'')+'</div></td>'+
       '<td style="font-size:12px;">'+fmtDate(o.created_at)+'</td>'+
+      '<td>'+termsBadge+'</td>'+
       '<td style="text-align:center;">—</td>'+
       '<td style="font-weight:600;">RM '+(o.total||0).toFixed(2)+'</td>'+
-      '<td><span class="badge '+statusCls+'">'+o.status+'</span></td>'+
-      '<td><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();viewOrder(\''+o.id+'\')">View</button></td>'+
+      '<td><span class="badge '+statusCls+'">'+esc(o.status)+'</span></td>'+
+      '<td><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();viewOrder(\''+idJs+'\')">View</button></td>'+
     '</tr>';
   });
   html+='</tbody></table>';
@@ -82,33 +94,121 @@ async function viewOrder(id){
   var{data:items}=await sb.from('salesweb_order_items').select('*').eq('order_id',id);
   items=items||[];
 
+  // For credit orders, fetch per-collection events + all of this customer's
+  // monthly invoices so the per-month breakdown table can render.
+  var creditCollections=[];
+  var creditInvoicesByPeriod={};
+  if(order.payment_terms==='credit'){
+    try{
+      var{data:collRows}=await sb.from('salesweb_order_collections').select('collected_qty,collected_at,al_number').eq('order_id',id);
+      creditCollections=collRows||[];
+    }catch(e){creditCollections=[];}
+    if(order.customer_id){
+      var{data:invRows}=await sb.from('salesweb_credit_invoices').select('id,invoice_number,billing_period,total_qty,total_amount,status,invoice_file_url,payment_proof_url,issued_at,due_date,paid_at').eq('customer_id',order.customer_id);
+      (invRows||[]).forEach(function(inv){creditInvoicesByPeriod[inv.billing_period]=inv;});
+    }
+  }
+
   var shortId=order.order_number||order.id.substring(0,8).toUpperCase();
-  document.getElementById('mo-title').textContent='Order #'+shortId;
+  // order_number sometimes already contains a leading '#' — avoid "Order ##10539".
+  var titleId=String(shortId);if(titleId.charAt(0)!=='#')titleId='#'+titleId;
+  document.getElementById('mo-title').textContent='Order '+titleId;
 
   var html='';
 
-  // ── Status bar ──
-  html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:.8rem 1rem;background:var(--bg);border-radius:10px;margin-bottom:1rem;">';
-  html+='<div><span class="badge '+orderBadgeCls(order.status)+'" style="font-size:12px;padding:5px 12px;">'+order.status+'</span></div>';
-  html+='<div style="display:flex;align-items:center;gap:.5rem;"><label style="font-size:12px;font-weight:600;color:var(--ink3);">Change to:</label><select id="mo-status-select" class="form-input" style="width:auto;font-size:12px;padding:6px 10px;">';
-  ORDER_STATUSES.forEach(function(s){html+='<option'+(s===order.status?' selected':'')+'>'+s+'</option>';});
-  html+='</select><button class="btn btn-primary btn-sm" onclick="updateOrderStatus(\''+id+'\')">Update</button></div></div>';
+  // ── 1. Status + Payment Terms (top, side-by-side) ──
+  var currentTerms=order.payment_terms==='credit'?'credit':'cash';
+  var creditPeriod=order.credit_billing_period||'';
+  var billedAt=order.credit_billed_at||'';
 
-  // ── Customer info ──
   html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">';
-  html+='<div style="background:var(--bg);border-radius:10px;padding:1rem;"><div style="font-size:13px;font-weight:600;margin-bottom:.5rem;">Customer</div>';
+
+  // Status card
+  html+='<div style="background:var(--bg);border-radius:10px;padding:1rem;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">';
+  html+='<div style="font-size:13px;font-weight:600;">Order Status</div>';
+  html+='<span class="badge '+orderBadgeCls(order.status)+'" style="font-size:11px;padding:4px 10px;">'+order.status+'</span>';
+  html+='</div>';
+  html+='<div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;">';
+  html+='<select id="mo-status-select" class="form-input" style="flex:1;min-width:140px;font-size:12px;padding:6px 10px;">';
+  ORDER_STATUSES.forEach(function(s){html+='<option'+(s===order.status?' selected':'')+'>'+s+'</option>';});
+  html+='</select>';
+  html+='<button class="btn btn-primary btn-sm" onclick="updateOrderStatus(\''+id+'\')">Update</button>';
+  html+='</div></div>';
+
+  // Payment Terms card
+  html+='<div style="background:var(--bg);border-radius:10px;padding:1rem;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">';
+  html+='<div style="font-size:13px;font-weight:600;">Payment Terms</div>';
+  html+='<span class="badge" style="font-size:11px;padding:4px 10px;'+(currentTerms==='credit'?'background:#fef3c7;color:#92400e;border:1px solid #fde68a;':'background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;')+'">'+(currentTerms==='credit'?'💳 Credit':'💵 Cash')+'</span>';
+  html+='</div>';
+  html+='<div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;">';
+  html+='<select id="mo-terms-select" class="form-input" style="flex:1;min-width:120px;font-size:12px;padding:6px 10px;" onchange="document.getElementById(\'mo-credit-period-row\').style.display=this.value===\'credit\'?\'flex\':\'none\';">';
+  html+='<option value="cash"'+(currentTerms==='cash'?' selected':'')+'>💵 Cash</option>';
+  html+='<option value="credit"'+(currentTerms==='credit'?' selected':'')+'>💳 Credit</option>';
+  html+='</select>';
+  html+='<button class="btn btn-primary btn-sm" onclick="updateOrderPaymentTerms(\''+id+'\')">Update</button>';
+  html+='</div>';
+  html+='<div id="mo-credit-period-row" style="display:'+(currentTerms==='credit'?'flex':'none')+';gap:.4rem;align-items:center;flex-wrap:wrap;margin-top:.5rem;">';
+  html+='<label style="font-size:11px;color:var(--ink3);">Billing period:</label>';
+  html+='<input class="form-input" id="mo-credit-period" type="text" value="'+esc(creditPeriod)+'" placeholder="2026-05" style="width:110px;font-size:12px;padding:6px 10px;">';
+  if(billedAt){
+    html+='<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;font-size:10px;">Billed '+fmtDate(billedAt)+'</span>';
+    html+='<button class="btn btn-outline btn-sm" onclick="setOrderCreditBilled(\''+id+'\',false)" style="font-size:10px;">Mark Unbilled</button>';
+  } else {
+    html+='<span class="badge badge-amber" style="font-size:10px;">Unbilled</span>';
+    html+='<button class="btn btn-outline btn-sm" onclick="setOrderCreditBilled(\''+id+'\',true)" style="font-size:10px;">Mark Billed</button>';
+  }
+  html+='</div></div>';
+
+  html+='</div>'; // /grid
+
+  // ── 2. Customer + Billing ──
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">';
+
+  html+='<div style="background:var(--bg);border-radius:10px;padding:1rem;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">';
+  html+='<div style="font-size:13px;font-weight:600;">Customer</div>';
+  html+='<button class="btn btn-outline btn-sm" onclick="toggleEditCustomer()" style="font-size:11px;padding:2px 8px;">✏️ Edit</button>';
+  html+='</div>';
+  html+='<div id="mo-customer-view">';
   html+='<div style="font-size:13px;"><strong>'+esc(order.customer_name||'—')+'</strong></div>';
   html+='<div style="font-size:12px;color:var(--ink3);">'+esc(order.customer_email||'—')+'</div>';
-  if(order.shipping_address)html+='<div style="font-size:12px;color:var(--ink3);margin-top:.3rem;">'+esc(order.shipping_address)+'</div>';
+  if(order.shipping_address)html+='<div style="font-size:12px;color:var(--ink3);margin-top:.3rem;white-space:pre-wrap;">'+esc(order.shipping_address)+'</div>';
   html+='</div>';
-  html+='<div style="background:var(--bg);border-radius:10px;padding:1rem;"><div style="font-size:13px;font-weight:600;margin-bottom:.5rem;">Billing / E-Invoice</div>';
+  html+='<div id="mo-customer-edit" style="display:none;">';
+  html+='<input class="form-input" id="mo-cust-name" placeholder="Customer name" value="'+esc(order.customer_name||'')+'" style="font-size:12px;padding:6px 10px;margin-bottom:.3rem;">';
+  html+='<input class="form-input" id="mo-cust-email" placeholder="Email" value="'+esc(order.customer_email||'')+'" style="font-size:12px;padding:6px 10px;margin-bottom:.3rem;">';
+  html+='<textarea class="form-input" id="mo-cust-address" placeholder="Shipping address" rows="2" style="font-size:12px;padding:6px 10px;margin-bottom:.3rem;">'+esc(order.shipping_address||'')+'</textarea>';
+  html+='<div style="display:flex;gap:.4rem;"><button class="btn btn-primary btn-sm" onclick="saveCustomerDetails(\''+id+'\')">Save</button><button class="btn btn-outline btn-sm" onclick="toggleEditCustomer()">Cancel</button></div>';
+  html+='</div></div>';
+
+  html+='<div style="background:var(--bg);border-radius:10px;padding:1rem;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">';
+  html+='<div style="font-size:13px;font-weight:600;">Billing / E-Invoice</div>';
+  html+='<button class="btn btn-outline btn-sm" onclick="toggleEditBilling()" style="font-size:11px;padding:2px 8px;">✏️ Edit</button>';
+  html+='</div>';
+  html+='<div id="mo-billing-view">';
   html+='<div style="font-size:12px;color:var(--ink3);">'+esc(order.billing_name||order.customer_name||'—')+'</div>';
   html+='<div style="font-size:12px;color:var(--ink3);">Tax ID: '+esc(order.billing_tax_id||'—')+'</div>';
   html+='<div style="font-size:12px;color:var(--ink3);">Points issued: '+(order.points_issued||0)+'</div>';
+  html+='</div>';
+  html+='<div id="mo-billing-edit" style="display:none;">';
+  html+='<input class="form-input" id="mo-bill-name" placeholder="Billing name" value="'+esc(order.billing_name||'')+'" style="font-size:12px;padding:6px 10px;margin-bottom:.3rem;">';
+  html+='<input class="form-input" id="mo-bill-tax" placeholder="Tax ID" value="'+esc(order.billing_tax_id||'')+'" style="font-size:12px;padding:6px 10px;margin-bottom:.3rem;">';
+  html+='<div style="display:flex;gap:.4rem;"><button class="btn btn-primary btn-sm" onclick="saveBillingDetails(\''+id+'\')">Save</button><button class="btn btn-outline btn-sm" onclick="toggleEditBilling()">Cancel</button></div>';
   html+='</div></div>';
 
-  // ── Items table ──
-  html+='<div style="margin-bottom:1rem;"><div style="font-size:13px;font-weight:600;margin-bottom:.5rem;">Order Items</div>';
+  html+='</div>'; // /grid
+
+  // ── 3. Order Items + totals (single merged section) ──
+  var subtotal=items.reduce(function(s,it){return s+(it.subtotal||0);},0);
+  html+='<div style="background:var(--bg);border-radius:10px;padding:1rem;margin-bottom:1rem;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">';
+  html+='<div style="font-size:13px;font-weight:600;">Order Items</div>';
+  html+='<button class="btn btn-outline btn-sm" onclick="renderItemsEditMode(\''+id+'\')" style="font-size:11px;padding:2px 8px;">✏️ Edit Items</button>';
+  html+='</div>';
+  html+='<div id="mo-items-container">';
   if(items.length){
     html+='<table class="data-table"><thead><tr><th>Product</th><th style="text-align:right;">Price</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Subtotal</th></tr></thead><tbody>';
     items.forEach(function(it){html+='<tr><td>'+esc(it.product_name||'—')+'</td><td style="text-align:right;">RM '+(it.unit_price||0).toFixed(2)+'</td><td style="text-align:right;">'+it.quantity+'</td><td style="text-align:right;font-weight:600;">RM '+(it.subtotal||0).toFixed(2)+'</td></tr>';});
@@ -116,17 +216,16 @@ async function viewOrder(id){
   } else html+='<div style="font-size:12px;color:var(--ink4);padding:.5rem 0;">No items</div>';
   html+='</div>';
 
-  // ── Financial summary ──
-  var subtotal=items.reduce(function(s,it){return s+(it.subtotal||0);},0);
-  html+='<div style="background:var(--bg);border-radius:10px;padding:1rem;margin-bottom:1rem;">';
-  html+='<div style="font-size:13px;font-weight:600;margin-bottom:.5rem;">Financial Summary</div>';
+  // Totals breakdown stays in the same card
+  html+='<div style="margin-top:.8rem;padding-top:.8rem;border-top:1px solid var(--border);">';
   html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;"><span>Subtotal</span><span>RM '+subtotal.toFixed(2)+'</span></div>';
   if(order.discount_amount>0)html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;color:var(--red);"><span>Discount</span><span>-RM '+order.discount_amount.toFixed(2)+'</span></div>';
   if(order.coupon_code)html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;color:var(--red);"><span>Coupon ('+esc(order.coupon_code)+')</span><span>-RM '+(order.coupon_discount||0).toFixed(2)+'</span></div>';
   html+='<div style="display:flex;justify-content:space-between;padding:.4rem 0;border-top:1.5px solid var(--border);margin-top:.3rem;font-size:15px;font-weight:700;"><span>Total</span><span>RM '+(order.total||0).toFixed(2)+'</span></div>';
+  html+='</div>';
 
   // Discount + Coupon controls (collapsible)
-  html+='<div style="margin-top:.8rem;padding-top:.8rem;border-top:1px solid var(--border);display:flex;gap:.5rem;flex-wrap:wrap;">';
+  html+='<div style="margin-top:.6rem;padding-top:.6rem;border-top:1px solid var(--border);display:flex;gap:.5rem;flex-wrap:wrap;">';
   html+='<button class="btn btn-outline btn-sm" onclick="var el=document.getElementById(\'mo-discount-panel\');el.style.display=el.style.display===\'none\'?\'flex\':\'none\';" style="font-size:11px;">Set Discount</button>';
   html+='<button class="btn btn-outline btn-sm" onclick="var el=document.getElementById(\'mo-coupon-panel\');el.style.display=el.style.display===\'none\'?\'flex\':\'none\';" style="font-size:11px;">Apply Coupon</button>';
   html+='</div>';
@@ -138,11 +237,81 @@ async function viewOrder(id){
   html+='</div>';
   html+='</div>';
 
-  // ── Customer Remark ──
+  // ── 4. Customer Remark ──
   if(order.customer_remark){
     html+='<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:.8rem 1rem;margin-bottom:1rem;">';
     html+='<div style="font-size:11px;font-weight:600;color:#92400e;margin-bottom:.3rem;">Customer Remark</div>';
     html+='<div style="font-size:13px;color:var(--ink2);">'+esc(order.customer_remark)+'</div></div>';
+  }
+
+  // ── 4b. Credit Monthly Breakdown (only for credit-term orders) ──
+  if(order.payment_terms==='credit'){
+    // Group collections by 'YYYY-MM'
+    var qtyByPeriod={};
+    creditCollections.forEach(function(c){
+      if(!c.collected_at)return;
+      var p=String(c.collected_at).slice(0,7);
+      qtyByPeriod[p]=(qtyByPeriod[p]||0)+(c.collected_qty||0);
+    });
+    // Fallback: if no per-event collections recorded but the order itself has a
+    // single collected_at/collected_qty (legacy data), use that as one entry.
+    if(!creditCollections.length&&order.collected_at&&order.collected_qty){
+      qtyByPeriod[String(order.collected_at).slice(0,7)]=order.collected_qty;
+    }
+
+    // Generate every month from order created_at through current month
+    function periodKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
+    function periodLabel(p){var parts=p.split('-');return new Date(+parts[0],+parts[1]-1,1).toLocaleString('en-MY',{month:'short',year:'numeric'});}
+    var startDate=new Date(order.created_at);startDate.setDate(1);
+    var cursor=new Date(startDate.getFullYear(),startDate.getMonth(),1);
+    var endCursor=new Date();endCursor=new Date(endCursor.getFullYear(),endCursor.getMonth(),1);
+    var periods=[];
+    while(cursor<=endCursor){periods.push(periodKey(cursor));cursor.setMonth(cursor.getMonth()+1);}
+
+    html+='<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:.8rem 1rem;margin-bottom:1rem;">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">';
+    html+='<div style="font-size:13px;font-weight:600;color:#1d4ed8;">Credit — Monthly Invoice Breakdown</div>';
+    html+='<span style="font-size:11px;color:var(--ink3);">Order placed '+fmtDate(order.created_at)+'</span>';
+    html+='</div>';
+    html+='<table class="data-table" style="font-size:12px;"><thead><tr><th>Month</th><th style="text-align:right;">Qty Collected</th><th>Invoice</th><th style="text-align:right;">Action</th></tr></thead><tbody>';
+    periods.forEach(function(p){
+      var qty=qtyByPeriod[p]||0;
+      var inv=creditInvoicesByPeriod[p]||null;
+      var isLinked=inv&&order.credit_invoice_id===inv.id;
+      html+='<tr>';
+      html+='<td style="font-weight:600;">'+esc(periodLabel(p))+'</td>';
+      html+='<td style="text-align:right;'+(qty>0?'font-weight:600;':'color:var(--ink4);')+'">'+(qty>0?qty.toLocaleString():'—')+'</td>';
+      // Invoice column
+      html+='<td>';
+      if(inv){
+        var st=inv.status||'issued';
+        var stColor=st==='paid'?'background:#dcfce7;color:#166534;border:1px solid #bbf7d0;':st==='overdue'?'background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;':'background:#fef3c7;color:#92400e;border:1px solid #fde68a;';
+        html+='<span style="font-weight:600;">'+esc(inv.invoice_number||'—')+'</span>';
+        html+=' <span class="badge" style="font-size:10px;padding:2px 6px;'+stColor+'">'+st.toUpperCase()+'</span>';
+        if(!isLinked&&qty>0)html+=' <span style="font-size:10px;color:#92400e;">(not linked to this order)</span>';
+        if(inv.invoice_file_url)html+=' <a href="'+esc(inv.invoice_file_url)+'" target="_blank" rel="noopener" style="margin-left:.3rem;text-decoration:none;" title="View invoice PDF">📄</a>';
+        if(inv.payment_proof_url)html+='<a href="'+esc(inv.payment_proof_url)+'" target="_blank" rel="noopener" style="margin-left:.2rem;text-decoration:none;" title="View payment proof">🧾</a>';
+      } else if(qty>0){
+        html+='<span style="font-size:11px;color:#92400e;">Not issued</span>';
+      } else {
+        html+='<span style="font-size:11px;color:var(--ink4);">—</span>';
+      }
+      html+='</td>';
+      // Action column
+      html+='<td style="text-align:right;">';
+      if(inv&&inv.status!=='paid'){
+        html+='<button class="btn btn-outline btn-sm" onclick="markCreditInvoicePaid(\''+esc(inv.id)+'\',\''+id+'\')" style="font-size:10px;padding:2px 8px;">✓ Mark Paid</button>';
+      } else if(!inv&&qty>0){
+        html+='<button class="btn btn-primary btn-sm" onclick="openInvoiceUploadModalForMonth(\''+id+'\',\''+p+'\')" style="font-size:10px;padding:2px 8px;">📤 Upload</button>';
+      }
+      html+='</td>';
+      html+='</tr>';
+    });
+    html+='</tbody></table>';
+    if(!order.customer_id){
+      html+='<div style="font-size:11px;color:#92400e;margin-top:.5rem;">⚠ This order has no <code>customer_id</code>, so it cannot be tied to a customer invoice. Edit the customer record first.</div>';
+    }
+    html+='</div>';
   }
 
   // ── Seller Note ──
@@ -328,22 +497,38 @@ async function applyCoupon(orderId){
   var code=document.getElementById('mo-coupon').value.trim().toUpperCase();
   if(!code){toast('Enter coupon code','error');return;}
 
-  var{data:coupon}=await sb.from('salesweb_coupons').select('*').eq('code',code).eq('is_active',true).single();
-  if(!coupon){toast('Invalid or inactive coupon','error');return;}
-  if(coupon.expiry_date&&coupon.expiry_date<new Date().toISOString().split('T')[0]){toast('Coupon expired','error');return;}
-  if(coupon.usage_limit>0&&coupon.usage_count>=coupon.usage_limit){toast('Coupon usage limit reached','error');return;}
-
-  // Calculate discount
-  var{data:items}=await sb.from('salesweb_order_items').select('subtotal').eq('order_id',orderId);
+  // Pull order + items + product categories so the RPC can evaluate scope.
+  var{data:items}=await sb.from('salesweb_order_items').select('product_id,quantity,unit_price,subtotal').eq('order_id',orderId);
+  var{data:order}=await sb.from('salesweb_customer_orders').select('customer_id,customer_email,discount_amount').eq('id',orderId).single();
   var subtotal=(items||[]).reduce(function(s,i){return s+(i.subtotal||0);},0);
-  var{data:order}=await sb.from('salesweb_customer_orders').select('discount_amount').eq('id',orderId).single();
-  var discount=coupon.discount_type==='percentage'?Math.round(subtotal*(coupon.discount_value/100)*100)/100:coupon.discount_value;
 
-  if(coupon.min_order_value>0&&subtotal<coupon.min_order_value){toast('Min order RM '+coupon.min_order_value+' required','error');return;}
+  var prodIds=(items||[]).map(function(i){return i.product_id;}).filter(Boolean);
+  var byId={};
+  if(prodIds.length){
+    var{data:prods}=await sb.from('salesweb_products').select('id,category,product_type').in('id',prodIds);
+    (prods||[]).forEach(function(p){byId[p.id]={category:p.category||p.product_type||null};});
+  }
+  var rpcItems=(items||[]).map(function(i){
+    var meta=byId[i.product_id]||{};
+    return{product_id:i.product_id,category:meta.category,qty:i.quantity,price:i.unit_price};
+  });
 
-  var total=Math.max(0,subtotal-(order?.discount_amount||0)-discount);
+  // Single source of truth: redeem_coupon writes the redemption row + bumps
+  // usage_count atomically, and re-validates against the live cart.
+  var{data:res,error}=await sb.rpc('redeem_coupon',{
+    p_code:code,
+    p_customer_id:order&&order.customer_id||null,
+    p_customer_email:order&&order.customer_email||null,
+    p_order_id:orderId,
+    p_subtotal:subtotal,
+    p_items:rpcItems
+  });
+  if(error){toast('Coupon error: '+error.message,'error');return;}
+  if(!res||res.ok===false){toast(res&&res.reason?res.reason:'Coupon rejected','error');return;}
+
+  var discount=Number(res.discount||0);
+  var total=Math.max(0,subtotal-(order&&order.discount_amount||0)-discount);
   await sb.from('salesweb_customer_orders').update({coupon_code:code,coupon_discount:discount,total:total,updated_at:new Date().toISOString()}).eq('id',orderId);
-  await sb.from('salesweb_coupons').update({usage_count:(coupon.usage_count||0)+1}).eq('id',coupon.id);
   toast('Coupon applied: -RM '+discount.toFixed(2));
   viewOrder(orderId);
 }
@@ -361,6 +546,62 @@ async function saveInternalNote(orderId){
   var note=document.getElementById('mo-notes').value;
   await sb.from('salesweb_customer_orders').update({internal_notes:note,updated_at:new Date().toISOString()}).eq('id',orderId);
   toast('Internal note saved');
+}
+
+// ═══════════════════════════════════════
+//  CREDIT INVOICE — mark paid from admin order modal
+// ═══════════════════════════════════════
+async function markCreditInvoicePaid(invoiceId,orderId){
+  if(!confirm('Mark this invoice as paid?'))return;
+  var{error}=await sb.from('salesweb_credit_invoices').update({status:'paid',paid_at:new Date().toISOString()}).eq('id',invoiceId);
+  if(error){toast('Failed: '+error.message,'error');return;}
+  var session=await sb.auth.getSession();
+  var user=session?.data?.session?.user?.email||'admin';
+  await sb.from('salesweb_order_timeline').insert([{order_id:orderId,status:'Invoice Paid',note:'Credit invoice marked as paid',changed_by:user}]);
+  toast('Invoice marked as paid');
+  viewOrder(orderId);
+}
+
+// ═══════════════════════════════════════
+//  PAYMENT TERMS (cash / credit)
+// ═══════════════════════════════════════
+async function updateOrderPaymentTerms(orderId){
+  var newTerms=document.getElementById('mo-terms-select').value;
+  var period=(document.getElementById('mo-credit-period')||{}).value||'';
+  period=period.trim();
+  var{data:order}=await sb.from('salesweb_customer_orders').select('payment_terms,credit_billing_period,status').eq('id',orderId).single();
+  if(!order){toast('Order not found','error');return;}
+  var oldTerms=order.payment_terms==='credit'?'credit':'cash';
+  if(newTerms===oldTerms&&period===(order.credit_billing_period||'')){toast('No changes');return;}
+  if(newTerms==='credit'&&oldTerms!=='credit'){
+    if(!confirm('Switch this order to CREDIT terms?\n\nThe total will count toward credit outstanding until billed.'))return;
+  }
+  var update={payment_terms:newTerms,updated_at:new Date().toISOString()};
+  if(newTerms==='credit')update.credit_billing_period=period||null;
+  else{update.credit_billing_period=null;update.credit_billed_at=null;}
+  var{error}=await sb.from('salesweb_customer_orders').update(update).eq('id',orderId);
+  if(error){toast('Error: '+error.message,'error');return;}
+  var session=await sb.auth.getSession();
+  var user=session?.data?.session?.user?.email||'admin';
+  var note='Payment terms changed from '+oldTerms.toUpperCase()+' to '+newTerms.toUpperCase();
+  if(newTerms==='credit'&&period)note+=' (period: '+period+')';
+  await sb.from('salesweb_order_timeline').insert([{order_id:orderId,status:order.status,note:note,changed_by:user}]);
+  toast('Payment terms updated');
+  viewOrder(orderId);
+}
+
+async function setOrderCreditBilled(orderId,billed){
+  var{data:order}=await sb.from('salesweb_customer_orders').select('payment_terms,status').eq('id',orderId).single();
+  if(!order){toast('Order not found','error');return;}
+  if(order.payment_terms!=='credit'){toast('Order is not on credit terms','error');return;}
+  var update={credit_billed_at:billed?new Date().toISOString():null,updated_at:new Date().toISOString()};
+  var{error}=await sb.from('salesweb_customer_orders').update(update).eq('id',orderId);
+  if(error){toast('Error: '+error.message,'error');return;}
+  var session=await sb.auth.getSession();
+  var user=session?.data?.session?.user?.email||'admin';
+  await sb.from('salesweb_order_timeline').insert([{order_id:orderId,status:order.status,note:billed?'Credit marked as Billed':'Credit marked as Unbilled',changed_by:user}]);
+  toast(billed?'Marked as Billed':'Marked as Unbilled');
+  viewOrder(orderId);
 }
 
 // ═══════════════════════════════════════
@@ -412,30 +653,28 @@ async function loadTimeline(orderId){
   var{data}=await sb.from('salesweb_order_timeline').select('*').eq('order_id',orderId).order('created_at',{ascending:true});
   var el=document.getElementById('mo-timeline');
 
-  // Always include "Order Placed" as first entry
+  // Build entries in chronological order, with the synthetic "Order Placed"
+  // anchored at the start, then reverse for display (newest on top).
   var entries=[{status:'Order Placed',note:'Order created',created_at:null,changed_by:'System'}];
-
   if(data&&data.length){
-    // Use order created_at for first entry
     entries[0].created_at=data[0].created_at;
     data.forEach(function(t){entries.push(t);});
   }
+  entries.reverse();
 
   var html='<div style="position:relative;padding-left:24px;">';
-  // Vertical line
   html+='<div style="position:absolute;left:7px;top:4px;bottom:4px;width:2px;background:var(--border);"></div>';
 
   entries.forEach(function(t,i){
-    var isLast=i===entries.length-1;
+    var isLatest=i===0;
     var dt=t.created_at?new Date(t.created_at).toLocaleString('en-MY',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
-    var dotColor=isLast?'var(--green)':'var(--border2)';
-    var dotSize=isLast?'12px':'10px';
+    var dotColor=isLatest?'var(--green)':'var(--border2)';
+    var dotSize=isLatest?'12px':'10px';
+    var latestBadge=isLatest?' <span style="display:inline-block;font-size:9px;font-weight:700;color:#fff;background:var(--green);padding:1px 6px;border-radius:10px;letter-spacing:.05em;text-transform:uppercase;vertical-align:middle;margin-left:.3rem;">Latest</span>':'';
 
     html+='<div style="position:relative;padding-bottom:1rem;margin-bottom:.3rem;">';
-    // Dot
     html+='<div style="position:absolute;left:-24px;top:3px;width:'+dotSize+';height:'+dotSize+';border-radius:50%;background:'+dotColor+';border:2px solid #fff;box-shadow:0 0 0 2px '+dotColor+';"></div>';
-    // Content
-    html+='<div style="font-size:13px;font-weight:600;color:var(--ink);">'+esc(t.status)+'</div>';
+    html+='<div style="font-size:13px;font-weight:'+(isLatest?'700':'600')+';color:var(--ink);">'+esc(t.status)+latestBadge+'</div>';
     if(t.note)html+='<div style="font-size:12px;color:var(--ink3);margin-top:.1rem;">'+esc(t.note)+'</div>';
     html+='<div style="font-size:10px;color:var(--ink4);margin-top:.15rem;">'+dt+(t.changed_by?' · '+esc(t.changed_by):'')+'</div>';
     html+='</div>';
@@ -447,16 +686,41 @@ async function loadTimeline(orderId){
 // ═══════════════════════════════════════
 //  LOYALTY POINTS (on Paid)
 // ═══════════════════════════════════════
-async function issuePoints(orderId,totalAmount){
-  // 1 point per RM 100
-  var points=Math.floor(totalAmount/100);
-  if(points<=0)return;
-  await sb.from('salesweb_customer_orders').update({points_issued:points}).eq('id',orderId);
+// Points formula is configurable from admin → Points Settings (stored as
+// JSON in salesweb_app_settings.key='points_config'):
+//
+//   points = floor(total / earn_rm) * earn_pts
+//
+// The number we save on the order is a SNAPSHOT — later changes to the
+// rate won't retroactively recalculate past orders (matches the spec).
+async function issuePoints(orderId, totalAmount) {
+  // Read configurable earn rate, fall back to RM1=1pt if no row.
+  var earnRm = 1, earnPts = 1;
+  try {
+    var { data } = await sb.from('salesweb_app_settings')
+      .select('value').eq('key', 'points_config').maybeSingle();
+    if (data && data.value) {
+      var cfg = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+      if (cfg && cfg.earn_rm)  earnRm  = Math.max(0.01, Number(cfg.earn_rm)  || 1);
+      if (cfg && cfg.earn_pts !== undefined) earnPts = Math.max(0, Number(cfg.earn_pts) || 0);
+    }
+  } catch (e) { console.warn('[points] config load failed, using defaults:', e); }
 
-  // Log
-  var session=await sb.auth.getSession();
-  var user=session?.data?.session?.user?.email||'admin';
-  await sb.from('salesweb_order_timeline').insert([{order_id:orderId,status:'Points Issued',note:points+' loyalty points issued (RM '+totalAmount.toFixed(2)+' @ 1pt/RM100)',changed_by:user}]);
+  var amt    = Number(totalAmount) || 0;
+  var points = Math.floor(amt / earnRm) * earnPts;
+  if (points <= 0) return;
+
+  await sb.from('salesweb_customer_orders')
+    .update({ points_issued: points }).eq('id', orderId);
+
+  var session = await sb.auth.getSession();
+  var user = session?.data?.session?.user?.email || 'admin';
+  await sb.from('salesweb_order_timeline').insert([{
+    order_id: orderId,
+    status: 'Points Issued',
+    note: points + ' loyalty points issued (RM ' + amt.toFixed(2) + ' @ ' + earnPts + ' pt per RM ' + earnRm + ')',
+    changed_by: user
+  }]);
 }
 
 // ═══════════════════════════════════════
@@ -509,4 +773,333 @@ async function createALFromOrder(orderId,order){
     note:'Acknowledgement Letter '+alNumber+' auto-created in nursery system',
     changed_by:user
   }]);
+}
+
+// ═══════════════════════════════════════
+//  EDIT — CUSTOMER DETAILS
+// ═══════════════════════════════════════
+function toggleEditCustomer(){
+  var view=document.getElementById('mo-customer-view');
+  var edit=document.getElementById('mo-customer-edit');
+  if(!view||!edit)return;
+  var isEditing=edit.style.display!=='none';
+  view.style.display=isEditing?'':'none';
+  edit.style.display=isEditing?'none':'';
+}
+
+async function saveCustomerDetails(orderId){
+  var name=(document.getElementById('mo-cust-name').value||'').trim();
+  var email=(document.getElementById('mo-cust-email').value||'').trim();
+  var address=(document.getElementById('mo-cust-address').value||'').trim();
+  var{data:order}=await sb.from('salesweb_customer_orders').select('customer_name,customer_email,shipping_address,status').eq('id',orderId).single();
+  if(!order){toast('Order not found','error');return;}
+  var{error}=await sb.from('salesweb_customer_orders').update({customer_name:name,customer_email:email,shipping_address:address,updated_at:new Date().toISOString()}).eq('id',orderId);
+  if(error){toast('Error: '+error.message,'error');return;}
+  var changes=[];
+  if(name!==(order.customer_name||''))changes.push('name');
+  if(email!==(order.customer_email||''))changes.push('email');
+  if(address!==(order.shipping_address||''))changes.push('shipping address');
+  if(changes.length){
+    var session=await sb.auth.getSession();
+    var user=session?.data?.session?.user?.email||'admin';
+    await sb.from('salesweb_order_timeline').insert([{order_id:orderId,status:order.status,note:'Customer details updated ('+changes.join(', ')+')',changed_by:user}]);
+  }
+  toast('Customer details saved');
+  viewOrder(orderId);
+}
+
+// ═══════════════════════════════════════
+//  EDIT — BILLING DETAILS
+// ═══════════════════════════════════════
+function toggleEditBilling(){
+  var view=document.getElementById('mo-billing-view');
+  var edit=document.getElementById('mo-billing-edit');
+  if(!view||!edit)return;
+  var isEditing=edit.style.display!=='none';
+  view.style.display=isEditing?'':'none';
+  edit.style.display=isEditing?'none':'';
+}
+
+async function saveBillingDetails(orderId){
+  var name=(document.getElementById('mo-bill-name').value||'').trim();
+  var tax=(document.getElementById('mo-bill-tax').value||'').trim();
+  var{data:order}=await sb.from('salesweb_customer_orders').select('billing_name,billing_tax_id,status').eq('id',orderId).single();
+  if(!order){toast('Order not found','error');return;}
+  var{error}=await sb.from('salesweb_customer_orders').update({billing_name:name,billing_tax_id:tax,updated_at:new Date().toISOString()}).eq('id',orderId);
+  if(error){toast('Error: '+error.message,'error');return;}
+  var changes=[];
+  if(name!==(order.billing_name||''))changes.push('billing name');
+  if(tax!==(order.billing_tax_id||''))changes.push('tax ID');
+  if(changes.length){
+    var session=await sb.auth.getSession();
+    var user=session?.data?.session?.user?.email||'admin';
+    await sb.from('salesweb_order_timeline').insert([{order_id:orderId,status:order.status,note:'Billing details updated ('+changes.join(', ')+')',changed_by:user}]);
+  }
+  toast('Billing details saved');
+  viewOrder(orderId);
+}
+
+// ═══════════════════════════════════════
+//  EDIT — ORDER ITEMS (qty / price / add / delete)
+// ═══════════════════════════════════════
+async function renderItemsEditMode(orderId){
+  var{data:items}=await sb.from('salesweb_order_items').select('*').eq('order_id',orderId).order('id');
+  items=items||[];
+  window._editItems=items.map(function(it){return{id:it.id,product_id:it.product_id||null,product_name:it.product_name||'',unit_price:Number(it.unit_price)||0,quantity:Number(it.quantity)||0,_action:'keep'};});
+  drawItemsEditTable(orderId);
+}
+
+function drawItemsEditTable(orderId){
+  var all=window._editItems||[];
+  var rows=all.filter(function(r){return r._action!=='delete';});
+  var subtotalNow=rows.reduce(function(s,r){return s+(Number(r.unit_price)||0)*(Number(r.quantity)||0);},0);
+  var html='<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:.5rem .7rem;font-size:11px;color:#92400e;margin-bottom:.5rem;">⚠️ Editing items will recalculate the order total (discount and coupon are preserved). Click <strong>Save Changes</strong> when done.</div>';
+  html+='<table class="data-table"><thead><tr><th>Product</th><th style="text-align:right;width:110px;">Price (RM)</th><th style="text-align:right;width:80px;">Qty</th><th style="text-align:right;width:100px;">Subtotal</th><th style="width:40px;"></th></tr></thead><tbody>';
+  if(!rows.length){
+    html+='<tr><td colspan="5" style="text-align:center;font-size:12px;color:var(--ink4);padding:.6rem;">No items — add one below</td></tr>';
+  }
+  rows.forEach(function(r){
+    var idx=all.indexOf(r);
+    var rowSub=(Number(r.unit_price)||0)*(Number(r.quantity)||0);
+    html+='<tr>';
+    html+='<td><input class="form-input" type="text" value="'+esc(r.product_name)+'" oninput="updateEditItem('+idx+',\'product_name\',this.value)" style="font-size:12px;padding:4px 8px;width:100%;"></td>';
+    html+='<td style="text-align:right;"><input class="form-input" type="number" step="0.01" min="0" value="'+r.unit_price+'" oninput="updateEditItemNum('+idx+',\'unit_price\',this.value,\''+orderId+'\')" style="font-size:12px;padding:4px 8px;text-align:right;width:100%;"></td>';
+    html+='<td style="text-align:right;"><input class="form-input" type="number" min="0" step="1" value="'+r.quantity+'" oninput="updateEditItemNum('+idx+',\'quantity\',this.value,\''+orderId+'\')" style="font-size:12px;padding:4px 8px;text-align:right;width:100%;"></td>';
+    html+='<td style="text-align:right;font-weight:600;font-size:12px;">RM '+rowSub.toFixed(2)+'</td>';
+    html+='<td style="text-align:center;"><button class="btn btn-outline btn-sm" onclick="removeEditItem('+idx+',\''+orderId+'\')" title="Remove" style="color:var(--red);font-size:11px;padding:2px 6px;">✕</button></td>';
+    html+='</tr>';
+  });
+  html+='</tbody></table>';
+  // Add new row
+  html+='<div style="display:flex;gap:.4rem;margin-top:.6rem;align-items:center;flex-wrap:wrap;background:var(--bg);padding:.5rem;border-radius:8px;">';
+  html+='<input class="form-input" id="mo-new-item-name" placeholder="Product name" style="flex:1;min-width:160px;font-size:12px;padding:6px 10px;">';
+  html+='<input class="form-input" id="mo-new-item-price" type="number" step="0.01" min="0" placeholder="Price" style="width:90px;font-size:12px;padding:6px 10px;">';
+  html+='<input class="form-input" id="mo-new-item-qty" type="number" min="1" step="1" value="1" style="width:60px;font-size:12px;padding:6px 10px;">';
+  html+='<button class="btn btn-outline btn-sm" onclick="addEditItem(\''+orderId+'\')" style="font-size:11px;">+ Add Item</button>';
+  html+='</div>';
+  // Running subtotal
+  html+='<div style="display:flex;justify-content:space-between;margin-top:.6rem;font-size:12px;color:var(--ink3);"><span>New subtotal preview</span><span style="font-weight:600;color:var(--ink);">RM '+subtotalNow.toFixed(2)+'</span></div>';
+  // Save / Cancel
+  html+='<div style="display:flex;gap:.4rem;margin-top:.8rem;">';
+  html+='<button class="btn btn-primary btn-sm" onclick="saveOrderItems(\''+orderId+'\')">Save Changes</button>';
+  html+='<button class="btn btn-outline btn-sm" onclick="viewOrder(\''+orderId+'\')">Cancel</button>';
+  html+='</div>';
+  document.getElementById('mo-items-container').innerHTML=html;
+}
+
+function updateEditItem(idx,field,value){
+  if(!window._editItems||!window._editItems[idx])return;
+  window._editItems[idx][field]=value;
+  if(window._editItems[idx]._action==='keep')window._editItems[idx]._action='update';
+}
+
+function updateEditItemNum(idx,field,value,orderId){
+  if(!window._editItems||!window._editItems[idx])return;
+  var num=field==='quantity'?(parseInt(value)||0):(parseFloat(value)||0);
+  window._editItems[idx][field]=num;
+  if(window._editItems[idx]._action==='keep')window._editItems[idx]._action='update';
+  // Update subtotal cells + preview without full redraw
+  var rowSub=(Number(window._editItems[idx].unit_price)||0)*(Number(window._editItems[idx].quantity)||0);
+  var rows=document.querySelectorAll('#mo-items-container table tbody tr');
+  // Match visible row index to underlying idx
+  var visible=window._editItems.filter(function(r){return r._action!=='delete';});
+  var visibleIdx=visible.indexOf(window._editItems[idx]);
+  if(visibleIdx>-1&&rows[visibleIdx]){
+    var subCell=rows[visibleIdx].cells[3];
+    if(subCell)subCell.textContent='RM '+rowSub.toFixed(2);
+  }
+  // Recompute total subtotal
+  var subtotal=visible.reduce(function(s,r){return s+(Number(r.unit_price)||0)*(Number(r.quantity)||0);},0);
+  var spans=document.querySelectorAll('#mo-items-container span');
+  if(spans.length>=2){
+    spans[spans.length-1].textContent='RM '+subtotal.toFixed(2);
+  }
+}
+
+function removeEditItem(idx,orderId){
+  if(!window._editItems||!window._editItems[idx])return;
+  var it=window._editItems[idx];
+  if(it._action==='add'){window._editItems.splice(idx,1);}
+  else it._action='delete';
+  drawItemsEditTable(orderId);
+}
+
+function addEditItem(orderId){
+  var nameEl=document.getElementById('mo-new-item-name');
+  var priceEl=document.getElementById('mo-new-item-price');
+  var qtyEl=document.getElementById('mo-new-item-qty');
+  var name=(nameEl.value||'').trim();
+  var price=parseFloat(priceEl.value)||0;
+  var qty=parseInt(qtyEl.value)||0;
+  if(!name){toast('Enter product name','error');return;}
+  if(qty<=0){toast('Quantity must be > 0','error');return;}
+  window._editItems=window._editItems||[];
+  window._editItems.push({id:null,product_id:null,product_name:name,unit_price:price,quantity:qty,_action:'add'});
+  drawItemsEditTable(orderId);
+}
+
+async function saveOrderItems(orderId){
+  var items=window._editItems||[];
+  // Validate
+  for(var k=0;k<items.length;k++){
+    var r=items[k];
+    if(r._action==='delete')continue;
+    if(!r.product_name||!r.product_name.trim()){toast('Each item needs a product name','error');return;}
+    if((Number(r.quantity)||0)<=0){toast('Each item needs quantity > 0','error');return;}
+    if((Number(r.unit_price)||0)<0){toast('Price cannot be negative','error');return;}
+  }
+  // Apply DB changes
+  for(var i=0;i<items.length;i++){
+    var it=items[i];
+    var sub=(Number(it.unit_price)||0)*(Number(it.quantity)||0);
+    sub=Math.round(sub*100)/100;
+    if(it._action==='delete'&&it.id){
+      var{error:dErr}=await sb.from('salesweb_order_items').delete().eq('id',it.id);
+      if(dErr){toast('Delete failed: '+dErr.message,'error');return;}
+    } else if(it._action==='add'){
+      var{error:iErr}=await sb.from('salesweb_order_items').insert([{order_id:orderId,product_id:it.product_id||null,product_name:it.product_name,unit_price:Number(it.unit_price)||0,quantity:Number(it.quantity)||0,subtotal:sub}]);
+      if(iErr){toast('Insert failed: '+iErr.message,'error');return;}
+    } else if(it._action==='update'&&it.id){
+      var{error:uErr}=await sb.from('salesweb_order_items').update({product_name:it.product_name,unit_price:Number(it.unit_price)||0,quantity:Number(it.quantity)||0,subtotal:sub}).eq('id',it.id);
+      if(uErr){toast('Update failed: '+uErr.message,'error');return;}
+    }
+  }
+  // Recalculate total — preserve existing discount + coupon
+  var{data:freshItems}=await sb.from('salesweb_order_items').select('subtotal').eq('order_id',orderId);
+  var subtotal=(freshItems||[]).reduce(function(s,r){return s+(Number(r.subtotal)||0);},0);
+  var{data:order}=await sb.from('salesweb_customer_orders').select('discount_amount,coupon_discount,status').eq('id',orderId).single();
+  var total=Math.max(0,subtotal-(order?.discount_amount||0)-(order?.coupon_discount||0));
+  total=Math.round(total*100)/100;
+  await sb.from('salesweb_customer_orders').update({total:total,updated_at:new Date().toISOString()}).eq('id',orderId);
+  // Log to timeline
+  var session=await sb.auth.getSession();
+  var user=session?.data?.session?.user?.email||'admin';
+  await sb.from('salesweb_order_timeline').insert([{order_id:orderId,status:order?.status||'Updated',note:'Order items edited — new subtotal RM '+subtotal.toFixed(2)+', new total RM '+total.toFixed(2),changed_by:user}]);
+  window._editItems=null;
+  toast('Items saved');
+  viewOrder(orderId);
+}
+
+// ═══════════════════════════════════════
+//  CREDIT INVOICE UPLOAD (from order modal monthly breakdown)
+// ═══════════════════════════════════════
+async function openInvoiceUploadModalForMonth(orderId,period){
+  // Pull the trigger order's customer_id + customer_name, then aggregate all
+  // of that customer's credit orders with uninvoiced collections in this
+  // period so the invoice covers the whole month, not just this one order.
+  var{data:trig}=await sb.from('salesweb_customer_orders').select('customer_id,customer_name').eq('id',orderId).single();
+  if(!trig||!trig.customer_id){toast('Order has no customer_id','error');return;}
+
+  var{data:custOrders}=await sb.from('salesweb_customer_orders').select('id').eq('customer_id',trig.customer_id).eq('payment_terms','credit').is('credit_invoice_id',null);
+  var custOrderIds=(custOrders||[]).map(function(o){return o.id;});
+  // Find which of those have collections inside the chosen period
+  var matchingIds=[];var totalQty=0;
+  if(custOrderIds.length){
+    var{data:colls}=await sb.from('salesweb_order_collections').select('order_id,collected_qty,collected_at').in('order_id',custOrderIds);
+    (colls||[]).forEach(function(c){
+      if(!c.collected_at)return;
+      if(String(c.collected_at).slice(0,7)!==period)return;
+      if(matchingIds.indexOf(c.order_id)<0)matchingIds.push(c.order_id);
+      totalQty+=(c.collected_qty||0);
+    });
+    // Legacy fallback: orders with single collected_at on the row itself
+    if(!colls||!colls.length){
+      var{data:legacy}=await sb.from('salesweb_customer_orders').select('id,collected_qty,collected_at').in('id',custOrderIds);
+      (legacy||[]).forEach(function(o){
+        if(!o.collected_at)return;
+        if(String(o.collected_at).slice(0,7)!==period)return;
+        if(matchingIds.indexOf(o.id)<0)matchingIds.push(o.id);
+        totalQty+=(o.collected_qty||0);
+      });
+    }
+  }
+  if(!matchingIds.length){
+    // Trigger order itself wasn't matched above (no collections recorded). Fall
+    // back to including just it so the admin can still issue something.
+    matchingIds=[orderId];
+  }
+
+  document.getElementById('miu-customer-id').value=trig.customer_id;
+  document.getElementById('miu-period').value=period;
+  document.getElementById('miu-trigger-order-id').value=orderId;
+  window._miuOrderIds=matchingIds;
+  document.getElementById('miu-customer-name').textContent=trig.customer_name||'—';
+  var parts=period.split('-');
+  document.getElementById('miu-period-label').textContent=new Date(+parts[0],+parts[1]-1,1).toLocaleString('en-MY',{month:'short',year:'numeric'})+' ('+period+')';
+  document.getElementById('miu-summary').textContent=matchingIds.length+' order'+(matchingIds.length===1?'':'s')+' · '+totalQty.toLocaleString()+' qty';
+  document.getElementById('miu-invoice-no').value='';
+  document.getElementById('miu-file').value='';
+  document.getElementById('miu-due').value='';
+  document.getElementById('miu-notes').value='';
+  document.getElementById('miu-error').textContent='';
+  openModal('modal-invoice-upload');
+}
+
+async function submitInvoiceUpload(){
+  var err=document.getElementById('miu-error');err.textContent='';
+  var custId=document.getElementById('miu-customer-id').value;
+  var period=document.getElementById('miu-period').value;
+  var triggerOrderId=document.getElementById('miu-trigger-order-id').value;
+  var orderIds=window._miuOrderIds||[];
+  var invNo=document.getElementById('miu-invoice-no').value.trim();
+  var due=document.getElementById('miu-due').value||null;
+  var notes=document.getElementById('miu-notes').value.trim()||null;
+  var fileInput=document.getElementById('miu-file');
+
+  if(!invNo){err.textContent='Invoice number is required.';return;}
+  if(!fileInput.files||!fileInput.files[0]){err.textContent='Pick a PDF or image.';return;}
+  if(!orderIds.length){err.textContent='No orders to invoice.';return;}
+
+  var btn=document.getElementById('miu-submit');btn.disabled=true;btn.textContent='Uploading…';
+  try{
+    var file=fileInput.files[0];
+    var safeInv=invNo.replace(/[^A-Za-z0-9_-]/g,'_');
+    var ext=(file.name.split('.').pop()||'pdf').toLowerCase();
+    var path='invoices/'+custId.substring(0,8)+'_'+period+'_'+safeInv+'_'+Date.now()+'.'+ext;
+    var{error:upErr}=await sb.storage.from('order-attachments').upload(path,file,{contentType:file.type,upsert:true});
+    if(upErr)throw upErr;
+    var{data:urlData}=sb.storage.from('order-attachments').getPublicUrl(path);
+    var fileUrl=urlData?.publicUrl||'';
+
+    var session=await sb.auth.getSession();
+    var uid=session?.data?.session?.user?.id||null;
+    var uemail=session?.data?.session?.user?.email||'admin';
+
+    // Compute total qty + total amount from the matching collections (used for
+    // invoice header — actual line items aren't tracked per invoice here).
+    var{data:colls}=await sb.from('salesweb_order_collections').select('order_id,collected_qty,collected_at').in('order_id',orderIds);
+    var totalQty=0;
+    (colls||[]).forEach(function(c){if(c.collected_at&&String(c.collected_at).slice(0,7)===period)totalQty+=(c.collected_qty||0);});
+    // Sum amount from orders' totals (proportional fallback)
+    var{data:ords}=await sb.from('salesweb_customer_orders').select('id,total,collected_qty').in('id',orderIds);
+    var totalAmt=(ords||[]).reduce(function(s,o){return s+(o.total||0);},0);
+
+    var{data:inv,error:invErr}=await sb.from('salesweb_credit_invoices').insert([{
+      customer_id:custId,billing_period:period,invoice_number:invNo,
+      total_qty:totalQty,total_amount:Number(totalAmt.toFixed(2)),
+      status:'issued',invoice_file_url:fileUrl,due_date:due,
+      issued_by:uid,notes:notes
+    }]).select().single();
+    if(invErr)throw invErr;
+
+    var nowIso=new Date().toISOString();
+    await sb.from('salesweb_customer_orders').update({
+      credit_invoice_id:inv.id,credit_billed_at:nowIso,credit_billing_period:period,updated_at:nowIso
+    }).in('id',orderIds);
+
+    // Fan-out: attachment + timeline per affected order
+    var attRows=orderIds.map(function(oid){return{order_id:oid,file_name:'Invoice '+invNo+'.'+ext,file_url:fileUrl,file_type:file.type||'application/pdf',uploaded_by:uemail};});
+    await sb.from('salesweb_order_attachments').insert(attRows);
+    var tlRows=orderIds.map(function(oid){return{order_id:oid,status:'Invoiced',note:'Invoice '+invNo+' issued for '+period,changed_by:uemail};});
+    await sb.from('salesweb_order_timeline').insert(tlRows);
+
+    closeModal('modal-invoice-upload');
+    toast('Invoice issued — '+orderIds.length+' order(s) linked');
+    viewOrder(triggerOrderId);
+  }catch(e){
+    console.error('[Invoice upload]',e);
+    err.textContent=(e?.message||'Upload failed')+'';
+  }finally{
+    btn.disabled=false;btn.textContent='Upload & Issue Invoice';
+  }
 }

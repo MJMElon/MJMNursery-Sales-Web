@@ -1691,41 +1691,14 @@
     <div class="login-modal-body">
       <div class="cl-status" id="cl-status"></div>
 
-      <!-- Mode tabs -->
-      <div class="lm-tabs" role="tablist">
-        <button class="lm-tab active" id="lm-tab-phone" onclick="clSwitchMode('phone')" role="tab">📱 Phone OTP</button>
-        <button class="lm-tab" id="lm-tab-email" onclick="clSwitchMode('email')" role="tab">✉ Email</button>
-      </div>
+      <!--
+        Phone OTP (SMS / WhatsApp) is intentionally hidden until a phone-number
+        sender is registered with Twilio. Re-add the .lm-tabs block + the
+        #lm-pane-phone div when ready.
+      -->
 
-      <!-- ── PHONE PANE (default) ── -->
-      <div class="lm-pane active" id="lm-pane-phone">
-        <div class="lm-helper">No password needed — we'll send a 6-digit code to your phone via SMS or WhatsApp.</div>
-
-        <div style="display:flex;flex-direction:column;gap:.65rem;">
-          <div id="cl-signup-fields-phone" style="display:none;">
-            <input type="text" id="cl-signup-name-phone" class="cl-input" placeholder="Full Name">
-          </div>
-
-          <input type="tel" id="cl-phone" class="cl-input" placeholder="Phone Number (e.g. +60 12 345 6789)" autocomplete="tel">
-
-          <div class="lm-otp-channels">
-            <button class="lm-channel-btn" id="cl-btn-sms" onclick="clSendOTP('sms')">📩 Send SMS</button>
-            <button class="lm-channel-btn wa" id="cl-btn-wa" onclick="clSendOTP('whatsapp')">💬 WhatsApp</button>
-          </div>
-
-          <div class="cl-otp-row" id="cl-otp-row-phone">
-            <input type="text" id="cl-otp-code-phone" class="cl-input" placeholder="Enter 6-digit code" maxlength="6" inputmode="numeric">
-            <button class="cl-otp-verify" onclick="clVerifyOTP('phone')">Verify</button>
-          </div>
-        </div>
-
-        <div style="display:flex;justify-content:center;align-items:center;margin-top:.9rem;">
-          <button class="cl-link" id="cl-btn-toggle-phone" onclick="clToggleSignup('phone')">First time? Create Account</button>
-        </div>
-      </div>
-
-      <!-- ── EMAIL PANE ── -->
-      <div class="lm-pane" id="lm-pane-email">
+      <!-- ── EMAIL PANE (only mode for now) ── -->
+      <div class="lm-pane active" id="lm-pane-email">
         <div style="display:flex;flex-direction:column;gap:.65rem;">
           <div id="cl-signup-fields" style="display:none;">
             <input type="text" id="cl-signup-name" class="cl-input" placeholder="Full Name" style="margin-bottom:.65rem;">
@@ -2844,7 +2817,7 @@ function openLoginModal(context) {
     var el = document.getElementById(id); if (el) el.classList.remove('show');
   });
   // Default to phone tab
-  clSwitchMode('phone');
+  clSwitchMode('email');
   // Update subtitle
   var subEl = document.getElementById('lm-sub');
   if (subEl) subEl.textContent = context === 'checkout'

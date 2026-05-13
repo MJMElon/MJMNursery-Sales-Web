@@ -94,6 +94,14 @@ async function viewOrder(id){
   var{data:items}=await sb.from('salesweb_order_items').select('*').eq('order_id',id);
   items=items||[];
 
+  // If this is a credit order linked to an invoice, fetch the invoice so the
+  // Credit Invoice section can render its current status / file / paid date.
+  var creditInvoice=null;
+  if(order.payment_terms==='credit'&&order.credit_invoice_id){
+    var{data:invRow}=await sb.from('salesweb_credit_invoices').select('id,invoice_number,billing_period,total_qty,total_amount,status,invoice_file_url,payment_proof_url,issued_at,due_date,paid_at,notes').eq('id',order.credit_invoice_id).maybeSingle();
+    creditInvoice=invRow||null;
+  }
+
   var shortId=order.order_number||order.id.substring(0,8).toUpperCase();
   document.getElementById('mo-title').textContent='Order #'+shortId;
 
@@ -225,6 +233,36 @@ async function viewOrder(id){
     html+='<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:.8rem 1rem;margin-bottom:1rem;">';
     html+='<div style="font-size:11px;font-weight:600;color:#92400e;margin-bottom:.3rem;">Customer Remark</div>';
     html+='<div style="font-size:13px;color:var(--ink2);">'+esc(order.customer_remark)+'</div></div>';
+  }
+
+  // ── 4b. Credit Invoice (only for credit-term orders) ──
+  if(order.payment_terms==='credit'){
+    html+='<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:.8rem 1rem;margin-bottom:1rem;">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem;">';
+    html+='<div style="font-size:13px;font-weight:600;color:#1d4ed8;">Credit Invoice</div>';
+    if(creditInvoice){
+      var statusColor=creditInvoice.status==='paid'?'background:#dcfce7;color:#166534;border:1px solid #bbf7d0;':creditInvoice.status==='overdue'?'background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;':'background:#fef3c7;color:#92400e;border:1px solid #fde68a;';
+      html+='<span class="badge" style="font-size:11px;padding:3px 9px;'+statusColor+'">'+(creditInvoice.status||'issued').toUpperCase()+'</span>';
+    }
+    html+='</div>';
+    if(creditInvoice){
+      html+='<div style="display:grid;grid-template-columns:auto 1fr;gap:.3rem .8rem;font-size:12px;color:var(--ink2);">';
+      html+='<span style="color:var(--ink3);">Invoice No</span><span style="font-weight:600;">'+esc(creditInvoice.invoice_number||'—')+'</span>';
+      html+='<span style="color:var(--ink3);">Billing period</span><span>'+esc(creditInvoice.billing_period||'—')+'</span>';
+      html+='<span style="color:var(--ink3);">Amount</span><span style="font-weight:600;">RM '+Number(creditInvoice.total_amount||0).toFixed(2)+' ('+(creditInvoice.total_qty||0)+' qty)</span>';
+      html+='<span style="color:var(--ink3);">Issued</span><span>'+(creditInvoice.issued_at?fmtDate(creditInvoice.issued_at):'—')+'</span>';
+      if(creditInvoice.due_date)html+='<span style="color:var(--ink3);">Due</span><span>'+fmtDate(creditInvoice.due_date)+'</span>';
+      if(creditInvoice.paid_at)html+='<span style="color:var(--ink3);">Paid</span><span style="color:#166534;font-weight:600;">'+fmtDate(creditInvoice.paid_at)+'</span>';
+      html+='</div>';
+      html+='<div style="display:flex;gap:.5rem;margin-top:.6rem;flex-wrap:wrap;">';
+      if(creditInvoice.invoice_file_url)html+='<a href="'+esc(creditInvoice.invoice_file_url)+'" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="font-size:11px;text-decoration:none;">📄 View Invoice</a>';
+      if(creditInvoice.payment_proof_url)html+='<a href="'+esc(creditInvoice.payment_proof_url)+'" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="font-size:11px;text-decoration:none;">🧾 View Payment Proof</a>';
+      if(creditInvoice.status!=='paid')html+='<button class="btn btn-primary btn-sm" onclick="markCreditInvoicePaid(\''+esc(creditInvoice.id)+'\',\''+id+'\')" style="font-size:11px;">✓ Mark as Paid</button>';
+      html+='</div>';
+    } else {
+      html+='<div style="font-size:12px;color:var(--ink3);">Not yet invoiced. This order will appear in the <strong>Credit</strong> tab of the operation to-do list once collected.</div>';
+    }
+    html+='</div>';
   }
 
   // ── Seller Note ──
@@ -459,6 +497,20 @@ async function saveInternalNote(orderId){
   var note=document.getElementById('mo-notes').value;
   await sb.from('salesweb_customer_orders').update({internal_notes:note,updated_at:new Date().toISOString()}).eq('id',orderId);
   toast('Internal note saved');
+}
+
+// ═══════════════════════════════════════
+//  CREDIT INVOICE — mark paid from admin order modal
+// ═══════════════════════════════════════
+async function markCreditInvoicePaid(invoiceId,orderId){
+  if(!confirm('Mark this invoice as paid?'))return;
+  var{error}=await sb.from('salesweb_credit_invoices').update({status:'paid',paid_at:new Date().toISOString()}).eq('id',invoiceId);
+  if(error){toast('Failed: '+error.message,'error');return;}
+  var session=await sb.auth.getSession();
+  var user=session?.data?.session?.user?.email||'admin';
+  await sb.from('salesweb_order_timeline').insert([{order_id:orderId,status:'Invoice Paid',note:'Credit invoice marked as paid',changed_by:user}]);
+  toast('Invoice marked as paid');
+  viewOrder(orderId);
 }
 
 // ═══════════════════════════════════════

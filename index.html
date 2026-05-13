@@ -94,7 +94,7 @@
 // Bump MJM_BUILD on every meaningful deploy.
 (function() {
   try {
-    var MJM_BUILD = '2026-05-13-fix-openlogin-ref';
+    var MJM_BUILD = '2026-05-13-deep-fetch-diag';
     var prev = null;
     try { prev = localStorage.getItem('mjm_build'); } catch (_) { return; }
     if (prev === MJM_BUILD) return;                // already on latest
@@ -1920,6 +1920,10 @@ async function sbFetch(table, params) {
     }
     if (qs.length) url += '?' + qs.join('&');
   }
+  // Remember the last URL we hit so the diagnostic empty-state can display
+  // it. Stripping the apikey was already done by living in headers, but the
+  // URL itself is still useful for debugging filter/encoding issues.
+  window._lastSbUrl = url;
   var res = await fetch(url, {
     headers: {
       'apikey': SUPA_KEY,
@@ -1927,7 +1931,12 @@ async function sbFetch(table, params) {
       'Accept': 'application/json'
     }
   });
-  if (!res.ok) throw new Error('sbFetch ' + table + ' → HTTP ' + res.status);
+  window._lastSbStatus = res.status;
+  if (!res.ok) {
+    var body = '';
+    try { body = (await res.text()).slice(0, 200); } catch (_) {}
+    throw new Error('sbFetch ' + table + ' → HTTP ' + res.status + (body ? ' · ' + body : ''));
+  }
   return await res.json();
 }
 
@@ -2020,6 +2029,7 @@ let lastFetchDebug = null;
 async function fetchProducts() {
   var debug = { startedAt: new Date().toISOString(), step: 'start' };
   var data = null;
+  // Try 1 — full query with sort_order
   try {
     data = await sbFetch('salesweb_products', {
       'select': '*',
@@ -2030,8 +2040,10 @@ async function fetchProducts() {
     debug.firstCount = (data && data.length) || 0;
     debug.step = 'done';
   } catch (e) {
-    // sort_order column might not exist on older deployments — retry without it
     debug.firstError = (e && e.message) ? e.message : String(e);
+  }
+  // Try 2 — drop sort_order (older deployments)
+  if (!data || !data.length) {
     try {
       data = await sbFetch('salesweb_products', {
         'select': '*',
@@ -2042,9 +2054,41 @@ async function fetchProducts() {
       debug.fallbackCount = (data && data.length) || 0;
       debug.step = 'done-fallback';
     } catch (e2) {
-      debug.step = 'threw'; debug.threw = (e2 && e2.message) ? e2.message : String(e2);
+      debug.fallbackError = (e2 && e2.message) ? e2.message : String(e2);
     }
   }
+  // Try 3 — boolean filter syntax variant (`is.true` instead of `eq.true`).
+  // PostgREST treats these subtly differently; if RLS or some quirk is
+  // hiding rows under one syntax it may not under the other.
+  if (!data || !data.length) {
+    try {
+      data = await sbFetch('salesweb_products', {
+        'select': '*',
+        'is_published': 'is.true',
+        'is_active': 'is.true'
+      });
+      debug.is2Count = (data && data.length) || 0;
+      debug.step = 'done-is';
+    } catch (e3) {
+      debug.is2Error = (e3 && e3.message) ? e3.message : String(e3);
+    }
+  }
+  // Try 4 (final, ANON-READ probe) — no filters, just a limit. If THIS
+  // returns rows we know RLS/auth is fine and the bug is in our filter
+  // syntax. If THIS returns 0 too, then RLS is blocking anon SELECT and
+  // we need a policy fix in Supabase, not a code fix here.
+  if (!data || !data.length) {
+    try {
+      var probe = await sbFetch('salesweb_products', { 'select': 'id,name,is_published,is_active', 'limit': '5' });
+      debug.probeCount = (probe && probe.length) || 0;
+      debug.probeSample = (probe && probe[0]) ? JSON.stringify(probe[0]).slice(0, 200) : null;
+    } catch (e4) {
+      debug.probeError = (e4 && e4.message) ? e4.message : String(e4);
+    }
+  }
+  // Capture the last URL + status so the diagnostic banner shows it.
+  debug.lastUrl = window._lastSbUrl || null;
+  debug.lastStatus = window._lastSbStatus || null;
   lastFetchDebug = debug;
   if (!data || !data.length) {
     products = [];
@@ -2140,16 +2184,25 @@ function renderProducts() {
     gridEl.innerHTML = normalProducts.map(renderProductCard).join('');
   } else if (!promoProducts.length) {
     var dbg = lastFetchDebug || {};
-    var dbgLine = 'count: ' + (dbg.firstCount || 0) + (dbg.fallbackCount !== undefined ? ' (fallback ' + dbg.fallbackCount + ')' : '');
-    if (dbg.firstError) dbgLine += ' · err: ' + dbg.firstError;
-    if (dbg.fallbackError) dbgLine += ' · fallback err: ' + dbg.fallbackError;
-    if (dbg.threw) dbgLine += ' · threw: ' + dbg.threw;
+    var dbgLine = 'step:' + (dbg.step || '?')
+      + ' · first:' + (dbg.firstCount || 0)
+      + (dbg.fallbackCount !== undefined ? ' · fb:' + dbg.fallbackCount : '')
+      + (dbg.is2Count !== undefined ? ' · is:' + dbg.is2Count : '')
+      + (dbg.probeCount !== undefined ? ' · probe:' + dbg.probeCount : '');
+    if (dbg.firstError) dbgLine += ' · firstErr:' + dbg.firstError;
+    if (dbg.fallbackError) dbgLine += ' · fbErr:' + dbg.fallbackError;
+    if (dbg.is2Error) dbgLine += ' · isErr:' + dbg.is2Error;
+    if (dbg.probeError) dbgLine += ' · probeErr:' + dbg.probeError;
+    if (dbg.probeSample) dbgLine += ' · sample:' + dbg.probeSample;
+    if (dbg.threw) dbgLine += ' · threw:' + dbg.threw;
+    if (dbg.lastStatus) dbgLine += ' · HTTP ' + dbg.lastStatus;
+    if (dbg.lastUrl) dbgLine += '\nURL: ' + dbg.lastUrl;
     gridEl.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:3rem 1.5rem;background:#fff;border:1px dashed var(--green-pale);border-radius:16px;">'
       + '<div style="font-size:42px;margin-bottom:.5rem;">&#127793;</div>'
       + '<div style="font-family:\'Cormorant Garamond\',serif;font-size:1.4rem;color:var(--text-dark);margin-bottom:.4rem;">New seedlings coming soon</div>'
       + '<div style="color:var(--text-light);font-size:13px;line-height:1.55;max-width:320px;margin:0 auto;">Our growers are preparing the next batch. Tap <strong style="color:var(--green-dark);">Book Seedling Collection</strong> to reserve a slot, or check back shortly.</div>'
       + '<button onclick="fetchProducts()" style="margin-top:1rem;background:var(--green-dark);color:#fff;border:none;padding:.5rem 1.2rem;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Reload products</button>'
-      + '<div style="margin-top:.8rem;font-size:10px;color:#bbb;font-family:monospace;word-break:break-all;">' + dbgLine + '</div>'
+      + '<div style="margin-top:.8rem;font-size:10px;color:#bbb;font-family:monospace;word-break:break-all;white-space:pre-wrap;text-align:left;max-width:520px;margin-left:auto;margin-right:auto;">' + esc(dbgLine) + '</div>'
       + '</div>';
   } else {
     gridEl.innerHTML = '';

@@ -94,7 +94,7 @@
 // Bump MJM_BUILD on every meaningful deploy.
 (function() {
   try {
-    var MJM_BUILD = '2026-05-13-popup-horizontal';
+    var MJM_BUILD = '2026-05-13-safari-diag';
     var prev = null;
     try { prev = localStorage.getItem('mjm_build'); } catch (_) { return; }
     if (prev === MJM_BUILD) return;                // already on latest
@@ -113,19 +113,63 @@
   } catch (_) {}
 })();
 </script>
+<script>
+// ── VISIBLE JS ERROR REPORTER ─────────────────────────────────────────────
+// Surfaces ANY uncaught JS error as a red banner at the top of the page so
+// we can finally see what's breaking on Safari/iOS. Without this, users on
+// non-Chrome browsers see a blank page with no clue. The banner only
+// appears if something throws — happy path is invisible.
+(function() {
+  function showErr(label, detail) {
+    try {
+      var b = document.getElementById('js-error-banner');
+      if (!b) {
+        b = document.createElement('div');
+        b.id = 'js-error-banner';
+        b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#dc2626;color:#fff;padding:.6rem 1rem;font:12px/1.4 -apple-system,BlinkMacSystemFont,sans-serif;text-align:left;box-shadow:0 4px 12px rgba(0,0,0,.3);white-space:pre-wrap;word-break:break-word;max-height:50vh;overflow-y:auto;';
+        (document.body || document.documentElement).appendChild(b);
+      }
+      // Append (don't replace) so multiple errors are all visible.
+      b.textContent = (b.textContent ? b.textContent + '\n\n' : '') + '⚠ ' + label + ': ' + detail;
+    } catch (_) {}
+  }
+  window.addEventListener('error', function(ev) {
+    var msg = (ev && (ev.message || (ev.error && ev.error.message))) || 'Unknown error';
+    var where = (ev && ev.filename) ? (' @ ' + ev.filename + ':' + (ev.lineno || '?') + ':' + (ev.colno || '?')) : '';
+    showErr('JS error', msg + where);
+  });
+  window.addEventListener('unhandledrejection', function(ev) {
+    var reason = ev && ev.reason;
+    var msg = (reason && (reason.message || String(reason))) || 'Unknown promise rejection';
+    showErr('Promise rejection', msg);
+  });
+})();
+</script>
 <title>MJM Nursery | MPOB Certified Oil Palm Seedlings</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  /* ── SPLASH POSTER ── */
+  /* ── SPLASH POSTER ──
+     Uses BOTH `inset:0` (modern Safari/Chrome) AND the legacy top/right/
+     bottom/left:0 quartet, so positioning still works on Safari < 14.5.
+     The keyframe `splashAutoFade` is a CSS-only safety net: even if every
+     line of JS on this page dies, the splash will visibly fade and stop
+     blocking the user's clicks 5 seconds after page load. */
   #splash-poster {
-    position: fixed; inset: 0; z-index: 9999;
+    position: fixed;
+    top: 0; right: 0; bottom: 0; left: 0;
+    inset: 0; z-index: 9999;
     background: linear-gradient(160deg, #1a1608 0%, #2c2210 30%, #3d321a 60%, #1a1608 100%);
     display: flex; align-items: center; justify-content: center;
     transition: opacity 1.2s ease-out;
     overflow: hidden;
+    /* CSS-only fade safety net — kicks in 4s after page load and runs for
+       1.5s. If JS dismiss fires first (normal happy path) the .fade-out
+       class wins via higher specificity + opacity:0 already. */
+    animation: splashAutoFade 1.5s ease-out 4s forwards;
   }
+  @keyframes splashAutoFade { to { opacity: 0; pointer-events: none; visibility: hidden; } }
   #splash-poster.fade-out { opacity: 0; pointer-events: none; }
 
   .splash-countdown {
@@ -1832,7 +1876,14 @@
   </a>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Pin supabase-js to the explicit UMD build so the browser gets a real
+     script (not the ESM build that some CDN auto-resolutions point to,
+     which fails silently as a classic <script src>). If jsDelivr returns
+     a bad response, the second tag tries unpkg as a fallback. The main
+     script below guards with `typeof supabase !== 'undefined'` so even
+     a complete CDN outage leaves the rest of the page running. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
+<script>if (typeof supabase === 'undefined') { document.write('\x3Cscript src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" crossorigin="anonymous">\x3C/script>'); }</script>
 <script>
 // ── SUPABASE ──
 var SUPA_URL='https://kibqjztozokohqmhqqqf.supabase.co';

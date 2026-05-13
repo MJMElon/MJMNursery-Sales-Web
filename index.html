@@ -94,7 +94,7 @@
 // Bump MJM_BUILD on every meaningful deploy.
 (function() {
   try {
-    var MJM_BUILD = '2026-05-13-deep-fetch-diag';
+    var MJM_BUILD = '2026-05-13-use-user-jwt';
     var prev = null;
     try { prev = localStorage.getItem('mjm_build'); } catch (_) { return; }
     if (prev === MJM_BUILD) return;                // already on latest
@@ -1909,6 +1909,22 @@ var _sbLoadPromise = null;
 // Raw fetch wrapper that talks directly to Supabase's REST API. No SDK,
 // no CDN dependency, works in every browser that has fetch() (IE11 is
 // the only modern browser without it — out of scope).
+// Pull the logged-in user's JWT out of supabase-js's localStorage entry.
+// The SDK key format for v2 is `sb-<projectRef>-auth-token`; the value is
+// JSON. By reading it directly we don't need the SDK to be loaded yet.
+function getStoredJwt() {
+  try {
+    var key = 'sb-' + (SUPA_URL.replace('https://','').split('.')[0]) + '-auth-token';
+    var raw = localStorage.getItem(key);
+    if (!raw) return null;
+    var p = JSON.parse(raw);
+    if (p && p.access_token) return p.access_token;
+    if (p && p.currentSession && p.currentSession.access_token) return p.currentSession.access_token;
+    if (Array.isArray(p) && p[0]) return p[0];   // some SDK versions store [token, ...]
+    return null;
+  } catch (_) { return null; }
+}
+
 async function sbFetch(table, params) {
   var url = SUPA_URL + '/rest/v1/' + table;
   if (params) {
@@ -1920,14 +1936,17 @@ async function sbFetch(table, params) {
     }
     if (qs.length) url += '?' + qs.join('&');
   }
-  // Remember the last URL we hit so the diagnostic empty-state can display
-  // it. Stripping the apikey was already done by living in headers, but the
-  // URL itself is still useful for debugging filter/encoding issues.
+  // If the user is logged in, send their access token as Authorization so
+  // PostgREST resolves them as `authenticated` role (broader RLS access)
+  // instead of `anon`. Falls back to the anon key if nobody is signed in.
+  var jwt = getStoredJwt();
+  var bearer = jwt || SUPA_KEY;
   window._lastSbUrl = url;
+  window._lastSbAuth = jwt ? 'user-jwt' : 'anon';
   var res = await fetch(url, {
     headers: {
       'apikey': SUPA_KEY,
-      'Authorization': 'Bearer ' + SUPA_KEY,
+      'Authorization': 'Bearer ' + bearer,
       'Accept': 'application/json'
     }
   });
@@ -2196,6 +2215,7 @@ function renderProducts() {
     if (dbg.probeSample) dbgLine += ' · sample:' + dbg.probeSample;
     if (dbg.threw) dbgLine += ' · threw:' + dbg.threw;
     if (dbg.lastStatus) dbgLine += ' · HTTP ' + dbg.lastStatus;
+    if (window._lastSbAuth) dbgLine += ' · auth:' + window._lastSbAuth;
     if (dbg.lastUrl) dbgLine += '\nURL: ' + dbg.lastUrl;
     gridEl.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:3rem 1.5rem;background:#fff;border:1px dashed var(--green-pale);border-radius:16px;">'
       + '<div style="font-size:42px;margin-bottom:.5rem;">&#127793;</div>'

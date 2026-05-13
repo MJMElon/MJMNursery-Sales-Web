@@ -811,8 +811,10 @@ async function placeOrder(){
   // Timeline entry — fire and forget (audit log, doesn't need to block redirect)
   _sb.from('salesweb_order_timeline').insert([{order_id:order.id,status:'Order Placed',note:'Order placed by customer',changed_by:email}]).then(function(){});
 
-  // Clear cart
-  sessionStorage.removeItem('mjm_cart');
+  // Don't clear the cart yet — the customer may back-navigate after creating
+  // the order (e.g. to add more items). The cart is cleared only on terminal
+  // success: payment-callback.html (online) or payment-proof.html (offline
+  // after proof upload).
 
   if(selectedPayMethod==='offline'){
     // Redirect to payment proof page

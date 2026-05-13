@@ -290,9 +290,10 @@ async function submitProof(){
   btn.style.background='#059669';
   showToast('Payment proof submitted! We will verify shortly.');
 
-  // Clean up
+  // Clean up — terminal success for the offline flow, safe to clear the cart now.
   sessionStorage.removeItem('mjm_pay_order_id');
   sessionStorage.removeItem('mjm_pay_order_total');
+  sessionStorage.removeItem('mjm_cart');
 }
 </script>
 </body>

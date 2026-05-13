@@ -94,7 +94,7 @@
 // Bump MJM_BUILD on every meaningful deploy.
 (function() {
   try {
-    var MJM_BUILD = '2026-05-13-fix-mobile-nav-checkout-404';
+    var MJM_BUILD = '2026-05-13-cart-persist-and-cancel-order';
     var prev = null;
     try { prev = localStorage.getItem('mjm_build'); } catch (_) { return; }
     if (prev === MJM_BUILD) return;                // already on latest
@@ -3106,8 +3106,52 @@ function openOrderDetail(ordNum){
   }
   h+='</div>';
 
+  // ── Cancel order action (only while the order is still unpaid) ──
+  // Per spec: as long as payment is NOT yet confirmed, the customer can cancel.
+  // "Pending Payment" is the unpaid state; everything past that (Order Confirmed
+  // and onward) is post-payment and can't be cancelled from the portal.
+  var canCancel = (o.status === 'Pending Payment');
+  if (canCancel) {
+    var idJsC = String(o.id || '').replace(/[\\'"<>]/g, '');
+    h += '<div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--green-pale);display:flex;justify-content:flex-end;">';
+    h += '<button onclick="pCancelOrder(\'' + idJsC + '\')" style="background:#fee2e2;color:#b91c1c;border:1.5px solid #fca5a5;padding:.5rem 1rem;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;" onmouseover="this.style.background=\'#dc2626\';this.style.color=\'#fff\';" onmouseout="this.style.background=\'#fee2e2\';this.style.color=\'#b91c1c\';">✕ Cancel Order</button>';
+    h += '</div>';
+  }
+
   document.getElementById('p-od-body').innerHTML=h;
   document.getElementById('p-order-detail-modal').classList.add('open');
+}
+
+// Customer-initiated order cancel. Allowed only while status === 'Pending Payment'
+// (UI already gates the button). Writes status=Cancelled and an audit timeline row.
+async function pCancelOrder(orderId){
+  var ord = P_ORDERS.find(function(x){return x.id === orderId;});
+  if (!ord) { showPortalToast('Order not found'); return; }
+  if (ord.status !== 'Pending Payment') { showPortalToast('Only unpaid orders can be cancelled'); return; }
+  if (!confirm('Cancel order #' + ord.id + '?\n\nThis will set the order to Cancelled and cannot be undone. The items will be released back to stock by the team.')) return;
+
+  try {
+    await loadSupabaseSdk();
+    if (!_sb) { showPortalToast('Connection error — try again'); return; }
+    var fullId = ord.fullId || orderId;
+    var email = sessionStorage.getItem('mjm_user_email') || 'customer';
+    var { error } = await _sb.from('salesweb_customer_orders')
+        .update({ status: 'Cancelled', updated_at: new Date().toISOString() })
+        .eq('id', fullId);
+    if (error) { showPortalToast('Cancel failed: ' + error.message); return; }
+    await _sb.from('salesweb_order_timeline').insert([{
+      order_id: fullId,
+      status: 'Cancelled',
+      note: 'Order cancelled by customer via portal',
+      changed_by: email
+    }]);
+    showPortalToast('Order cancelled');
+    document.getElementById('p-order-detail-modal').classList.remove('open');
+    // Refresh portal data so the order moves into the Cancelled state instantly.
+    try { await loadCustomerOrders(); pRenderOrders(); pRenderHistory(); } catch(e){ console.error('portal refresh:', e); }
+  } catch (e) {
+    showPortalToast('Cancel failed: ' + (e.message || e));
+  }
 }
 
 // Load real points data from DB

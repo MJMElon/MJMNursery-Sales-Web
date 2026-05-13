@@ -58,6 +58,8 @@ var billplzPaidAt=params.get('billplz[paid_at]')||'';
   var el=document.getElementById('result');
 
   if(billplzPaid){
+    // Payment confirmed — safe to clear the cart now (terminal success state).
+    try{sessionStorage.removeItem('mjm_cart');}catch(e){}
     el.innerHTML=
       '<div class="icon">✅</div>'+
       '<div class="title">Payment Successful!</div>'+

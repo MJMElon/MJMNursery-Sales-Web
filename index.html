@@ -77,6 +77,43 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
+<script>
+// ── BUILD-VERSION CACHE BUSTER ────────────────────────────────────────────
+// GitHub Pages + Android Chrome can stubbornly serve a stale cached index.html
+// even when the meta no-cache tags are present. This tiny IIFE runs before
+// anything else: if the cached HTML predates the version we last saw on a
+// successful visit, we bypass the HTTP cache once via a ?_v=<ts> query and
+// drop any service-worker caches that might be holding old responses.
+// Bump MJM_BUILD on every meaningful deploy.
+(function() {
+  var MJM_BUILD = '2026-05-13-credit-table';
+  try {
+    if (window.caches && caches.keys) {
+      caches.keys().then(function(keys) {
+        keys.forEach(function(k) { try { caches.delete(k); } catch (_) {} });
+      }).catch(function(){});
+    }
+    var prev = null;
+    try { prev = localStorage.getItem('mjm_build'); } catch (_) {}
+    if (prev && prev !== MJM_BUILD) {
+      try { localStorage.setItem('mjm_build', MJM_BUILD); } catch (_) {}
+      // First visit on a new build → reload once, bypassing the cache, so
+      // the browser fetches fresh assets. Guard against an infinite loop
+      // by only doing it if we don't already carry a recent ?_v stamp.
+      var url = new URL(location.href);
+      var carried = url.searchParams.get('_v');
+      var now = Date.now();
+      if (!carried || (now - Number(carried)) > 60000) {
+        url.searchParams.set('_v', String(now));
+        location.replace(url.href);
+        return;
+      }
+    } else if (!prev) {
+      try { localStorage.setItem('mjm_build', MJM_BUILD); } catch (_) {}
+    }
+  } catch (_) {}
+})();
+</script>
 <title>MJM Nursery | MPOB Certified Oil Palm Seedlings</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&display=swap" rel="stylesheet">
 <style>
@@ -972,10 +1009,10 @@
 -->
 <script>
 (function() {
-  function showNav() {
-    var n = document.getElementById('navbar');
-    if (n) n.style.display = '';
-  }
+  // showNav() used to flip navbar.style.display from 'none' → ''; the navbar
+  // no longer starts hidden so this is a no-op kept for compatibility with
+  // any old cached scripts that might still call it.
+  function showNav() {}
   function dismissSplash() {
     var s = document.getElementById('splash-poster');
     showNav();
@@ -1043,8 +1080,12 @@
 })();
 </script>
 
-<!-- NAV (hidden during splash, revealed after) -->
-<nav id="navbar" style="display:none;">
+<!-- NAV — Always present in the DOM. The splash overlay (z-index 9999, full
+     viewport) covers it visually until dismissed; no JS-controlled
+     display:none, so even if the splash script fails to run for ANY reason
+     (rare browser, parser bug, CSP, content blocker), the user still sees a
+     working header once the splash fades. -->
+<nav id="navbar">
   <div class="nav-logo" onclick="showPage('home')">
     <img id="nav-logo-img" src="https://cdn.store-assets.com/s/1408881/f/16655641.png" alt="MJM Nursery" style="height:140px;cursor:pointer;transition:transform .3s ease;" onmouseenter="showLogoOverlay()" onclick="event.stopPropagation();">
   </div>

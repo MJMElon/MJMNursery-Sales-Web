@@ -94,7 +94,7 @@
 // Bump MJM_BUILD on every meaningful deploy.
 (function() {
   try {
-    var MJM_BUILD = '2026-05-13-mobile-nav-popup-social';
+    var MJM_BUILD = '2026-05-13-fix-closemobilemenu';
     var prev = null;
     try { prev = localStorage.getItem('mjm_build'); } catch (_) { return; }
     if (prev === MJM_BUILD) return;                // already on latest
@@ -1916,7 +1916,15 @@
 </div>
 
 <script>
-// ── SUPABASE — ZERO-DEPENDENCY STOREFRONT MODE ────────────────────────────
+// Global mobile-menu close helper — inline onclicks in the mobile nav drawer
+// (Log In, My Account, Sign Out) call this. Defining it here, BEFORE the
+// main storefront <script>, guarantees the symbol exists even if a later
+// script errors out partway through. A missing closeMobileMenu used to
+// throw ReferenceError on tap, which halted execution and left the
+// product grid empty.
+function closeMobileMenu(){var l=document.getElementById('navLinks');if(l)l.classList.remove('open');}
+</script>
+<script>
 // Previous build loaded @supabase/supabase-js from jsDelivr in the <head>
 // and called supabase.createClient() inline. On Safari/iOS that pipeline
 // was failing as cross-origin "Script error." with no detail — most

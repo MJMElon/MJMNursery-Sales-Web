@@ -167,7 +167,7 @@
   .splash-center { display: flex; align-items: center; justify-content: center; gap: 1.5rem; margin: 1rem 0; position: relative; }
   @media(max-width:600px) {
     .splash-center { flex-direction: column; gap: .4rem; margin: .4rem 0; }
-    .splash-logo { height: 95px !important; margin-bottom: .25rem !important; }
+    .splash-logo { height: 124px !important; margin-bottom: .25rem !important; }
     .splash-seedling { height: 140px !important; }
     .splash-glow { width: 180px !important; height: 180px !important; }
     .splash-feature { flex: 0 0 auto !important; padding: .4rem .7rem !important; }
@@ -1085,7 +1085,7 @@
         <div class="cart-footer" id="cartFooter"></div>
       </div>
     </div>
-    <button class="hamburger" id="hamburger" aria-label="Menu">
+    <button class="hamburger" id="hamburger" aria-label="Menu" onclick="var l=document.getElementById('navLinks');if(l)l.classList.toggle('open');">
       <span></span><span></span><span></span>
     </button>
   </div>
@@ -1956,9 +1956,6 @@ function renderProducts() {
   if (normalProducts.length) {
     gridEl.innerHTML = normalProducts.map(renderProductCard).join('');
   } else if (!promoProducts.length) {
-<<<<<<< Updated upstream
-    gridEl.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--text-light);font-size:13px;">No products available at the moment.</div>';
-=======
     var dbg = lastFetchDebug || {};
     var dbgLine = 'count: ' + (dbg.firstCount || 0) + (dbg.fallbackCount !== undefined ? ' (fallback ' + dbg.fallbackCount + ')' : '');
     if (dbg.firstError) dbgLine += ' · err: ' + dbg.firstError;
@@ -1971,7 +1968,6 @@ function renderProducts() {
       + '<button onclick="fetchProducts()" style="margin-top:1rem;background:var(--green-dark);color:#fff;border:none;padding:.5rem 1.2rem;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Reload products</button>'
       + '<div style="margin-top:.8rem;font-size:10px;color:#bbb;font-family:monospace;word-break:break-all;">' + dbgLine + '</div>'
       + '</div>';
->>>>>>> Stashed changes
   } else {
     gridEl.innerHTML = '';
   }

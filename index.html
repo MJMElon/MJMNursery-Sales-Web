@@ -86,7 +86,7 @@
 // drop any service-worker caches that might be holding old responses.
 // Bump MJM_BUILD on every meaningful deploy.
 (function() {
-  var MJM_BUILD = '2026-05-13-credit-table';
+  var MJM_BUILD = '2026-05-13-card-qty-add';
   try {
     if (window.caches && caches.keys) {
       caches.keys().then(function(keys) {
@@ -431,6 +431,18 @@
   .btn-add { background: var(--green-dark); color: var(--white); border: none; border-radius: 6px; padding: .45rem .9rem; font-size: 12px; font-weight: 500; cursor: pointer; transition: background .2s; display: flex; align-items: center; gap: .3rem; font-family: 'DM Sans', sans-serif; }
   .btn-add:hover { background: var(--green-mid); }
   .btn-add:disabled { background: #ccc; cursor: not-allowed; }
+
+  /* In-card qty + Add controls (main page can add to cart without opening popup) */
+  .card-qty-row { display:flex; align-items:center; justify-content:center; gap:.4rem; margin: .7rem 0 .5rem; }
+  .card-qty-btn { width:28px; height:28px; border-radius:6px; border:1.5px solid var(--green-pale); background:#fff; color:var(--green-dark); font-size:1rem; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; line-height:1; font-family:inherit; user-select:none; transition: all .15s; }
+  .card-qty-btn:hover { background: var(--green-pale); }
+  .card-qty-btn:active { transform: scale(.95); }
+  .card-qty-input { width:54px; height:28px; text-align:center; border:1.5px solid var(--green-pale); border-radius:6px; font-size:13px; font-weight:700; color: var(--text-dark); font-family: 'DM Sans', sans-serif; outline:none; padding:0 4px; }
+  .card-qty-input:focus { border-color: var(--green-mid); }
+  .card-add-btn { width:100%; justify-content:center; padding: .55rem .9rem; font-size: 13px; font-weight: 600; border-radius: 8px; }
+  .special-showcase .card-qty-btn { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.25); color: var(--gold-light); }
+  .special-showcase .card-qty-btn:hover { background: rgba(255,255,255,.18); }
+  .special-showcase .card-qty-input { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.2); color: #fff; }
 
   /* ── (about section removed — merged into features strip) ── */
 
@@ -1145,8 +1157,8 @@
   <!-- Special For You section -->
   <section class="salesweb_products" id="salesweb_products" style="padding-top:3rem;">
     <div style="text-align:center;margin-bottom:2rem;">
-      <span class="section-label">Handpicked For You</span>
-      <h2 class="section-title">Special <em>For You</em></h2>
+      <span class="section-label">Curated Selection</span>
+      <h2 class="section-title">All Seedling Handpicked <em>Special For You</em></h2>
     </div>
     <div class="special-showcase" id="specialGrid"></div>
   </section>
@@ -1790,23 +1802,18 @@
   <p>&copy; 2026 Mega Jutamas Sdn Bhd. All rights reserved.</p>
 </div>
 
-<!-- Product Popup -->
+<!-- Product Popup — read-only detail view (photo + description). Quantity
+     selection + Add to Cart live on the main page product card. -->
 <div class="product-popup-overlay" id="productPopup" onclick="if(event.target===this)closeProductPopup()">
   <div class="product-popup">
     <div class="pp-img" id="ppImg"></div>
     <div class="pp-body">
       <div class="pp-name" id="ppName"></div>
-      <div class="pp-desc" id="ppDesc"></div>
+      <div class="pp-desc" id="ppDesc" style="white-space:pre-wrap;line-height:1.55;"></div>
       <div class="pp-price" id="ppPrice"></div>
       <div class="pp-stock" id="ppStock"></div>
-      <div class="pp-qty-row">
-        <button class="pp-qty-btn" onclick="changePopupQty(-1)">−</button>
-        <input type="text" class="pp-qty-val" id="ppQty" value="1" onblur="setPopupQty(this.value);this.value=popupQty" onkeydown="if(event.key==='Enter'){this.blur();}" style="width:100px;text-align:center;border:1.5px solid var(--green-pale);border-radius:10px;font-size:1.2rem;font-weight:700;padding:8px;font-family:'DM Sans',sans-serif;outline:none;">
-        <button class="pp-qty-btn" onclick="changePopupQty(1)">+</button>
-      </div>
-      <div class="pp-actions">
-        <button class="pp-close-btn" onclick="closeProductPopup()">Cancel</button>
-        <button class="pp-add-btn" id="ppAddBtn" onclick="addPopupToCart()">Add to Cart</button>
+      <div class="pp-actions" style="margin-top:1rem;">
+        <button class="pp-close-btn" onclick="closeProductPopup()" style="width:100%;">Close</button>
       </div>
     </div>
   </div>
@@ -1912,7 +1919,10 @@ async function fetchProducts() {
   }
 
   products = data.map(function(p) {
-    var sellLabel = (p.sell_month && p.sell_year) ? p.sell_month + ' ' + p.sell_year : (p.description || '');
+    // Only include the actual sell month/year here — DO NOT fall back to
+    // the description field, since description is reserved for the product
+    // popup and must never bleed onto the main card.
+    var sellLabel = (p.sell_month && p.sell_year) ? p.sell_month + ' ' + p.sell_year : '';
     var status = 'available';
     var badge = null;
     if (p.stock_qty <= 0) { status = 'sold-out'; badge = 'Sold Out'; }
@@ -1927,6 +1937,7 @@ async function fetchProducts() {
       id: p.id,
       name: p.name,
       month: sellLabel,
+      description: p.description || '',
       price: priceHtml,
       priceNum: p.price || 0,
       stock: p.stock_qty || 0,
@@ -1943,12 +1954,36 @@ function renderProductCard(p) {
   var bc = p.status === 'sold-out' ? 'sold-out' : p.status === 'coming-soon' ? 'coming-soon' : '';
   var badge = p.badge ? '<div class="product-badge ' + bc + '">' + esc(p.badge) + '</div>' : '';
   var canAdd = p.status === 'available' || p.status === 'promo';
-  var btnLabel = p.status === 'sold-out' ? 'Sold Out' : p.status === 'coming-soon' ? 'Coming Soon' : 'Add';
   var imgHtml = p.image_url
     ? '<img src="' + esc(p.image_url) + '" style="width:100%;height:100%;object-fit:cover;" alt="' + esc(p.name) + '">'
     : '<svg viewBox="0 0 80 100" fill="none"><path d="M40 85 Q25 65 25 50 Q25 30 40 15 Q55 30 55 50 Q55 65 40 85Z" fill="#6A9B6E" opacity=".4"/><path d="M40 85 Q20 70 18 55 Q16 38 30 25" stroke="#3E6B42" stroke-width="1.5" fill="none" opacity=".5"/><path d="M40 85 Q60 70 62 55 Q64 38 50 25" stroke="#3E6B42" stroke-width="1.5" fill="none" opacity=".5"/><rect x="32" y="85" width="16" height="12" rx="2" fill="#2D4A30" opacity=".6"/></svg>';
   var idx = products.indexOf(p);
-  return '<div class="product-card"><div class="product-img">' + badge + imgHtml + '</div><div class="product-info"><div class="product-name">' + esc(p.name) + '</div><div class="product-month">' + esc(p.month) + '</div><div class="product-footer"><div><div class="product-price">' + esc(p.price) + '</div><div class="product-stock">' + (p.stock > 0 ? p.stock.toLocaleString() + ' left' : 'Out of stock') + '</div></div><button class="btn-add" ' + (!canAdd ? 'disabled' : '') + ' onclick="openProductPopup(' + idx + ')">' + (canAdd ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>' : '') + btnLabel + '</button></div></div></div>';
+
+  // Main page card: image + name open the popup (read-only product detail).
+  // Qty +/-, qty input, and Add-to-Cart are clickable directly on the card —
+  // stopPropagation prevents those clicks from bubbling up to the popup
+  // opener. Description NEVER renders on the card by spec.
+  var qtyRow = canAdd
+    ? '<div class="card-qty-row" onclick="event.stopPropagation();">'
+      + '<button class="card-qty-btn" type="button" onclick="event.stopPropagation();changeCardQty(' + idx + ',-1)" aria-label="Decrease quantity">−</button>'
+      + '<input type="text" class="card-qty-input" id="cardQty-' + idx + '" value="1" inputmode="numeric" onclick="event.stopPropagation()" onkeydown="if(event.key===\'Enter\')this.blur();" onblur="setCardQty(' + idx + ',this.value)">'
+      + '<button class="card-qty-btn" type="button" onclick="event.stopPropagation();changeCardQty(' + idx + ',1)" aria-label="Increase quantity">+</button>'
+      + '</div>'
+    : '';
+  var addLabel = p.status === 'sold-out' ? 'Sold Out' : p.status === 'coming-soon' ? 'Coming Soon' : 'Add to Cart';
+  var addBtn = '<button class="btn-add card-add-btn" type="button" ' + (canAdd ? '' : 'disabled ') + 'onclick="event.stopPropagation();addCardToCart(' + idx + ')">' + addLabel + '</button>';
+
+  return '<div class="product-card" onclick="openProductPopup(' + idx + ')">'
+       +   '<div class="product-img">' + badge + imgHtml + '</div>'
+       +   '<div class="product-info">'
+       +     '<div class="product-name">' + esc(p.name) + '</div>'
+       +     (p.month ? '<div class="product-month">' + esc(p.month) + '</div>' : '')
+       +     '<div class="product-price" style="margin-top:.3rem;">' + esc(p.price) + '</div>'
+       +     '<div class="product-stock">' + (p.stock > 0 ? p.stock.toLocaleString() + ' left' : 'Out of stock') + '</div>'
+       +     qtyRow
+       +     addBtn
+       +   '</div>'
+       + '</div>';
 }
 
 function renderProducts() {
@@ -1997,23 +2032,30 @@ var popupQty = 1;
 function fmtRM(n) { return 'RM ' + n.toLocaleString('en-MY', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
 function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
-// Product popup
+// Product popup — read-only product detail (photo + description). Qty input
+// and Add-to-Cart now live on the main page card, not in the popup.
 function openProductPopup(idx) {
   var p = products[idx];
   if (!p) return;
   popupProductIdx = idx;
   popupQty = 1;
 
-  // Image
   var imgEl = document.getElementById('ppImg');
   if (p.image_url) imgEl.innerHTML = '<img src="' + esc(p.image_url) + '">';
   else imgEl.innerHTML = '<div style="font-size:3rem;">🌱</div>';
 
   document.getElementById('ppName').textContent = p.name + (p.month ? ' — ' + p.month : '');
-  document.getElementById('ppDesc').textContent = p.month || '';
+  // ppDesc now shows the REAL product description (or a graceful fallback).
+  var descEl = document.getElementById('ppDesc');
+  if (p.description) {
+    descEl.textContent = p.description;
+    descEl.style.display = '';
+  } else {
+    descEl.textContent = '';
+    descEl.style.display = 'none';
+  }
   document.getElementById('ppPrice').textContent = 'RM ' + (p.priceNum || 0).toFixed(2);
   document.getElementById('ppStock').textContent = p.stock > 0 ? p.stock.toLocaleString() + ' available' : 'Out of stock';
-  document.getElementById('ppQty').value = 1;
   document.getElementById('productPopup').classList.add('open');
 }
 
@@ -2022,18 +2064,49 @@ function closeProductPopup() {
   popupProductIdx = -1;
 }
 
-function changePopupQty(delta) {
-  var p = products[popupProductIdx];
+// ── In-card quantity + Add to Cart (main page) ─────────────────────────────
+function changeCardQty(idx, delta) {
+  var p = products[idx];
   if (!p) return;
-  popupQty = Math.max(1, Math.min(p.stock || 999, popupQty + delta));
-  document.getElementById('ppQty').value = popupQty;
+  var input = document.getElementById('cardQty-' + idx);
+  if (!input) return;
+  var cur = parseInt(input.value) || 1;
+  var next = cur + delta;
+  next = Math.max(1, Math.min(p.stock || 999, next));
+  input.value = next;
 }
 
-function setPopupQty(val) {
-  var p = products[popupProductIdx];
+function setCardQty(idx, val) {
+  var p = products[idx];
   if (!p) return;
+  var input = document.getElementById('cardQty-' + idx);
+  if (!input) return;
   var n = parseInt(val) || 1;
-  popupQty = Math.max(1, Math.min(p.stock || 999, n));
+  n = Math.max(1, Math.min(p.stock || 999, n));
+  input.value = n;
+}
+
+function addCardToCart(idx) {
+  var p = products[idx];
+  if (!p) return;
+  if (p.status !== 'available' && p.status !== 'promo') return;
+  var input = document.getElementById('cardQty-' + idx);
+  var qty = parseInt(input ? input.value : '1') || 1;
+  qty = Math.max(1, Math.min(p.stock || 999, qty));
+  var priceNum = p.priceNum || 0;
+  var existing = cart.find(function(c) { return c.id === p.id; });
+  if (existing) {
+    existing.qty = Math.min((existing.qty || 0) + qty, p.stock || 999);
+  } else {
+    cart.push({
+      id: p.id, name: p.name, month: p.month || '',
+      price: priceNum, priceHtml: p.price, qty: qty,
+      image_url: p.image_url || null, stock: p.stock || 0
+    });
+  }
+  updateCartUI();
+  if (typeof showPortalToast === 'function') showPortalToast(p.name + ' × ' + qty + ' added to cart');
+  if (input) input.value = 1;
 }
 
 function addPopupToCart() {

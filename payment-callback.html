@@ -58,11 +58,12 @@ var billplzPaidAt=params.get('billplz[paid_at]')||'';
   var el=document.getElementById('result');
 
   if(billplzPaid){
+    // Payment confirmed — safe to clear the cart now (terminal success state).
+    try{sessionStorage.removeItem('mjm_cart');}catch(e){}
     el.innerHTML=
       '<div class="icon">✅</div>'+
       '<div class="title">Payment Successful!</div>'+
-      '<div class="msg">Your payment has been received. Your order is now being processed.<br>You can view your order in My Account.</div>'+
-      '<a href="index.html" class="btn" onclick="sessionStorage.setItem(\'mjm_last_page\',\'portal\');return true;">View My Orders</a>';
+      '<div class="msg">Thank you. Your payment has been received and your order is now being processed.<br>You will receive an email confirmation shortly.</div>';
   } else {
     el.innerHTML=
       '<div class="icon">⚠️</div>'+

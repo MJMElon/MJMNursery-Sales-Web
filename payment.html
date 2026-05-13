@@ -788,33 +788,33 @@ async function placeOrder(){
 
   if(error){showToast('Error: '+error.message);btn.disabled=false;btn.textContent='Place Order';return;}
 
-  // Create order items & hold stock
+  // Create order items & hold stock in PARALLEL
   var items=cart.map(function(c){
     return{order_id:order.id,product_id:c.id,product_name:c.name+(c.month?' — '+c.month:''),quantity:c.qty,unit_price:c.price,subtotal:c.price*c.qty};
   });
-  await _sb.from('salesweb_order_items').insert(items);
 
-  // Deduct stock for each item (hold stock)
-  for(var i=0;i<cart.length;i++){
+  var stockHolds=cart.map(async function(c){
     try{
-      var{error:rpcErr}=await _sb.rpc('hold_product_stock',{p_product_id:cart[i].id,p_qty:cart[i].qty});
-      if(rpcErr){
-        // Fallback: direct stock_qty deduction
-        var{data:prod}=await _sb.from('salesweb_products').select('stock_qty').eq('id',cart[i].id).single();
-        if(prod){await _sb.from('salesweb_products').update({stock_qty:Math.max(0,(prod.stock_qty||0)-cart[i].qty),updated_at:new Date().toISOString()}).eq('id',cart[i].id);}
-      }
-    }catch(e){
-      // Fallback: direct stock_qty deduction
-      var{data:prod}=await _sb.from('salesweb_products').select('stock_qty').eq('id',cart[i].id).single();
-      if(prod){await _sb.from('salesweb_products').update({stock_qty:Math.max(0,(prod.stock_qty||0)-cart[i].qty),updated_at:new Date().toISOString()}).eq('id',cart[i].id);}
-    }
-  }
+      var{error:rpcErr}=await _sb.rpc('hold_product_stock',{p_product_id:c.id,p_qty:c.qty});
+      if(!rpcErr)return;
+    }catch(e){}
+    // Fallback: direct stock_qty deduction
+    var{data:prod}=await _sb.from('salesweb_products').select('stock_qty').eq('id',c.id).single();
+    if(prod){await _sb.from('salesweb_products').update({stock_qty:Math.max(0,(prod.stock_qty||0)-c.qty),updated_at:new Date().toISOString()}).eq('id',c.id);}
+  });
 
-  // Create timeline entry
-  await _sb.from('salesweb_order_timeline').insert([{order_id:order.id,status:'Order Placed',note:'Order placed by customer',changed_by:email}]);
+  await Promise.all([
+    _sb.from('salesweb_order_items').insert(items),
+    Promise.all(stockHolds)
+  ]);
 
-  // Clear cart
-  sessionStorage.removeItem('mjm_cart');
+  // Timeline entry — fire and forget (audit log, doesn't need to block redirect)
+  _sb.from('salesweb_order_timeline').insert([{order_id:order.id,status:'Order Placed',note:'Order placed by customer',changed_by:email}]).then(function(){});
+
+  // Don't clear the cart yet — the customer may back-navigate after creating
+  // the order (e.g. to add more items). The cart is cleared only on terminal
+  // success: payment-callback.html (online) or payment-proof.html (offline
+  // after proof upload).
 
   if(selectedPayMethod==='offline'){
     // Redirect to payment proof page

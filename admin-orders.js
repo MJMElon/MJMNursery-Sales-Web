@@ -99,17 +99,56 @@ async function viewOrder(id){
 
   var html='';
 
-  // ── Status bar ──
-  html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:.8rem 1rem;background:var(--bg);border-radius:10px;margin-bottom:1rem;">';
-  html+='<div><span class="badge '+orderBadgeCls(order.status)+'" style="font-size:12px;padding:5px 12px;">'+order.status+'</span></div>';
-  html+='<div style="display:flex;align-items:center;gap:.5rem;"><label style="font-size:12px;font-weight:600;color:var(--ink3);">Change to:</label><select id="mo-status-select" class="form-input" style="width:auto;font-size:12px;padding:6px 10px;">';
-  ORDER_STATUSES.forEach(function(s){html+='<option'+(s===order.status?' selected':'')+'>'+s+'</option>';});
-  html+='</select><button class="btn btn-primary btn-sm" onclick="updateOrderStatus(\''+id+'\')">Update</button></div></div>';
+  // ── 1. Status + Payment Terms (top, side-by-side) ──
+  var currentTerms=order.payment_terms==='credit'?'credit':'cash';
+  var creditPeriod=order.credit_billing_period||'';
+  var billedAt=order.credit_billed_at||'';
 
-  // ── Customer info (with edit) ──
   html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">';
 
-  // Customer card
+  // Status card
+  html+='<div style="background:var(--bg);border-radius:10px;padding:1rem;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">';
+  html+='<div style="font-size:13px;font-weight:600;">Order Status</div>';
+  html+='<span class="badge '+orderBadgeCls(order.status)+'" style="font-size:11px;padding:4px 10px;">'+order.status+'</span>';
+  html+='</div>';
+  html+='<div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;">';
+  html+='<select id="mo-status-select" class="form-input" style="flex:1;min-width:140px;font-size:12px;padding:6px 10px;">';
+  ORDER_STATUSES.forEach(function(s){html+='<option'+(s===order.status?' selected':'')+'>'+s+'</option>';});
+  html+='</select>';
+  html+='<button class="btn btn-primary btn-sm" onclick="updateOrderStatus(\''+id+'\')">Update</button>';
+  html+='</div></div>';
+
+  // Payment Terms card
+  html+='<div style="background:var(--bg);border-radius:10px;padding:1rem;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">';
+  html+='<div style="font-size:13px;font-weight:600;">Payment Terms</div>';
+  html+='<span class="badge" style="font-size:11px;padding:4px 10px;'+(currentTerms==='credit'?'background:#fef3c7;color:#92400e;border:1px solid #fde68a;':'background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;')+'">'+(currentTerms==='credit'?'💳 Credit':'💵 Cash')+'</span>';
+  html+='</div>';
+  html+='<div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;">';
+  html+='<select id="mo-terms-select" class="form-input" style="flex:1;min-width:120px;font-size:12px;padding:6px 10px;" onchange="document.getElementById(\'mo-credit-period-row\').style.display=this.value===\'credit\'?\'flex\':\'none\';">';
+  html+='<option value="cash"'+(currentTerms==='cash'?' selected':'')+'>💵 Cash</option>';
+  html+='<option value="credit"'+(currentTerms==='credit'?' selected':'')+'>💳 Credit</option>';
+  html+='</select>';
+  html+='<button class="btn btn-primary btn-sm" onclick="updateOrderPaymentTerms(\''+id+'\')">Update</button>';
+  html+='</div>';
+  html+='<div id="mo-credit-period-row" style="display:'+(currentTerms==='credit'?'flex':'none')+';gap:.4rem;align-items:center;flex-wrap:wrap;margin-top:.5rem;">';
+  html+='<label style="font-size:11px;color:var(--ink3);">Billing period:</label>';
+  html+='<input class="form-input" id="mo-credit-period" type="text" value="'+esc(creditPeriod)+'" placeholder="2026-05" style="width:110px;font-size:12px;padding:6px 10px;">';
+  if(billedAt){
+    html+='<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;font-size:10px;">Billed '+fmtDate(billedAt)+'</span>';
+    html+='<button class="btn btn-outline btn-sm" onclick="setOrderCreditBilled(\''+id+'\',false)" style="font-size:10px;">Mark Unbilled</button>';
+  } else {
+    html+='<span class="badge badge-amber" style="font-size:10px;">Unbilled</span>';
+    html+='<button class="btn btn-outline btn-sm" onclick="setOrderCreditBilled(\''+id+'\',true)" style="font-size:10px;">Mark Billed</button>';
+  }
+  html+='</div></div>';
+
+  html+='</div>'; // /grid
+
+  // ── 2. Customer + Billing ──
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">';
+
   html+='<div style="background:var(--bg);border-radius:10px;padding:1rem;">';
   html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">';
   html+='<div style="font-size:13px;font-weight:600;">Customer</div>';
@@ -125,10 +164,8 @@ async function viewOrder(id){
   html+='<input class="form-input" id="mo-cust-email" placeholder="Email" value="'+esc(order.customer_email||'')+'" style="font-size:12px;padding:6px 10px;margin-bottom:.3rem;">';
   html+='<textarea class="form-input" id="mo-cust-address" placeholder="Shipping address" rows="2" style="font-size:12px;padding:6px 10px;margin-bottom:.3rem;">'+esc(order.shipping_address||'')+'</textarea>';
   html+='<div style="display:flex;gap:.4rem;"><button class="btn btn-primary btn-sm" onclick="saveCustomerDetails(\''+id+'\')">Save</button><button class="btn btn-outline btn-sm" onclick="toggleEditCustomer()">Cancel</button></div>';
-  html+='</div>';
-  html+='</div>';
+  html+='</div></div>';
 
-  // Billing card
   html+='<div style="background:var(--bg);border-radius:10px;padding:1rem;">';
   html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">';
   html+='<div style="font-size:13px;font-weight:600;">Billing / E-Invoice</div>';
@@ -143,13 +180,13 @@ async function viewOrder(id){
   html+='<input class="form-input" id="mo-bill-name" placeholder="Billing name" value="'+esc(order.billing_name||'')+'" style="font-size:12px;padding:6px 10px;margin-bottom:.3rem;">';
   html+='<input class="form-input" id="mo-bill-tax" placeholder="Tax ID" value="'+esc(order.billing_tax_id||'')+'" style="font-size:12px;padding:6px 10px;margin-bottom:.3rem;">';
   html+='<div style="display:flex;gap:.4rem;"><button class="btn btn-primary btn-sm" onclick="saveBillingDetails(\''+id+'\')">Save</button><button class="btn btn-outline btn-sm" onclick="toggleEditBilling()">Cancel</button></div>';
-  html+='</div>';
-  html+='</div>';
+  html+='</div></div>';
 
-  html+='</div>';
+  html+='</div>'; // /grid
 
-  // ── Items table (with edit) ──
-  html+='<div style="margin-bottom:1rem;">';
+  // ── 3. Order Items + totals (single merged section) ──
+  var subtotal=items.reduce(function(s,it){return s+(it.subtotal||0);},0);
+  html+='<div style="background:var(--bg);border-radius:10px;padding:1rem;margin-bottom:1rem;">';
   html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">';
   html+='<div style="font-size:13px;font-weight:600;">Order Items</div>';
   html+='<button class="btn btn-outline btn-sm" onclick="renderItemsEditMode(\''+id+'\')" style="font-size:11px;padding:2px 8px;">✏️ Edit Items</button>';
@@ -160,19 +197,18 @@ async function viewOrder(id){
     items.forEach(function(it){html+='<tr><td>'+esc(it.product_name||'—')+'</td><td style="text-align:right;">RM '+(it.unit_price||0).toFixed(2)+'</td><td style="text-align:right;">'+it.quantity+'</td><td style="text-align:right;font-weight:600;">RM '+(it.subtotal||0).toFixed(2)+'</td></tr>';});
     html+='</tbody></table>';
   } else html+='<div style="font-size:12px;color:var(--ink4);padding:.5rem 0;">No items</div>';
-  html+='</div></div>';
+  html+='</div>';
 
-  // ── Financial summary ──
-  var subtotal=items.reduce(function(s,it){return s+(it.subtotal||0);},0);
-  html+='<div style="background:var(--bg);border-radius:10px;padding:1rem;margin-bottom:1rem;">';
-  html+='<div style="font-size:13px;font-weight:600;margin-bottom:.5rem;">Financial Summary</div>';
+  // Totals breakdown stays in the same card
+  html+='<div style="margin-top:.8rem;padding-top:.8rem;border-top:1px solid var(--border);">';
   html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;"><span>Subtotal</span><span>RM '+subtotal.toFixed(2)+'</span></div>';
   if(order.discount_amount>0)html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;color:var(--red);"><span>Discount</span><span>-RM '+order.discount_amount.toFixed(2)+'</span></div>';
   if(order.coupon_code)html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;color:var(--red);"><span>Coupon ('+esc(order.coupon_code)+')</span><span>-RM '+(order.coupon_discount||0).toFixed(2)+'</span></div>';
   html+='<div style="display:flex;justify-content:space-between;padding:.4rem 0;border-top:1.5px solid var(--border);margin-top:.3rem;font-size:15px;font-weight:700;"><span>Total</span><span>RM '+(order.total||0).toFixed(2)+'</span></div>';
+  html+='</div>';
 
   // Discount + Coupon controls (collapsible)
-  html+='<div style="margin-top:.8rem;padding-top:.8rem;border-top:1px solid var(--border);display:flex;gap:.5rem;flex-wrap:wrap;">';
+  html+='<div style="margin-top:.6rem;padding-top:.6rem;border-top:1px solid var(--border);display:flex;gap:.5rem;flex-wrap:wrap;">';
   html+='<button class="btn btn-outline btn-sm" onclick="var el=document.getElementById(\'mo-discount-panel\');el.style.display=el.style.display===\'none\'?\'flex\':\'none\';" style="font-size:11px;">Set Discount</button>';
   html+='<button class="btn btn-outline btn-sm" onclick="var el=document.getElementById(\'mo-coupon-panel\');el.style.display=el.style.display===\'none\'?\'flex\':\'none\';" style="font-size:11px;">Apply Coupon</button>';
   html+='</div>';
@@ -184,32 +220,7 @@ async function viewOrder(id){
   html+='</div>';
   html+='</div>';
 
-  // ── Payment Terms (Cash / Credit) ──
-  var currentTerms=order.payment_terms==='credit'?'credit':'cash';
-  var creditPeriod=order.credit_billing_period||'';
-  var billedAt=order.credit_billed_at||'';
-  html+='<div style="background:var(--bg);border-radius:10px;padding:1rem;margin-bottom:1rem;">';
-  html+='<div style="font-size:13px;font-weight:600;margin-bottom:.5rem;">Payment Terms</div>';
-  html+='<div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">';
-  html+='<select id="mo-terms-select" class="form-input" style="width:auto;font-size:12px;padding:6px 10px;" onchange="document.getElementById(\'mo-credit-period-row\').style.display=this.value===\'credit\'?\'flex\':\'none\';">';
-  html+='<option value="cash"'+(currentTerms==='cash'?' selected':'')+'>💵 Cash</option>';
-  html+='<option value="credit"'+(currentTerms==='credit'?' selected':'')+'>💳 Credit</option>';
-  html+='</select>';
-  html+='<button class="btn btn-primary btn-sm" onclick="updateOrderPaymentTerms(\''+id+'\')">Update Terms</button>';
-  html+='</div>';
-  html+='<div id="mo-credit-period-row" style="display:'+(currentTerms==='credit'?'flex':'none')+';gap:.5rem;align-items:center;flex-wrap:wrap;margin-top:.6rem;">';
-  html+='<label style="font-size:12px;color:var(--ink3);">Billing period:</label>';
-  html+='<input class="form-input" id="mo-credit-period" type="text" value="'+esc(creditPeriod)+'" placeholder="e.g. 2026-05" style="width:140px;font-size:12px;padding:6px 10px;">';
-  if(billedAt){
-    html+='<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;">Billed '+fmtDate(billedAt)+'</span>';
-    html+='<button class="btn btn-outline btn-sm" onclick="setOrderCreditBilled(\''+id+'\',false)" style="font-size:11px;">Mark Unbilled</button>';
-  } else {
-    html+='<span class="badge badge-amber">Unbilled</span>';
-    html+='<button class="btn btn-outline btn-sm" onclick="setOrderCreditBilled(\''+id+'\',true)" style="font-size:11px;">Mark Billed</button>';
-  }
-  html+='</div></div>';
-
-  // ── Customer Remark ──
+  // ── 4. Customer Remark ──
   if(order.customer_remark){
     html+='<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:.8rem 1rem;margin-bottom:1rem;">';
     html+='<div style="font-size:11px;font-weight:600;color:#92400e;margin-bottom:.3rem;">Customer Remark</div>';
@@ -541,30 +552,28 @@ async function loadTimeline(orderId){
   var{data}=await sb.from('salesweb_order_timeline').select('*').eq('order_id',orderId).order('created_at',{ascending:true});
   var el=document.getElementById('mo-timeline');
 
-  // Always include "Order Placed" as first entry
+  // Build entries in chronological order, with the synthetic "Order Placed"
+  // anchored at the start, then reverse for display (newest on top).
   var entries=[{status:'Order Placed',note:'Order created',created_at:null,changed_by:'System'}];
-
   if(data&&data.length){
-    // Use order created_at for first entry
     entries[0].created_at=data[0].created_at;
     data.forEach(function(t){entries.push(t);});
   }
+  entries.reverse();
 
   var html='<div style="position:relative;padding-left:24px;">';
-  // Vertical line
   html+='<div style="position:absolute;left:7px;top:4px;bottom:4px;width:2px;background:var(--border);"></div>';
 
   entries.forEach(function(t,i){
-    var isLast=i===entries.length-1;
+    var isLatest=i===0;
     var dt=t.created_at?new Date(t.created_at).toLocaleString('en-MY',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
-    var dotColor=isLast?'var(--green)':'var(--border2)';
-    var dotSize=isLast?'12px':'10px';
+    var dotColor=isLatest?'var(--green)':'var(--border2)';
+    var dotSize=isLatest?'12px':'10px';
+    var latestBadge=isLatest?' <span style="display:inline-block;font-size:9px;font-weight:700;color:#fff;background:var(--green);padding:1px 6px;border-radius:10px;letter-spacing:.05em;text-transform:uppercase;vertical-align:middle;margin-left:.3rem;">Latest</span>':'';
 
     html+='<div style="position:relative;padding-bottom:1rem;margin-bottom:.3rem;">';
-    // Dot
     html+='<div style="position:absolute;left:-24px;top:3px;width:'+dotSize+';height:'+dotSize+';border-radius:50%;background:'+dotColor+';border:2px solid #fff;box-shadow:0 0 0 2px '+dotColor+';"></div>';
-    // Content
-    html+='<div style="font-size:13px;font-weight:600;color:var(--ink);">'+esc(t.status)+'</div>';
+    html+='<div style="font-size:13px;font-weight:'+(isLatest?'700':'600')+';color:var(--ink);">'+esc(t.status)+latestBadge+'</div>';
     if(t.note)html+='<div style="font-size:12px;color:var(--ink3);margin-top:.1rem;">'+esc(t.note)+'</div>';
     html+='<div style="font-size:10px;color:var(--ink4);margin-top:.15rem;">'+dt+(t.changed_by?' · '+esc(t.changed_by):'')+'</div>';
     html+='</div>';

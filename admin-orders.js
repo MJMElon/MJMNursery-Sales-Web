@@ -94,16 +94,25 @@ async function viewOrder(id){
   var{data:items}=await sb.from('salesweb_order_items').select('*').eq('order_id',id);
   items=items||[];
 
-  // If this is a credit order linked to an invoice, fetch the invoice so the
-  // Credit Invoice section can render its current status / file / paid date.
-  var creditInvoice=null;
-  if(order.payment_terms==='credit'&&order.credit_invoice_id){
-    var{data:invRow}=await sb.from('salesweb_credit_invoices').select('id,invoice_number,billing_period,total_qty,total_amount,status,invoice_file_url,payment_proof_url,issued_at,due_date,paid_at,notes').eq('id',order.credit_invoice_id).maybeSingle();
-    creditInvoice=invRow||null;
+  // For credit orders, fetch per-collection events + all of this customer's
+  // monthly invoices so the per-month breakdown table can render.
+  var creditCollections=[];
+  var creditInvoicesByPeriod={};
+  if(order.payment_terms==='credit'){
+    try{
+      var{data:collRows}=await sb.from('salesweb_order_collections').select('collected_qty,collected_at,al_number').eq('order_id',id);
+      creditCollections=collRows||[];
+    }catch(e){creditCollections=[];}
+    if(order.customer_id){
+      var{data:invRows}=await sb.from('salesweb_credit_invoices').select('id,invoice_number,billing_period,total_qty,total_amount,status,invoice_file_url,payment_proof_url,issued_at,due_date,paid_at').eq('customer_id',order.customer_id);
+      (invRows||[]).forEach(function(inv){creditInvoicesByPeriod[inv.billing_period]=inv;});
+    }
   }
 
   var shortId=order.order_number||order.id.substring(0,8).toUpperCase();
-  document.getElementById('mo-title').textContent='Order #'+shortId;
+  // order_number sometimes already contains a leading '#' — avoid "Order ##10539".
+  var titleId=String(shortId);if(titleId.charAt(0)!=='#')titleId='#'+titleId;
+  document.getElementById('mo-title').textContent='Order '+titleId;
 
   var html='';
 
@@ -235,32 +244,72 @@ async function viewOrder(id){
     html+='<div style="font-size:13px;color:var(--ink2);">'+esc(order.customer_remark)+'</div></div>';
   }
 
-  // ── 4b. Credit Invoice (only for credit-term orders) ──
+  // ── 4b. Credit Monthly Breakdown (only for credit-term orders) ──
   if(order.payment_terms==='credit'){
-    html+='<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:.8rem 1rem;margin-bottom:1rem;">';
-    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem;">';
-    html+='<div style="font-size:13px;font-weight:600;color:#1d4ed8;">Credit Invoice</div>';
-    if(creditInvoice){
-      var statusColor=creditInvoice.status==='paid'?'background:#dcfce7;color:#166534;border:1px solid #bbf7d0;':creditInvoice.status==='overdue'?'background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;':'background:#fef3c7;color:#92400e;border:1px solid #fde68a;';
-      html+='<span class="badge" style="font-size:11px;padding:3px 9px;'+statusColor+'">'+(creditInvoice.status||'issued').toUpperCase()+'</span>';
+    // Group collections by 'YYYY-MM'
+    var qtyByPeriod={};
+    creditCollections.forEach(function(c){
+      if(!c.collected_at)return;
+      var p=String(c.collected_at).slice(0,7);
+      qtyByPeriod[p]=(qtyByPeriod[p]||0)+(c.collected_qty||0);
+    });
+    // Fallback: if no per-event collections recorded but the order itself has a
+    // single collected_at/collected_qty (legacy data), use that as one entry.
+    if(!creditCollections.length&&order.collected_at&&order.collected_qty){
+      qtyByPeriod[String(order.collected_at).slice(0,7)]=order.collected_qty;
     }
+
+    // Generate every month from order created_at through current month
+    function periodKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
+    function periodLabel(p){var parts=p.split('-');return new Date(+parts[0],+parts[1]-1,1).toLocaleString('en-MY',{month:'short',year:'numeric'});}
+    var startDate=new Date(order.created_at);startDate.setDate(1);
+    var cursor=new Date(startDate.getFullYear(),startDate.getMonth(),1);
+    var endCursor=new Date();endCursor=new Date(endCursor.getFullYear(),endCursor.getMonth(),1);
+    var periods=[];
+    while(cursor<=endCursor){periods.push(periodKey(cursor));cursor.setMonth(cursor.getMonth()+1);}
+
+    html+='<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:.8rem 1rem;margin-bottom:1rem;">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">';
+    html+='<div style="font-size:13px;font-weight:600;color:#1d4ed8;">Credit — Monthly Invoice Breakdown</div>';
+    html+='<span style="font-size:11px;color:var(--ink3);">Order placed '+fmtDate(order.created_at)+'</span>';
     html+='</div>';
-    if(creditInvoice){
-      html+='<div style="display:grid;grid-template-columns:auto 1fr;gap:.3rem .8rem;font-size:12px;color:var(--ink2);">';
-      html+='<span style="color:var(--ink3);">Invoice No</span><span style="font-weight:600;">'+esc(creditInvoice.invoice_number||'—')+'</span>';
-      html+='<span style="color:var(--ink3);">Billing period</span><span>'+esc(creditInvoice.billing_period||'—')+'</span>';
-      html+='<span style="color:var(--ink3);">Amount</span><span style="font-weight:600;">RM '+Number(creditInvoice.total_amount||0).toFixed(2)+' ('+(creditInvoice.total_qty||0)+' qty)</span>';
-      html+='<span style="color:var(--ink3);">Issued</span><span>'+(creditInvoice.issued_at?fmtDate(creditInvoice.issued_at):'—')+'</span>';
-      if(creditInvoice.due_date)html+='<span style="color:var(--ink3);">Due</span><span>'+fmtDate(creditInvoice.due_date)+'</span>';
-      if(creditInvoice.paid_at)html+='<span style="color:var(--ink3);">Paid</span><span style="color:#166534;font-weight:600;">'+fmtDate(creditInvoice.paid_at)+'</span>';
-      html+='</div>';
-      html+='<div style="display:flex;gap:.5rem;margin-top:.6rem;flex-wrap:wrap;">';
-      if(creditInvoice.invoice_file_url)html+='<a href="'+esc(creditInvoice.invoice_file_url)+'" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="font-size:11px;text-decoration:none;">📄 View Invoice</a>';
-      if(creditInvoice.payment_proof_url)html+='<a href="'+esc(creditInvoice.payment_proof_url)+'" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="font-size:11px;text-decoration:none;">🧾 View Payment Proof</a>';
-      if(creditInvoice.status!=='paid')html+='<button class="btn btn-primary btn-sm" onclick="markCreditInvoicePaid(\''+esc(creditInvoice.id)+'\',\''+id+'\')" style="font-size:11px;">✓ Mark as Paid</button>';
-      html+='</div>';
-    } else {
-      html+='<div style="font-size:12px;color:var(--ink3);">Not yet invoiced. This order will appear in the <strong>Credit</strong> tab of the operation to-do list once collected.</div>';
+    html+='<table class="data-table" style="font-size:12px;"><thead><tr><th>Month</th><th style="text-align:right;">Qty Collected</th><th>Invoice</th><th style="text-align:right;">Action</th></tr></thead><tbody>';
+    periods.forEach(function(p){
+      var qty=qtyByPeriod[p]||0;
+      var inv=creditInvoicesByPeriod[p]||null;
+      var isLinked=inv&&order.credit_invoice_id===inv.id;
+      html+='<tr>';
+      html+='<td style="font-weight:600;">'+esc(periodLabel(p))+'</td>';
+      html+='<td style="text-align:right;'+(qty>0?'font-weight:600;':'color:var(--ink4);')+'">'+(qty>0?qty.toLocaleString():'—')+'</td>';
+      // Invoice column
+      html+='<td>';
+      if(inv){
+        var st=inv.status||'issued';
+        var stColor=st==='paid'?'background:#dcfce7;color:#166534;border:1px solid #bbf7d0;':st==='overdue'?'background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;':'background:#fef3c7;color:#92400e;border:1px solid #fde68a;';
+        html+='<span style="font-weight:600;">'+esc(inv.invoice_number||'—')+'</span>';
+        html+=' <span class="badge" style="font-size:10px;padding:2px 6px;'+stColor+'">'+st.toUpperCase()+'</span>';
+        if(!isLinked&&qty>0)html+=' <span style="font-size:10px;color:#92400e;">(not linked to this order)</span>';
+        if(inv.invoice_file_url)html+=' <a href="'+esc(inv.invoice_file_url)+'" target="_blank" rel="noopener" style="margin-left:.3rem;text-decoration:none;" title="View invoice PDF">📄</a>';
+        if(inv.payment_proof_url)html+='<a href="'+esc(inv.payment_proof_url)+'" target="_blank" rel="noopener" style="margin-left:.2rem;text-decoration:none;" title="View payment proof">🧾</a>';
+      } else if(qty>0){
+        html+='<span style="font-size:11px;color:#92400e;">Not issued</span>';
+      } else {
+        html+='<span style="font-size:11px;color:var(--ink4);">—</span>';
+      }
+      html+='</td>';
+      // Action column
+      html+='<td style="text-align:right;">';
+      if(inv&&inv.status!=='paid'){
+        html+='<button class="btn btn-outline btn-sm" onclick="markCreditInvoicePaid(\''+esc(inv.id)+'\',\''+id+'\')" style="font-size:10px;padding:2px 8px;">✓ Mark Paid</button>';
+      } else if(!inv&&qty>0){
+        html+='<button class="btn btn-primary btn-sm" onclick="openInvoiceUploadModalForMonth(\''+id+'\',\''+p+'\')" style="font-size:10px;padding:2px 8px;">📤 Upload</button>';
+      }
+      html+='</td>';
+      html+='</tr>';
+    });
+    html+='</tbody></table>';
+    if(!order.customer_id){
+      html+='<div style="font-size:11px;color:#92400e;margin-top:.5rem;">⚠ This order has no <code>customer_id</code>, so it cannot be tied to a customer invoice. Edit the customer record first.</div>';
     }
     html+='</div>';
   }
@@ -904,4 +953,128 @@ async function saveOrderItems(orderId){
   window._editItems=null;
   toast('Items saved');
   viewOrder(orderId);
+}
+
+// ═══════════════════════════════════════
+//  CREDIT INVOICE UPLOAD (from order modal monthly breakdown)
+// ═══════════════════════════════════════
+async function openInvoiceUploadModalForMonth(orderId,period){
+  // Pull the trigger order's customer_id + customer_name, then aggregate all
+  // of that customer's credit orders with uninvoiced collections in this
+  // period so the invoice covers the whole month, not just this one order.
+  var{data:trig}=await sb.from('salesweb_customer_orders').select('customer_id,customer_name').eq('id',orderId).single();
+  if(!trig||!trig.customer_id){toast('Order has no customer_id','error');return;}
+
+  var{data:custOrders}=await sb.from('salesweb_customer_orders').select('id').eq('customer_id',trig.customer_id).eq('payment_terms','credit').is('credit_invoice_id',null);
+  var custOrderIds=(custOrders||[]).map(function(o){return o.id;});
+  // Find which of those have collections inside the chosen period
+  var matchingIds=[];var totalQty=0;
+  if(custOrderIds.length){
+    var{data:colls}=await sb.from('salesweb_order_collections').select('order_id,collected_qty,collected_at').in('order_id',custOrderIds);
+    (colls||[]).forEach(function(c){
+      if(!c.collected_at)return;
+      if(String(c.collected_at).slice(0,7)!==period)return;
+      if(matchingIds.indexOf(c.order_id)<0)matchingIds.push(c.order_id);
+      totalQty+=(c.collected_qty||0);
+    });
+    // Legacy fallback: orders with single collected_at on the row itself
+    if(!colls||!colls.length){
+      var{data:legacy}=await sb.from('salesweb_customer_orders').select('id,collected_qty,collected_at').in('id',custOrderIds);
+      (legacy||[]).forEach(function(o){
+        if(!o.collected_at)return;
+        if(String(o.collected_at).slice(0,7)!==period)return;
+        if(matchingIds.indexOf(o.id)<0)matchingIds.push(o.id);
+        totalQty+=(o.collected_qty||0);
+      });
+    }
+  }
+  if(!matchingIds.length){
+    // Trigger order itself wasn't matched above (no collections recorded). Fall
+    // back to including just it so the admin can still issue something.
+    matchingIds=[orderId];
+  }
+
+  document.getElementById('miu-customer-id').value=trig.customer_id;
+  document.getElementById('miu-period').value=period;
+  document.getElementById('miu-trigger-order-id').value=orderId;
+  window._miuOrderIds=matchingIds;
+  document.getElementById('miu-customer-name').textContent=trig.customer_name||'—';
+  var parts=period.split('-');
+  document.getElementById('miu-period-label').textContent=new Date(+parts[0],+parts[1]-1,1).toLocaleString('en-MY',{month:'short',year:'numeric'})+' ('+period+')';
+  document.getElementById('miu-summary').textContent=matchingIds.length+' order'+(matchingIds.length===1?'':'s')+' · '+totalQty.toLocaleString()+' qty';
+  document.getElementById('miu-invoice-no').value='';
+  document.getElementById('miu-file').value='';
+  document.getElementById('miu-due').value='';
+  document.getElementById('miu-notes').value='';
+  document.getElementById('miu-error').textContent='';
+  openModal('modal-invoice-upload');
+}
+
+async function submitInvoiceUpload(){
+  var err=document.getElementById('miu-error');err.textContent='';
+  var custId=document.getElementById('miu-customer-id').value;
+  var period=document.getElementById('miu-period').value;
+  var triggerOrderId=document.getElementById('miu-trigger-order-id').value;
+  var orderIds=window._miuOrderIds||[];
+  var invNo=document.getElementById('miu-invoice-no').value.trim();
+  var due=document.getElementById('miu-due').value||null;
+  var notes=document.getElementById('miu-notes').value.trim()||null;
+  var fileInput=document.getElementById('miu-file');
+
+  if(!invNo){err.textContent='Invoice number is required.';return;}
+  if(!fileInput.files||!fileInput.files[0]){err.textContent='Pick a PDF or image.';return;}
+  if(!orderIds.length){err.textContent='No orders to invoice.';return;}
+
+  var btn=document.getElementById('miu-submit');btn.disabled=true;btn.textContent='Uploading…';
+  try{
+    var file=fileInput.files[0];
+    var safeInv=invNo.replace(/[^A-Za-z0-9_-]/g,'_');
+    var ext=(file.name.split('.').pop()||'pdf').toLowerCase();
+    var path='invoices/'+custId.substring(0,8)+'_'+period+'_'+safeInv+'_'+Date.now()+'.'+ext;
+    var{error:upErr}=await sb.storage.from('order-attachments').upload(path,file,{contentType:file.type,upsert:true});
+    if(upErr)throw upErr;
+    var{data:urlData}=sb.storage.from('order-attachments').getPublicUrl(path);
+    var fileUrl=urlData?.publicUrl||'';
+
+    var session=await sb.auth.getSession();
+    var uid=session?.data?.session?.user?.id||null;
+    var uemail=session?.data?.session?.user?.email||'admin';
+
+    // Compute total qty + total amount from the matching collections (used for
+    // invoice header — actual line items aren't tracked per invoice here).
+    var{data:colls}=await sb.from('salesweb_order_collections').select('order_id,collected_qty,collected_at').in('order_id',orderIds);
+    var totalQty=0;
+    (colls||[]).forEach(function(c){if(c.collected_at&&String(c.collected_at).slice(0,7)===period)totalQty+=(c.collected_qty||0);});
+    // Sum amount from orders' totals (proportional fallback)
+    var{data:ords}=await sb.from('salesweb_customer_orders').select('id,total,collected_qty').in('id',orderIds);
+    var totalAmt=(ords||[]).reduce(function(s,o){return s+(o.total||0);},0);
+
+    var{data:inv,error:invErr}=await sb.from('salesweb_credit_invoices').insert([{
+      customer_id:custId,billing_period:period,invoice_number:invNo,
+      total_qty:totalQty,total_amount:Number(totalAmt.toFixed(2)),
+      status:'issued',invoice_file_url:fileUrl,due_date:due,
+      issued_by:uid,notes:notes
+    }]).select().single();
+    if(invErr)throw invErr;
+
+    var nowIso=new Date().toISOString();
+    await sb.from('salesweb_customer_orders').update({
+      credit_invoice_id:inv.id,credit_billed_at:nowIso,credit_billing_period:period,updated_at:nowIso
+    }).in('id',orderIds);
+
+    // Fan-out: attachment + timeline per affected order
+    var attRows=orderIds.map(function(oid){return{order_id:oid,file_name:'Invoice '+invNo+'.'+ext,file_url:fileUrl,file_type:file.type||'application/pdf',uploaded_by:uemail};});
+    await sb.from('salesweb_order_attachments').insert(attRows);
+    var tlRows=orderIds.map(function(oid){return{order_id:oid,status:'Invoiced',note:'Invoice '+invNo+' issued for '+period,changed_by:uemail};});
+    await sb.from('salesweb_order_timeline').insert(tlRows);
+
+    closeModal('modal-invoice-upload');
+    toast('Invoice issued — '+orderIds.length+' order(s) linked');
+    viewOrder(triggerOrderId);
+  }catch(e){
+    console.error('[Invoice upload]',e);
+    err.textContent=(e?.message||'Upload failed')+'';
+  }finally{
+    btn.disabled=false;btn.textContent='Upload & Issue Invoice';
+  }
 }

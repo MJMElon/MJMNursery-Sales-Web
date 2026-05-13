@@ -352,6 +352,25 @@ input,select,textarea,button{font-family:inherit;}
 <!-- ORDER DETAIL MODAL -->
 <div class="modal-overlay" id="modal-order" style="z-index:250;"><div class="modal" style="max-width:750px;"><div class="modal-head"><h2 id="mo-title">Order Details</h2><button class="modal-close" onclick="closeModal('modal-order');">&#x2715;</button></div><div class="modal-body" id="mo-body" style="max-height:75vh;overflow-y:auto;"></div><div class="modal-foot" id="mo-foot"></div></div></div>
 
+<!-- CREDIT INVOICE UPLOAD MODAL (opened from credit order monthly breakdown) -->
+<div class="modal-overlay" id="modal-invoice-upload" style="z-index:260;"><div class="modal" style="max-width:540px;">
+  <div class="modal-head"><h2>📤 Upload Invoice</h2><button class="modal-close" onclick="closeModal('modal-invoice-upload')">&#x2715;</button></div>
+  <div class="modal-body" style="padding:1.2rem;max-height:70vh;overflow-y:auto;">
+    <input type="hidden" id="miu-customer-id">
+    <input type="hidden" id="miu-period">
+    <input type="hidden" id="miu-trigger-order-id">
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:.6rem .8rem;font-size:12px;color:#334155;margin-bottom:.4rem;">Customer: <strong id="miu-customer-name" style="color:#0f172a;">—</strong></div>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:.6rem .8rem;font-size:12px;color:#334155;margin-bottom:.4rem;">Billing period: <strong id="miu-period-label" style="color:#0f172a;">—</strong></div>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:.6rem .8rem;font-size:12px;color:#334155;margin-bottom:1rem;" id="miu-summary">—</div>
+    <div style="margin-bottom:.8rem;"><label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.25rem;">Invoice Number *</label><input type="text" id="miu-invoice-no" class="form-input" placeholder="e.g. INV-2026-05-014" autocomplete="off" style="font-size:13px;"></div>
+    <div style="margin-bottom:.8rem;"><label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.25rem;">Invoice PDF / Image *</label><input type="file" id="miu-file" class="form-input" accept="application/pdf,image/*" style="font-size:13px;"></div>
+    <div style="margin-bottom:.8rem;"><label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.25rem;">Due Date (optional)</label><input type="date" id="miu-due" class="form-input" style="font-size:13px;"></div>
+    <div style="margin-bottom:.8rem;"><label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.25rem;">Notes (optional)</label><textarea id="miu-notes" class="form-input" rows="2" placeholder="Internal notes for this invoice" style="font-size:13px;resize:vertical;"></textarea></div>
+    <div id="miu-error" style="color:var(--red);font-size:12px;font-weight:600;min-height:16px;"></div>
+  </div>
+  <div class="modal-foot"><button class="btn btn-outline" onclick="closeModal('modal-invoice-upload')">Cancel</button><button class="btn btn-primary" id="miu-submit" onclick="submitInvoiceUpload()">Upload &amp; Issue Invoice</button></div>
+</div></div>
+
 <!-- CANCEL STOCK RESTORE MODAL -->
 <div class="modal-overlay" id="modal-cancel-stock"><div class="modal" style="max-width:600px;"><div class="modal-head" style="background:#fef2f2;"><h2 style="font-size:1.1rem;color:#dc2626;">Cancel Order — Restore Stock</h2><button class="modal-close" onclick="closeModal('modal-cancel-stock')">&#x2715;</button></div><div class="modal-body" id="cancel-stock-body" style="max-height:65vh;overflow-y:auto;"></div><div class="modal-foot" id="cancel-stock-foot"></div></div></div>
 

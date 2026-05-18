@@ -708,19 +708,60 @@ async function issuePoints(orderId, totalAmount) {
 
   var amt    = Number(totalAmount) || 0;
   var points = Math.floor(amt / earnRm) * earnPts;
-  if (points <= 0) return;
 
-  await sb.from('salesweb_customer_orders')
-    .update({ points_issued: points }).eq('id', orderId);
+  // Pull the order so we know who to credit and whether a redemption was applied.
+  var { data: ord } = await sb.from('salesweb_customer_orders')
+    .select('customer_id, order_number, points_issued, points_redeemed, points_discount_rm')
+    .eq('id', orderId).maybeSingle();
+  if (!ord) return;
+  if (ord.points_issued) return;   // already processed — idempotent
 
   var session = await sb.auth.getSession();
   var user = session?.data?.session?.user?.email || 'admin';
-  await sb.from('salesweb_order_timeline').insert([{
-    order_id: orderId,
-    status: 'Points Issued',
-    note: points + ' loyalty points issued (RM ' + amt.toFixed(2) + ' @ ' + earnPts + ' pt per RM ' + earnRm + ')',
-    changed_by: user
-  }]);
+
+  if (points > 0) {
+    await sb.from('salesweb_customer_orders')
+      .update({ points_issued: points }).eq('id', orderId);
+
+    await sb.from('salesweb_order_timeline').insert([{
+      order_id: orderId,
+      status: 'Points Issued',
+      note: points + ' loyalty points issued (RM ' + amt.toFixed(2) + ' @ ' + earnPts + ' pt per RM ' + earnRm + ')',
+      changed_by: user
+    }]);
+  }
+
+  // Ledger writes — single source of truth for customer balance.
+  if (ord.customer_id) {
+    var ledgerRows = [];
+    if (points > 0) {
+      ledgerRows.push({
+        user_id: ord.customer_id,
+        change: points,
+        type: 'Earned',
+        order_id: orderId,
+        rm_value: amt,
+        note: 'Order ' + (ord.order_number || orderId),
+        created_by: user
+      });
+    }
+    var redeemed = Number(ord.points_redeemed || 0);
+    if (redeemed > 0) {
+      ledgerRows.push({
+        user_id: ord.customer_id,
+        change: -redeemed,
+        type: 'Redeemed',
+        order_id: orderId,
+        rm_value: Number(ord.points_discount_rm || 0),
+        note: 'Redeemed on order ' + (ord.order_number || orderId),
+        created_by: user
+      });
+    }
+    if (ledgerRows.length) {
+      var { error: ledgerErr } = await sb.from('salesweb_points_ledger').insert(ledgerRows);
+      if (ledgerErr) console.error('[points] ledger insert failed:', ledgerErr);
+    }
+  }
 }
 
 // ═══════════════════════════════════════

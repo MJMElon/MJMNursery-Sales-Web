@@ -345,6 +345,38 @@ input,select,textarea,button{font-family:inherit;}
       <div class="card"><h3>Product Types</h3><div id="settings-product-types"></div><div style="display:flex;gap:.5rem;margin-top:.8rem;"><input class="form-input" id="new-ptype" style="max-width:250px;" placeholder="New product type name"><button class="btn btn-primary btn-sm" onclick="addProductType()">Add</button></div></div>
       <div class="card"><h3>Collections</h3><div id="settings-collections"></div><div style="display:flex;gap:.5rem;margin-top:.8rem;"><input class="form-input" id="new-collection" style="max-width:250px;" placeholder="New collection name"><button class="btn btn-primary btn-sm" onclick="addCollection()">Add</button></div></div>
       <div class="card"><h3>Product Tags</h3><div id="settings-tags"></div><div style="display:flex;gap:.5rem;margin-top:.8rem;"><input class="form-input" id="new-tag" style="max-width:250px;" placeholder="New tag name"><button class="btn btn-primary btn-sm" onclick="addTag()">Add</button></div></div>
+
+      <!-- ─── Payment Details (offline bank transfer + DuitNow QR) ─── -->
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+          <h3 style="margin:0;">Payment Details (Bank Transfer / DuitNow QR)</h3>
+          <button class="btn btn-primary btn-sm" id="pay-save-btn" onclick="savePaymentDetails()">Save</button>
+        </div>
+        <p style="font-size:11px;color:var(--ink4);margin-bottom:.8rem;">These are shown to customers on the offline-payment screen so they know where to transfer money to.</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem;margin-bottom:.8rem;">
+          <div>
+            <label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.25rem;">Bank Name</label>
+            <input class="form-input" id="pay-bank-name" placeholder="e.g. Maybank" style="font-size:13px;">
+          </div>
+          <div>
+            <label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.25rem;">Account Name</label>
+            <input class="form-input" id="pay-account-name" placeholder="e.g. MJM Nursery Sdn Bhd" style="font-size:13px;">
+          </div>
+        </div>
+        <div style="margin-bottom:.8rem;">
+          <label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.25rem;">Account Number</label>
+          <input class="form-input" id="pay-account-number" placeholder="e.g. 5121-1234-5678" style="font-size:13px;font-family:monospace;letter-spacing:.05em;">
+        </div>
+        <div style="margin-bottom:.5rem;">
+          <label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.25rem;">DuitNow QR Image</label>
+          <input type="file" id="pay-qr-file" accept="image/*" style="font-size:12px;" onchange="uploadPaymentQr()">
+          <div id="pay-qr-status" style="font-size:11px;color:var(--ink4);margin-top:.3rem;">No QR uploaded yet.</div>
+          <div id="pay-qr-preview" style="margin-top:.5rem;display:none;">
+            <img id="pay-qr-img" style="max-width:200px;border:1px solid var(--border);border-radius:8px;padding:.4rem;background:#fff;">
+            <div><button class="btn btn-outline btn-sm" onclick="removePaymentQr()" style="color:var(--red);font-size:10px;margin-top:.3rem;">Remove QR</button></div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -637,6 +669,99 @@ async function loadSettings(){
   renderSettingsList('settings-product-types',adminSettings.productTypes,'ptype');
   renderSettingsList('settings-collections',adminSettings.collections,'coll');
   renderSettingsList('settings-tags',adminSettings.tags,'tag');
+  loadPaymentDetails();
+}
+
+// ═══════════════════════════════════════
+//  PAYMENT DETAILS (offline bank transfer + DuitNow QR)
+//  Stored in salesweb_app_settings.key='payment_details' as JSON:
+//    { bank_name, account_name, account_number, duitnow_qr_url }
+//  Surfaced to customers on payment-proof.html.
+// ═══════════════════════════════════════
+var paymentDetails = { bank_name:'', account_name:'', account_number:'', duitnow_qr_url:'' };
+
+async function loadPaymentDetails(){
+  try{
+    var{data}=await sb.from('salesweb_app_settings').select('value').eq('key','payment_details').maybeSingle();
+    if(data && data.value){
+      try{ paymentDetails = typeof data.value==='string' ? JSON.parse(data.value) : data.value; }catch(e){}
+    }
+  }catch(e){ console.warn('payment details load failed:', e); }
+  document.getElementById('pay-bank-name').value      = paymentDetails.bank_name      || '';
+  document.getElementById('pay-account-name').value   = paymentDetails.account_name   || '';
+  document.getElementById('pay-account-number').value = paymentDetails.account_number || '';
+  renderPaymentQrPreview();
+}
+
+function renderPaymentQrPreview(){
+  var url = paymentDetails.duitnow_qr_url || '';
+  var status = document.getElementById('pay-qr-status');
+  var prev   = document.getElementById('pay-qr-preview');
+  var img    = document.getElementById('pay-qr-img');
+  if(url){
+    status.textContent = 'Current QR image:';
+    img.src = url + (url.indexOf('?')<0 ? '?t='+Date.now() : ''); // cache-bust
+    prev.style.display = 'block';
+  } else {
+    status.textContent = 'No QR uploaded yet.';
+    prev.style.display = 'none';
+  }
+}
+
+async function savePaymentDetails(){
+  var btn = document.getElementById('pay-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving...';
+  paymentDetails.bank_name      = document.getElementById('pay-bank-name').value.trim();
+  paymentDetails.account_name   = document.getElementById('pay-account-name').value.trim();
+  paymentDetails.account_number = document.getElementById('pay-account-number').value.trim();
+  // duitnow_qr_url is set by uploadPaymentQr / removePaymentQr — keep as-is.
+  var{error} = await sb.from('salesweb_app_settings').upsert({
+    key:'payment_details',
+    value:JSON.stringify(paymentDetails),
+    updated_at:new Date().toISOString()
+  },{onConflict:'key'});
+  btn.disabled = false; btn.textContent = 'Save';
+  if(error){ toast('Save failed: '+error.message,'error'); return; }
+  toast('Payment details saved');
+}
+
+async function uploadPaymentQr(){
+  var input = document.getElementById('pay-qr-file');
+  if(!input.files || !input.files[0]) return;
+  var file = input.files[0];
+  if(file.size > 2*1024*1024){ toast('QR image must be under 2MB','error'); input.value=''; return; }
+
+  var ext = (file.name.split('.').pop()||'png').toLowerCase();
+  var path = 'payment-qr/duitnow_'+Date.now()+'.'+ext;
+  toast('Uploading QR...');
+  var{error:upErr} = await sb.storage.from('order-attachments').upload(path, file, { contentType:file.type, upsert:true });
+  if(upErr){ toast('Upload failed: '+upErr.message,'error'); return; }
+
+  var{data:urlData} = sb.storage.from('order-attachments').getPublicUrl(path);
+  paymentDetails.duitnow_qr_url = urlData?.publicUrl || '';
+  renderPaymentQrPreview();
+  input.value = '';
+
+  // Persist immediately so the QR is available even if the admin forgets to
+  // click Save afterwards.
+  await sb.from('salesweb_app_settings').upsert({
+    key:'payment_details',
+    value:JSON.stringify(paymentDetails),
+    updated_at:new Date().toISOString()
+  },{onConflict:'key'});
+  toast('QR uploaded');
+}
+
+async function removePaymentQr(){
+  if(!confirm('Remove the DuitNow QR image?')) return;
+  paymentDetails.duitnow_qr_url = '';
+  renderPaymentQrPreview();
+  await sb.from('salesweb_app_settings').upsert({
+    key:'payment_details',
+    value:JSON.stringify(paymentDetails),
+    updated_at:new Date().toISOString()
+  },{onConflict:'key'});
+  toast('QR removed');
 }
 function saveSettings(){try{localStorage.setItem('mjm_admin_settings',JSON.stringify(adminSettings));}catch(e){}}
 function renderSettingsList(containerId,list,prefix){
@@ -658,7 +783,7 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 
 <script src="admin-orders.js?v=2026-05-18-points-ledger"></script>
-<script src="admin-customers.js?v=2026-05-18-redeemed-totals"></script>
+<script src="admin-customers.js?v=2026-05-18-payment-details"></script>
 <script src="admin-products.js?v=2026-05-18-points-ledger"></script>
 <script src="admin-promotions.js?v=2026-05-18-points-ledger"></script>
 <script src="admin-coupons.js?v=2026-05-18-points-ledger"></script>

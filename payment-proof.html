@@ -74,19 +74,20 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-d
   </div>
 
   <!-- DuitNow QR -->
-  <div class="card">
+  <div class="card" id="pp-payment-card">
     <div class="card-title">DuitNow QR Payment</div>
-    <div class="qr-box">
-      <img src="https://placehold.co/220x220/2D4A30/FFFFFF?text=DuitNow+QR" alt="DuitNow QR Code">
+    <div class="qr-box" id="pp-qr-box" style="display:none;">
+      <img id="pp-qr-img" alt="DuitNow QR Code">
       <div class="qr-note">Scan with your banking app to pay</div>
     </div>
-    <div class="bank-details">
+    <div class="bank-details" id="pp-bank-details">
       <strong>Bank Transfer Details:</strong><br>
-      Bank: Maybank<br>
-      Account: Mega Jutamas Sdn Bhd<br>
-      Account No: 5121-xxxx-xxxx<br>
+      Bank: <span id="pp-bank-name">—</span><br>
+      Account: <span id="pp-account-name">—</span><br>
+      Account No: <span id="pp-account-number">—</span><br>
       Reference: Order <span id="pp-ref">—</span>
     </div>
+    <div id="pp-payment-empty" style="display:none;font-size:12px;color:var(--text-mid);padding:.5rem 0;">Bank transfer details have not been set up yet. Please contact the seller.</div>
   </div>
 
   <!-- Upload proof -->
@@ -151,6 +152,32 @@ var orderShort=sessionStorage.getItem('mjm_pay_order_number')||orderId.substring
 document.getElementById('pp-order-id').textContent='#'+orderShort;
 document.getElementById('pp-total').textContent=fmtRM(orderTotal);
 document.getElementById('pp-ref').textContent='#'+orderShort;
+
+// Load real bank / DuitNow QR details from admin settings.
+(async function loadPaymentDetails(){
+  try{
+    var{data}=await _sb.from('salesweb_app_settings')
+      .select('value').eq('key','payment_details').maybeSingle();
+    if(!data || !data.value){
+      document.getElementById('pp-bank-details').style.display='none';
+      document.getElementById('pp-payment-empty').style.display='block';
+      return;
+    }
+    var d = typeof data.value==='string' ? JSON.parse(data.value) : data.value;
+    if(d.bank_name)      document.getElementById('pp-bank-name').textContent      = d.bank_name;
+    if(d.account_name)   document.getElementById('pp-account-name').textContent   = d.account_name;
+    if(d.account_number) document.getElementById('pp-account-number').textContent = d.account_number;
+    if(d.duitnow_qr_url){
+      document.getElementById('pp-qr-img').src = d.duitnow_qr_url;
+      document.getElementById('pp-qr-box').style.display = 'block';
+    }
+    // If nothing meaningful is set, show the empty-state message.
+    if(!d.bank_name && !d.account_number && !d.duitnow_qr_url){
+      document.getElementById('pp-bank-details').style.display='none';
+      document.getElementById('pp-payment-empty').style.display='block';
+    }
+  }catch(e){ console.warn('payment details load failed:', e); }
+})();
 
 // File preview
 var proofFile=null;

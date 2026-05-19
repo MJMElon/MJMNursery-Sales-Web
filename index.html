@@ -94,7 +94,7 @@
 // Bump MJM_BUILD on every meaningful deploy.
 (function() {
   try {
-    var MJM_BUILD = '2026-05-18-portal-search-autofill-fix';
+    var MJM_BUILD = '2026-05-18-portal-search-autofill-fix-v2';
     var prev = null;
     try { prev = localStorage.getItem('mjm_build'); } catch (_) { return; }
     if (prev === MJM_BUILD) return;                // already on latest
@@ -2738,6 +2738,20 @@ async function initPortal(){
   // Load real orders from database
   await loadCustomerOrders();
 
+  // Defensively clear the search input before rendering. Chrome/Safari can
+  // ignore autocomplete=off for fields near a logged-in user's context and
+  // autofill the email here — which would then filter every order out.
+  // Schedule additional clears at 200ms and 800ms to catch autofill that
+  // arrives after the initial render.
+  (function clearSearchDefensively(){
+    var inp=document.getElementById('pp-order-search');
+    function clear(){ if(inp && inp.value && /@|\s/.test(inp.value)){ inp.value=''; if(typeof pRenderOrders==='function') pRenderOrders(); if(typeof pRenderHistory==='function') pRenderHistory(); } }
+    if(inp){ inp.value=''; }
+    setTimeout(clear, 200);
+    setTimeout(clear, 800);
+    setTimeout(clear, 2000);
+  })();
+
   try{pRenderOrders();}catch(e){console.error('orders:',e);}
   try{pRenderHistory();}catch(e){console.error('history:',e);}
   try{await loadCustomerPoints();}catch(e){console.error('points load:',e);}
@@ -2849,7 +2863,11 @@ function showPortalToast(msg){
 
 // Orders (active only — left side)
 function pRenderOrders(){
+  // Final safety net: if the input still contains autofilled noise (the user's
+  // email, or whitespace from a paste), treat it as no filter at all. Browser
+  // autofill into a "search by order #" box is virtually always wrong.
   var q=(document.getElementById('pp-order-search').value||'').trim().toLowerCase();
+  if(q.indexOf('@')>=0) q='';
   var recent=P_ORDERS.filter(function(o){return o.status!=='Order Completed';});
   if(q)recent=recent.filter(function(o){return pOrderMatchSearch(o,q);});
   var html='';
@@ -2861,7 +2879,11 @@ function pRenderOrders(){
 
 // History (left side — separate panel)
 function pRenderHistory(){
+  // Final safety net: if the input still contains autofilled noise (the user's
+  // email, or whitespace from a paste), treat it as no filter at all. Browser
+  // autofill into a "search by order #" box is virtually always wrong.
   var q=(document.getElementById('pp-order-search').value||'').trim().toLowerCase();
+  if(q.indexOf('@')>=0) q='';
   var hist=P_ORDERS.filter(function(o){return o.status==='Order Completed';});
   if(q)hist=hist.filter(function(o){return pOrderMatchSearch(o,q);});
   var html='';

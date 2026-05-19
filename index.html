@@ -94,7 +94,7 @@
 // Bump MJM_BUILD on every meaningful deploy.
 (function() {
   try {
-    var MJM_BUILD = '2026-05-18-points-redeem-persist';
+    var MJM_BUILD = '2026-05-18-portal-search-autofill-fix';
     var prev = null;
     try { prev = localStorage.getItem('mjm_build'); } catch (_) { return; }
     if (prev === MJM_BUILD) return;                // already on latest
@@ -1660,7 +1660,7 @@
           </div>
         </div>
         <div style="margin-bottom:.8rem;">
-          <input type="text" id="pp-order-search" placeholder="Search by order #, billing name, item..." oninput="pFilterOrders()" style="width:100%;padding:8px 12px;border:1.5px solid var(--green-pale);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;background:var(--cream);color:var(--text-dark);transition:border-color .15s;" onfocus="this.style.borderColor='var(--green-mid)'" onblur="this.style.borderColor='var(--green-pale)'">
+          <input type="text" id="pp-order-search" name="mjm-portal-search" autocomplete="off" inputmode="search" data-form-type="other" data-1p-ignore data-lpignore="true" placeholder="Search by order #, billing name, item..." oninput="pFilterOrders()" style="width:100%;padding:8px 12px;border:1.5px solid var(--green-pale);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;background:var(--cream);color:var(--text-dark);transition:border-color .15s;" onfocus="this.style.borderColor='var(--green-mid)'" onblur="this.style.borderColor='var(--green-pale)'">
         </div>
         <div id="pp-orders"></div>
         <div id="pp-history" style="display:none;"></div>
@@ -3155,6 +3155,34 @@ async function pCancelOrder(orderId){
     showPortalToast('Cancel failed: ' + (e.message || e));
   }
 }
+
+// When the portal page is restored from the browser's back/forward cache
+// (e.g. user goes portal → checkout → back), the page state — including any
+// autofilled value in the order search input — is preserved as-is and
+// initPortal() is NOT re-run. Clear stale search filters and re-render so the
+// list isn't empty just because the browser auto-pasted the user's email into
+// the search box.
+window.addEventListener('pageshow', function(e){
+  try{
+    var search = document.getElementById('pp-order-search');
+    if(search && search.value){ search.value = ''; }
+    var portalActive = document.getElementById('page-portal')
+                       && document.getElementById('page-portal').classList.contains('active');
+    if(portalActive){
+      if(typeof pRenderOrders === 'function') pRenderOrders();
+      if(typeof pRenderHistory === 'function') pRenderHistory();
+      // On a bfcache restore (e.persisted=true), also re-fetch orders so
+      // that any change made on another tab/page (e.g. a new order placed,
+      // a cancellation) is reflected.
+      if(e.persisted && typeof loadCustomerOrders === 'function'){
+        loadCustomerOrders().then(function(){
+          if(typeof pRenderOrders === 'function') pRenderOrders();
+          if(typeof pRenderHistory === 'function') pRenderHistory();
+        }).catch(function(){});
+      }
+    }
+  }catch(err){ console.error('portal pageshow handler:', err); }
+});
 
 // Load real points data from DB
 async function loadCustomerPoints(){

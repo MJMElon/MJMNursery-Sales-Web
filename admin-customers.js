@@ -77,10 +77,11 @@ async function loadPointsSettings(){
   if(data&&data.value){
     try{pointsConfig=JSON.parse(data.value);}catch(e){}
   }
-  document.getElementById('pts-earn-rm').value=pointsConfig.earn_rm||1;
-  document.getElementById('pts-earn-pts').value=pointsConfig.earn_pts||1;
-  document.getElementById('pts-redeem-pts').value=pointsConfig.redeem_pts||100;
-  document.getElementById('pts-redeem-rm').value=pointsConfig.redeem_rm||1;
+  // Use the saved value as-is; only fall back when the property is actually missing.
+  document.getElementById('pts-earn-rm').value    = pointsConfig.earn_rm    != null ? pointsConfig.earn_rm    : 1;
+  document.getElementById('pts-earn-pts').value   = pointsConfig.earn_pts   != null ? pointsConfig.earn_pts   : 1;
+  document.getElementById('pts-redeem-pts').value = pointsConfig.redeem_pts != null ? pointsConfig.redeem_pts : 100;
+  document.getElementById('pts-redeem-rm').value  = pointsConfig.redeem_rm  != null ? pointsConfig.redeem_rm  : 1;
   updatePointsSummary();
   togglePointsEdit(false);
   // Set default date range to current month
@@ -96,35 +97,56 @@ function togglePointsEdit(editing){
   document.getElementById('pts-save-btn').style.display=editing?'':'none';
   document.getElementById('pts-cancel-btn').style.display=editing?'':'none';
   if(!editing){
-    // Revert to saved values
-    document.getElementById('pts-earn-rm').value=pointsConfig.earn_rm||1;
-    document.getElementById('pts-earn-pts').value=pointsConfig.earn_pts||1;
-    document.getElementById('pts-redeem-pts').value=pointsConfig.redeem_pts||100;
-    document.getElementById('pts-redeem-rm').value=pointsConfig.redeem_rm||1;
+    // Revert to last-saved values (don't clobber a 0 with a fallback).
+    document.getElementById('pts-earn-rm').value    = pointsConfig.earn_rm    != null ? pointsConfig.earn_rm    : 1;
+    document.getElementById('pts-earn-pts').value   = pointsConfig.earn_pts   != null ? pointsConfig.earn_pts   : 1;
+    document.getElementById('pts-redeem-pts').value = pointsConfig.redeem_pts != null ? pointsConfig.redeem_pts : 100;
+    document.getElementById('pts-redeem-rm').value  = pointsConfig.redeem_rm  != null ? pointsConfig.redeem_rm  : 1;
     updatePointsSummary();
   }
 }
 
 function updatePointsSummary(){
-  var earnRm=parseFloat(document.getElementById('pts-earn-rm').value)||1;
-  var earnPts=parseInt(document.getElementById('pts-earn-pts').value)||1;
-  var redeemPts=parseInt(document.getElementById('pts-redeem-pts').value)||100;
-  var redeemRm=parseFloat(document.getElementById('pts-redeem-rm').value)||1;
+  var earnRm    = Math.max(0.01, parseFloat(document.getElementById('pts-earn-rm').value)    || 1);
+  var earnPts   = Math.max(0,    parseInt  (document.getElementById('pts-earn-pts').value)   || 0);
+  var redeemPts = Math.max(1,    parseInt  (document.getElementById('pts-redeem-pts').value) || 100);
+  var redeemRm  = Math.max(0,    parseFloat(document.getElementById('pts-redeem-rm').value)  || 0);
+
+  // Effective cashback rate = (points-per-RM-spent) * (RM-per-point-redeemed) * 100%.
+  // i.e. for every RM 100 a customer spends, what fraction comes back as redeemable discount.
+  var ptsPerRm   = earnPts / earnRm;
+  var rmPerPt    = redeemRm / redeemPts;
+  var cashbackPct = ptsPerRm * rmPerPt * 100;
+
   document.getElementById('pts-summary').innerHTML=
     '<strong>Earning:</strong> RM '+earnRm+' spent = '+earnPts+' point(s)<br>'+
     '<strong>Redemption:</strong> '+redeemPts+' points = RM '+redeemRm.toFixed(2)+' discount<br>'+
-    '<strong>Point value:</strong> 1 point = RM '+(redeemRm/redeemPts).toFixed(4);
+    '<strong>Point value:</strong> 1 point = RM '+(rmPerPt).toFixed(4)+'<br>'+
+    '<strong>Effective cashback:</strong> '+cashbackPct.toFixed(2)+'% '+
+      '<span style="color:var(--ink4);font-size:11px;">(every RM 100 spent → RM '+(cashbackPct).toFixed(2)+' redeemable discount)</span>';
 }
 
 async function savePointsSettings(){
-  var config={
-    earn_rm:parseFloat(document.getElementById('pts-earn-rm').value)||1,
-    earn_pts:parseInt(document.getElementById('pts-earn-pts').value)||1,
-    redeem_pts:parseInt(document.getElementById('pts-redeem-pts').value)||100,
-    redeem_rm:parseFloat(document.getElementById('pts-redeem-rm').value)||1
+  // Parse each field; treat blank/NaN as "use what was there before" so the
+  // user can't accidentally wipe a value by leaving a field empty.
+  function readNum(id, parser, fallback){
+    var raw = document.getElementById(id).value;
+    if (raw === '' || raw === null || raw === undefined) return fallback;
+    var n = parser(raw);
+    return isNaN(n) ? fallback : n;
+  }
+  var config = {
+    earn_rm:    readNum('pts-earn-rm',    parseFloat, pointsConfig.earn_rm    != null ? pointsConfig.earn_rm    : 1),
+    earn_pts:   readNum('pts-earn-pts',   parseInt,   pointsConfig.earn_pts   != null ? pointsConfig.earn_pts   : 1),
+    redeem_pts: readNum('pts-redeem-pts', parseInt,   pointsConfig.redeem_pts != null ? pointsConfig.redeem_pts : 100),
+    redeem_rm:  readNum('pts-redeem-rm',  parseFloat, pointsConfig.redeem_rm  != null ? pointsConfig.redeem_rm  : 1)
   };
+  // Sanity-clamp to prevent divide-by-zero in the summary math.
+  if (config.earn_rm    <= 0) config.earn_rm    = 0.01;
+  if (config.redeem_pts <= 0) config.redeem_pts = 1;
+
   var{error}=await sb.from('salesweb_app_settings').upsert({key:'points_config',value:JSON.stringify(config),updated_at:new Date().toISOString()},{onConflict:'key'});
-  if(error){toast('Error: '+error.message,'error');return;}
+  if(error){toast('Save failed: '+error.message,'error');return;}
 
   // Log change to history
   var session=await sb.auth.getSession();

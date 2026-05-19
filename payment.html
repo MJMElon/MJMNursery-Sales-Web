@@ -98,7 +98,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-d
 .promo-btn:hover{background:var(--green-mid);}
 .promo-btn:disabled{opacity:.5;cursor:not-allowed;}
 .promo-msg{font-size:11px;margin-top:.3rem;font-weight:500;}
-.promo-msg.ok{color:#059669;}.promo-msg.err{color:#dc2626;}
+.promo-msg.ok{color:#059669;}.promo-msg.err{color:#dc2626;}.promo-msg.warn{color:#b45309;}
 .points-row{display:flex;align-items:center;gap:.5rem;margin-top:.3rem;}
 .points-bal{font-size:11px;color:var(--text-mid);}
 .points-input{width:80px;background:var(--cream);border:1.5px solid var(--green-pale);border-radius:8px;padding:7px 10px;font-size:12px;font-weight:600;color:var(--text-dark);outline:none;font-family:'DM Sans',sans-serif;text-align:center;}
@@ -331,7 +331,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-d
       <div class="promo-section" id="points-section" style="display:none;">
         <div class="promo-label">Use Points</div>
         <div class="points-row">
-          <input class="points-input" type="number" id="ck-points" value="0" min="0" onchange="applyPoints()">
+          <input class="points-input" type="number" id="ck-points" value="0" min="0" placeholder="0">
+          <button class="promo-btn" id="btn-redeem-points" onclick="applyPoints()">Redeem</button>
           <span class="points-bal" id="points-bal">Balance: 0 pts</span>
         </div>
         <div class="promo-msg" id="points-msg"></div>
@@ -523,20 +524,40 @@ async function applyVoucher(){
 }
 
 // ── Points ──
+// Triggered only by the "Redeem" button next to the input (no longer on every
+// keystroke/blur, which used to silently snap the value to 0). Behaviour:
+//   • user types any number → value stays as typed until they click Redeem
+//   • if they redeem more than balance → cap to balance and show a warn
+//     message ("Max value is N pts (your balance).")
+//   • round down to whole multiples of redeemPtsPerRm so the RM discount is
+//     never fractional
+//   • redeeming 0 simply un-redeems any previously applied amount.
 function applyPoints(){
   var input=document.getElementById('ck-points');
-  var val=parseInt(input.value)||0;
-  val=Math.max(0,Math.min(pointsBalance,val));
+  var msg  =document.getElementById('points-msg');
+  var raw  =parseInt(input.value)||0;
+  if(raw<0)raw=0;
+
+  var capped=false;
+  if(raw>pointsBalance){ raw=pointsBalance; capped=true; }
+
   // Round down to a whole multiple of redeemPtsPerRm so we never give a
   // fractional discount (e.g. 100pts=RM1 → must spend 100/200/300/… pts).
-  if(redeemPtsPerRm>1) val = Math.floor(val/redeemPtsPerRm)*redeemPtsPerRm;
-  input.value=val;
-  pointsUsed=val;
-  var msg=document.getElementById('points-msg');
-  if(val>0){
-    msg.className='promo-msg ok';msg.textContent=fmtRM(ptsToRm(val))+' deducted from points';
+  if(redeemPtsPerRm>1) raw = Math.floor(raw/redeemPtsPerRm)*redeemPtsPerRm;
+
+  input.value=raw;
+  pointsUsed =raw;
+
+  if(capped){
+    msg.className='promo-msg warn';
+    msg.textContent='Max value is '+pointsBalance.toLocaleString()+' pts (your balance). '
+                  + (raw>0 ? fmtRM(ptsToRm(raw))+' deducted.' : '');
+  } else if(raw>0){
+    msg.className='promo-msg ok';
+    msg.textContent=fmtRM(ptsToRm(raw))+' deducted from points';
   } else {
-    msg.textContent='';msg.className='promo-msg';
+    msg.className='promo-msg';
+    msg.textContent='';
   }
   updateSummary();
 }

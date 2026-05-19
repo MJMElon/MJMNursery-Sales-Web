@@ -94,7 +94,7 @@
 // Bump MJM_BUILD on every meaningful deploy.
 (function() {
   try {
-    var MJM_BUILD = '2026-05-13-login-modal-spacing';
+    var MJM_BUILD = '2026-05-18-points-redeem-persist';
     var prev = null;
     try { prev = localStorage.getItem('mjm_build'); } catch (_) { return; }
     if (prev === MJM_BUILD) return;                // already on latest
@@ -3162,23 +3162,35 @@ async function loadCustomerPoints(){
   var uid=sess?.data?.session?.user?.id;
   if(!uid)return;
 
-  // Load points config from app_settings
+  // Load member tiers from app_settings
   var tiers=[{name:'Bronze',min_points:0,color:'#CD7F32'}];
   try{
     var{data:tiersData}=await _sb.from('salesweb_app_settings').select('value').eq('key','member_tiers').single();
     if(tiersData&&tiersData.value)tiers=JSON.parse(tiersData.value);
   }catch(e){}
 
-  // Calculate total earned from customer_orders.points_issued
-  var{data:orders}=await _sb.from('salesweb_customer_orders').select('points_issued').eq('customer_id',uid);
-  var totalEarned=0;
-  if(orders)orders.forEach(function(o){totalEarned+=(o.points_issued||0);});
+  // Single source of truth: the points ledger (via balance view).
+  // Falls back to summing per-order points_issued only if the view returns
+  // nothing — covers the edge case where the migration hasn't been run yet.
+  var balance=0,totalEarned=0,redeemed=0;
+  try{
+    var{data:bal}=await _sb.from('salesweb_customer_points_balance')
+      .select('balance,lifetime_earned,lifetime_redeemed')
+      .eq('user_id',uid).maybeSingle();
+    if(bal){
+      balance=Number(bal.balance)||0;
+      totalEarned=Number(bal.lifetime_earned)||0;
+      redeemed=Number(bal.lifetime_redeemed)||0;
+    }
+  }catch(e){}
+  if(!totalEarned){
+    var{data:orders}=await _sb.from('salesweb_customer_orders').select('points_issued').eq('customer_id',uid);
+    if(orders)orders.forEach(function(o){totalEarned+=(o.points_issued||0);});
+    if(!balance)balance=totalEarned-redeemed;
+  }
 
-  // For now redeemed = 0 (can be tracked later)
-  var redeemed=0;
-  var balance=totalEarned-redeemed;
-
-  // Determine tier
+  // Determine tier from lifetime earned (not current balance — spending
+  // redeemed points shouldn't demote you).
   tiers.sort(function(a,b){return b.min_points-a.min_points;});
   var currentTier=tiers[tiers.length-1]; // lowest tier as default
   for(var i=0;i<tiers.length;i++){

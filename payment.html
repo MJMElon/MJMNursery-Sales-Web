@@ -410,21 +410,45 @@ var selectedPayMethod='';
   }
 })();
 
-// ── Load points balance ──
+// Redeem ratio loaded from points_config — defaults to 100pts = RM1 (1pt = RM0.01).
+var redeemPtsPerRm = 100;   // points needed to get 1 unit of redeem_rm
+var redeemRmPerUnit = 1;    // RM per redeem_pts chunk
+function ptsToRm(pts){ return (Number(pts)||0) * (redeemRmPerUnit / redeemPtsPerRm); }
+
+// ── Load points balance + redeem ratio ──
 async function loadPointsBalance(){
   var session=await _sb.auth.getSession();
   var userId=session?.data?.session?.user?.id;
   if(!userId)return;
-  // Try to get points from a points/rewards table (fallback to 0)
+
+  // 1. Real balance from the ledger view (single source of truth).
   try{
-    var{data}=await _sb.from('salesweb_customer_points').select('balance').eq('user_id',userId).single();
-    if(data&&data.balance>0){
-      pointsBalance=data.balance;
-      document.getElementById('points-section').style.display='block';
-      document.getElementById('points-bal').textContent='Balance: '+pointsBalance.toLocaleString()+' pts';
-      document.getElementById('ck-points').max=pointsBalance;
+    var{data:bal}=await _sb.from('salesweb_customer_points_balance')
+      .select('balance').eq('user_id',userId).maybeSingle();
+    if(bal&&Number(bal.balance)>0){
+      pointsBalance=Number(bal.balance);
     }
   }catch(e){}
+
+  // 2. Live redeem ratio so checkout discount uses whatever the admin set.
+  try{
+    var{data:cfg}=await _sb.from('salesweb_app_settings')
+      .select('value').eq('key','points_config').maybeSingle();
+    if(cfg&&cfg.value){
+      var parsed = typeof cfg.value==='string' ? JSON.parse(cfg.value) : cfg.value;
+      if(parsed){
+        if(parsed.redeem_pts && Number(parsed.redeem_pts)>0) redeemPtsPerRm = Number(parsed.redeem_pts);
+        if(parsed.redeem_rm  && Number(parsed.redeem_rm) >0) redeemRmPerUnit = Number(parsed.redeem_rm);
+      }
+    }
+  }catch(e){}
+
+  if(pointsBalance>0){
+    document.getElementById('points-section').style.display='block';
+    document.getElementById('points-bal').textContent='Balance: '+pointsBalance.toLocaleString()+' pts';
+    document.getElementById('ck-points').max=pointsBalance;
+    document.getElementById('ck-points').step=redeemPtsPerRm;  // can only spend whole-chunk amounts
+  }
 }
 loadPointsBalance();
 
@@ -445,7 +469,7 @@ function updateSummary(){
   if(voucherDiscount>0){
     html+='<div class="summary-discount"><span>Voucher ('+voucherCode+')</span><span>- '+fmtRM(voucherDiscount)+'</span></div>';
   }
-  var pointsValue=pointsUsed*0.01; // 1 point = RM 0.01
+  var pointsValue=ptsToRm(pointsUsed);   // uses admin-configured redeem rate
   if(pointsUsed>0){
     html+='<div class="summary-discount"><span>Points ('+pointsUsed.toLocaleString()+' pts)</span><span>- '+fmtRM(pointsValue)+'</span></div>';
   }
@@ -503,11 +527,14 @@ function applyPoints(){
   var input=document.getElementById('ck-points');
   var val=parseInt(input.value)||0;
   val=Math.max(0,Math.min(pointsBalance,val));
+  // Round down to a whole multiple of redeemPtsPerRm so we never give a
+  // fractional discount (e.g. 100pts=RM1 → must spend 100/200/300/… pts).
+  if(redeemPtsPerRm>1) val = Math.floor(val/redeemPtsPerRm)*redeemPtsPerRm;
   input.value=val;
   pointsUsed=val;
   var msg=document.getElementById('points-msg');
   if(val>0){
-    msg.className='promo-msg ok';msg.textContent=fmtRM(val*0.01)+' deducted from points';
+    msg.className='promo-msg ok';msg.textContent=fmtRM(ptsToRm(val))+' deducted from points';
   } else {
     msg.textContent='';msg.className='promo-msg';
   }
@@ -729,12 +756,28 @@ async function placeOrder(){
   btn.disabled=true;btn.textContent='Processing...';
 
   var subtotal=cart.reduce(function(s,c){return s+(c.price*c.qty);},0);
-  var pointsValue=pointsUsed*0.01;
+  var pointsValue=ptsToRm(pointsUsed);
   var finalTotal=Math.max(0,subtotal-voucherDiscount-pointsValue);
 
   // Get user session
   var session=await _sb.auth.getSession();
   var userId=session?.data?.session?.user?.id||null;
+
+  // Server-side re-check: refuse to place the order if the user has somehow
+  // tried to spend more points than they actually have (e.g. by editing the
+  // input via devtools or by racing two pending orders).
+  if(pointsUsed>0 && userId){
+    try{
+      var{data:freshBal}=await _sb.from('salesweb_customer_points_balance')
+        .select('balance').eq('user_id',userId).maybeSingle();
+      var available = freshBal && Number(freshBal.balance) || 0;
+      if(pointsUsed>available){
+        showToast('Not enough points — only '+available.toLocaleString()+' available');
+        btn.disabled=false;btn.textContent='Place Order';
+        return;
+      }
+    }catch(e){ /* if the view query fails, fall through; admin sees lower-priority issue */ }
+  }
 
   // Save phone to profile for future use
   if(userId&&phone){
@@ -779,7 +822,12 @@ async function placeOrder(){
       shipping_address:'Self Collection — MJM Nursery Office, Niah Land District, Miri, 98000, Sarawak',
       customer_remark:remarkParts.join(' | '),
       billing_name:billingName,
-      billing_tax_id:billingTin||null
+      billing_tax_id:billingTin||null,
+      // Redemption snapshot — used by issuePoints()/billplz-webhook to insert
+      // the negative ledger row when the order flips to Paid. Defaults to 0
+      // when no points were applied.
+      points_redeemed:pointsUsed||0,
+      points_discount_rm:pointsValue||0
     }]).select().single();
     order=result.data;error=result.error;
     if(!error)break;

@@ -223,7 +223,17 @@ async function loadPointsStats(){
   orders=orders||[];
 
   var totalIssued=orders.reduce(function(s,o){return s+(o.points_issued||0);},0);
-  var totalRedeemed=0; // future: track redemption
+
+  // Sum redeemed points from the ledger in the same date range. Falls back
+  // to 0 if the ledger doesn't exist yet (migration not run).
+  var totalRedeemed=0;
+  try{
+    var ledgerQ=sb.from('salesweb_points_ledger').select('change').eq('type','Redeemed');
+    if(from)ledgerQ=ledgerQ.gte('created_at',from+'T00:00:00');
+    if(to)ledgerQ=ledgerQ.lte('created_at',to+'T23:59:59');
+    var{data:ledRows}=await ledgerQ;
+    if(ledRows)totalRedeemed=ledRows.reduce(function(s,r){return s+Math.abs(Number(r.change)||0);},0);
+  }catch(e){}
 
   // Calculate RM value from points config
   var redeemPts=pointsConfig.redeem_pts||100;
@@ -306,7 +316,25 @@ async function viewCustomer(id){
   // Calculate stats
   var totalSpend=orders.filter(function(o){return o.status!=='Cancelled';}).reduce(function(s,o){return s+(o.total||0);},0);
   var totalPurchases=orders.filter(function(o){return o.status!=='Cancelled';}).length;
-  var totalPtsEarned=orders.reduce(function(s,o){return s+(o.points_issued||0);},0);
+
+  // Pull points totals from the ledger view — this is the single source of
+  // truth and reflects both earnings (from orders) and redemptions. Fall back
+  // to summing per-order points_issued if the view returns nothing.
+  var totalPtsEarned=0, totalPtsRedeemed=0, ptsBalance=0;
+  try{
+    var{data:bal}=await sb.from('salesweb_customer_points_balance')
+      .select('balance,lifetime_earned,lifetime_redeemed')
+      .eq('user_id',id).maybeSingle();
+    if(bal){
+      ptsBalance=Number(bal.balance)||0;
+      totalPtsEarned=Number(bal.lifetime_earned)||0;
+      totalPtsRedeemed=Number(bal.lifetime_redeemed)||0;
+    }
+  }catch(e){}
+  if(!totalPtsEarned){
+    totalPtsEarned=orders.reduce(function(s,o){return s+(o.points_issued||0);},0);
+    if(!ptsBalance) ptsBalance=totalPtsEarned-totalPtsRedeemed;
+  }
   var activeOrders=orders.filter(function(o){return o.status!=='Completed'&&o.status!=='Cancelled';});
   var historyOrders=orders.filter(function(o){return o.status==='Completed'||o.status==='Cancelled';});
 
@@ -412,9 +440,9 @@ async function viewCustomer(id){
   html+='<div style="background:var(--bg);border-radius:12px;padding:1.2rem;">';
   html+='<div style="font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.8rem;">Points & Rewards</div>';
   var ptsItems=[
-    {label:'Available Points',value:totalPtsEarned.toLocaleString(),bold:true},
+    {label:'Available Points',value:ptsBalance.toLocaleString(),bold:true},
     {label:'Total Earned',value:totalPtsEarned.toLocaleString()},
-    {label:'Total Redeemed',value:'0'}
+    {label:'Total Redeemed',value:totalPtsRedeemed.toLocaleString()}
   ];
   ptsItems.forEach(function(p){
     html+='<div style="display:flex;justify-content:space-between;padding:.35rem 0;border-bottom:1px solid var(--border);font-size:13px;">';

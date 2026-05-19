@@ -94,7 +94,7 @@
 // Bump MJM_BUILD on every meaningful deploy.
 (function() {
   try {
-    var MJM_BUILD = '2026-05-18-portal-search-autofill-fix-v2';
+    var MJM_BUILD = '2026-05-18-portal-points-activity';
     var prev = null;
     try { prev = localStorage.getItem('mjm_build'); } catch (_) { return; }
     if (prev === MJM_BUILD) return;                // already on latest
@@ -1743,6 +1743,7 @@
       <div class="portal-right">
         <div id="pp-member-card"></div>
         <div id="pp-points-card"></div>
+        <div id="pp-points-activity"></div>
       </div>
     </div>
   </section>
@@ -2757,6 +2758,7 @@ async function initPortal(){
   try{await loadCustomerPoints();}catch(e){console.error('points load:',e);}
   try{pRenderMemberCard();}catch(e){console.error('member:',e);}
   try{pRenderPointsCard();}catch(e){console.error('points:',e);}
+  try{pRenderPointsActivity();}catch(e){console.error('points activity:',e);}
   try{loadBillingFromDb().then(function(){renderBillingEntries();}).catch(function(){loadBillingFromStorage();renderBillingEntries();});}catch(e){loadBillingFromStorage();renderBillingEntries();}
 
   var lastTab=sessionStorage.getItem('mjm_portal_tab');
@@ -3285,6 +3287,55 @@ function pRenderPointsCard(){
         '<div style="background:var(--cream);border-radius:8px;padding:.6rem .8rem;text-align:center;"><div style="font-size:.6rem;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.08em;">Redeemed</div><div style="font-size:1rem;font-weight:700;color:var(--text-dark);">'+p.redeemed.toLocaleString()+'</div></div>'+
       '</div>'+
     '</div>';
+}
+
+// Right side: Points Activity — recent earn/redeem entries from the ledger.
+async function pRenderPointsActivity(){
+  var el=document.getElementById('pp-points-activity');
+  if(!el)return;
+  var sess=await _sb.auth.getSession();
+  var uid=sess?.data?.session?.user?.id;
+  if(!uid){el.innerHTML='';return;}
+
+  var rows=[];
+  try{
+    var{data}=await _sb.from('salesweb_points_ledger')
+      .select('id,change,type,order_id,rm_value,note,created_at')
+      .eq('user_id',uid)
+      .order('created_at',{ascending:false})
+      .limit(10);
+    rows=data||[];
+  }catch(e){ rows=[]; }
+
+  if(!rows.length){
+    el.innerHTML='<div class="p-card"><h3>Points Activity</h3>'+
+      '<div style="font-size:12px;color:var(--text-light);text-align:center;padding:.5rem 0;">No activity yet. Your earn and redeem history will appear here.</div>'+
+    '</div>';
+    return;
+  }
+
+  // Map order_id (UUID) → order_number (display) so the activity row can label it.
+  var orderMap={};
+  (P_ORDERS||[]).forEach(function(o){if(o.fullId) orderMap[o.fullId]=o.id;});
+
+  function fmtDate(s){var d=new Date(s);return d.toLocaleDateString('en-MY',{day:'2-digit',month:'short',year:'numeric'});}
+  function rowHtml(r){
+    var sign = r.change>=0 ? '+' : '−';
+    var amt  = Math.abs(r.change).toLocaleString();
+    var color = r.change>=0 ? 'var(--green-mid)' : '#b45309';
+    var typeLabel = r.type==='Earned' ? '⭐ Earned' : (r.type==='Redeemed' ? '🎁 Redeemed' : '✏️ Adjusted');
+    var orderRef = r.order_id && orderMap[r.order_id] ? '<div style="font-size:10px;color:var(--text-light);">Order '+orderMap[r.order_id]+'</div>' : '';
+    return '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:.5rem 0;border-bottom:1px solid #e8ede8;font-size:12px;">'+
+        '<div><div style="font-weight:600;color:var(--text-dark);">'+typeLabel+'</div>'+orderRef+
+          '<div style="font-size:10px;color:var(--text-light);margin-top:.1rem;">'+fmtDate(r.created_at)+'</div></div>'+
+        '<div style="font-family:\'Cormorant Garamond\',serif;font-size:1.1rem;font-weight:600;color:'+color+';white-space:nowrap;">'+sign+amt+'</div>'+
+      '</div>';
+  }
+
+  el.innerHTML='<div class="p-card">'+
+    '<h3 style="display:flex;justify-content:space-between;align-items:center;"><span>Points Activity</span><span style="font-size:10px;font-weight:400;color:var(--text-light);">Latest 10</span></h3>'+
+    rows.map(rowHtml).join('')+
+  '</div>';
 }
 
 // Rating

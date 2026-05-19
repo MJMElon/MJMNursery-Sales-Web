@@ -10,7 +10,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>MJM Nursery | Checkout</title>
+<!-- BUILD: 2026-05-19c — points-redeem button + min-redemption feedback -->
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
@@ -527,28 +531,41 @@ async function applyVoucher(){
 // Triggered only by the "Redeem" button next to the input (no longer on every
 // keystroke/blur, which used to silently snap the value to 0). Behaviour:
 //   • user types any number → value stays as typed until they click Redeem
-//   • if they redeem more than balance → cap to balance and show a warn
-//     message ("Max value is N pts (your balance).")
-//   • round down to whole multiples of redeemPtsPerRm so the RM discount is
-//     never fractional
+//   • if they redeem more than balance → cap to balance, warn message
+//     "Max value is N pts (your balance)."
+//   • if they redeem fewer pts than the minimum chunk (e.g. typed 50 when
+//     100pts=RM1) → keep raw=0, show clear "Minimum is N pts" warning so the
+//     user understands why no discount was applied.
 //   • redeeming 0 simply un-redeems any previously applied amount.
 function applyPoints(){
-  var input=document.getElementById('ck-points');
-  var msg  =document.getElementById('points-msg');
-  var raw  =parseInt(input.value)||0;
-  if(raw<0)raw=0;
+  var input  = document.getElementById('ck-points');
+  var msg    = document.getElementById('points-msg');
+  var typed  = parseInt(input.value)||0;
+  if(typed<0)typed=0;
 
   var capped=false;
+  var raw   =typed;
   if(raw>pointsBalance){ raw=pointsBalance; capped=true; }
 
   // Round down to a whole multiple of redeemPtsPerRm so we never give a
   // fractional discount (e.g. 100pts=RM1 → must spend 100/200/300/… pts).
-  if(redeemPtsPerRm>1) raw = Math.floor(raw/redeemPtsPerRm)*redeemPtsPerRm;
+  var below_min = false;
+  if(redeemPtsPerRm>1){
+    var rounded = Math.floor(raw/redeemPtsPerRm)*redeemPtsPerRm;
+    if(typed>0 && rounded===0) below_min = true;
+    raw = rounded;
+  }
 
   input.value=raw;
   pointsUsed =raw;
 
-  if(capped){
+  if(below_min){
+    // User typed something positive but it's less than one redeemable chunk —
+    // surface this clearly instead of silently zeroing.
+    msg.className='promo-msg warn';
+    msg.textContent='Minimum redemption is '+redeemPtsPerRm.toLocaleString()+' pts '
+                  + '('+fmtRM(redeemRmPerUnit)+' off). Nothing deducted.';
+  } else if(capped){
     msg.className='promo-msg warn';
     msg.textContent='Max value is '+pointsBalance.toLocaleString()+' pts (your balance). '
                   + (raw>0 ? fmtRM(ptsToRm(raw))+' deducted.' : '');

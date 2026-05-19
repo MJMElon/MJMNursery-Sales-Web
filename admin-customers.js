@@ -13,34 +13,64 @@
 async function loadCustomers(){
   var q=(document.getElementById('cust-search').value||'').trim().toLowerCase();
 
-  // Get the set of customer_ids that have ever placed a sales-web order.
-  // A "customer" = anyone who's actually placed an order. This excludes
-  // operation/nursery staff accounts that happen to live in shared_profiles.
-  var{data:orderRows}=await sb.from('salesweb_customer_orders')
-    .select('customer_id').not('customer_id','is',null);
-  var hasOrder={};
-  (orderRows||[]).forEach(function(r){hasOrder[r.customer_id]=true;});
-  var orderedIds=Object.keys(hasOrder);
+  // ─── Build the customer set as the union of two groups ──────────────
+  //   A) Sales-web signed-up customers
+  //      (shared_profiles.user_type='customer' or legacy role='customer').
+  //      The sales-web signup flow in index.html / auth.html writes exactly
+  //      these markers — staff/operations accounts do not.
+  //   B) Anyone (regardless of sign-up source) who has at least one PAID
+  //      order. "Paid" = order status NOT IN
+  //      ('Pending Payment','Cancelled','Refunded').
+  //
+  //   The previous version showed every shared_profiles row that had ANY
+  //   order, which leaked pending-payment carts and staff accounts.
+  //   ───────────────────────────────────────────────────────────────────
 
-  if(!orderedIds.length){
+  // (B) Customer IDs with a paid order — pull all orders + status, filter
+  //     client-side so we don't have to depend on PostgREST IN-not syntax.
+  var{data:orderRows}=await sb.from('salesweb_customer_orders')
+    .select('customer_id,status').not('customer_id','is',null);
+  var NOT_PAID = {'Pending Payment':1,'Cancelled':1,'Refunded':1};
+  var paidIds={};
+  (orderRows||[]).forEach(function(r){
+    if(r.customer_id && !NOT_PAID[r.status]) paidIds[r.customer_id]=true;
+  });
+
+  // (A) Sales-web sign-ups.
+  var{data:swCusts,error}=await sb.from('shared_profiles')
+    .select('*').or('user_type.eq.customer,role.eq.customer');
+  if(error){toast('Error: '+error.message,'error');return;}
+
+  var byId={};
+  (swCusts||[]).forEach(function(c){byId[c.id]=c;});
+
+  // Pull profiles for paid-order customers that aren't already in (A).
+  var missingIds=Object.keys(paidIds).filter(function(id){return !byId[id];});
+  if(missingIds.length){
+    var{data:extras}=await sb.from('shared_profiles').select('*').in('id',missingIds);
+    (extras||[]).forEach(function(c){byId[c.id]=c;});
+  }
+
+  var custs=[];
+  for(var k in byId)custs.push(byId[k]);
+  custs.sort(function(a,b){return new Date(b.created_at||0)-new Date(a.created_at||0);});
+
+  if(q)custs=custs.filter(function(c){return(c.full_name||'').toLowerCase().includes(q)||(c.email||'').toLowerCase().includes(q);});
+
+  if(!custs.length){
     document.getElementById('cust-stats').innerHTML=
       '<div class="stat-box"><div class="stat-label">Total Customers</div><div class="stat-val">0</div></div>';
-    document.getElementById('customers-table').innerHTML='<div class="loading">No customers with orders yet</div>';
+    document.getElementById('customers-table').innerHTML='<div class="loading">No customers yet</div>';
     return;
   }
 
-  var{data,error}=await sb.from('shared_profiles')
-    .select('*').in('id',orderedIds).order('created_at',{ascending:false});
-  if(error){toast('Error: '+error.message,'error');return;}
-  var custs=data||[];
-  if(q)custs=custs.filter(function(c){return(c.full_name||'').toLowerCase().includes(q)||(c.email||'').toLowerCase().includes(q);});
-
   var creditCount=custs.filter(function(c){return c.payment_terms==='credit';}).length;
+  var paidCount  =custs.filter(function(c){return paidIds[c.id];}).length;
   document.getElementById('cust-stats').innerHTML=
     '<div class="stat-box"><div class="stat-label">Total Customers</div><div class="stat-val">'+custs.length+'</div></div>'+
+    '<div class="stat-box"><div class="stat-label">Has Paid Order</div><div class="stat-val" style="color:#059669;">'+paidCount+'</div></div>'+
     '<div class="stat-box"><div class="stat-label">Credit Customers</div><div class="stat-val" style="color:#a16207;">'+creditCount+'</div></div>';
 
-  if(!custs.length){document.getElementById('customers-table').innerHTML='<div class="loading">No customers found</div>';return;}
   var html='<table class="data-table"><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Terms</th><th>Joined</th><th>Action</th></tr></thead><tbody>';
   custs.forEach(function(c){
     var terms=c.payment_terms==='credit'?'credit':'cash';

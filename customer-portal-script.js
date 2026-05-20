@@ -13,13 +13,76 @@ const MJM_BANK = {
   accountNo: '5120 1234 5678', swift: 'MBBEMYKL'
 };
 
-const ORDERS = [
-  { id:'ORD-001', variety:'Oil Palm Seedling — Oct 2024', qty:2000, price:21.99, total:43980, orderDate:'2024-11-15', collDate:'2025-04-10', status:'Order Confirmed', notes:'Delivery to Miri — confirm route 1 week before.', billing:'Lot 234, Jalan Plantation, Taman Industri Miri, 98000 Miri, Sarawak', attachments:{ order_placed:[{name:'Invoice INV-2024-001',type:'PDF',size:'124 KB',icon:'📄'}], confirmed:[{name:'Order Confirmation',type:'PDF',size:'88 KB',icon:'✅'}], preparing:[], ready_to_collect:[], collecting:[], order_completed:[] } },
-  { id:'ORD-002', variety:'Oil Palm Seedling — Nov 2024', qty:1500, price:21.99, total:32985, orderDate:'2024-12-01', collDate:'2025-05-18', status:'Pending Payment', notes:'Waiting for payment confirmation.', billing:'Lot 234, Jalan Plantation, Taman Industri Miri, 98000 Miri, Sarawak', attachments:{ order_placed:[{name:'Proforma Invoice',type:'PDF',size:'98 KB',icon:'📄'}], confirmed:[], preparing:[], ready_to_collect:[], collecting:[], order_completed:[] } },
-  { id:'ORD-003', variety:'Oil Palm Seedling — Sep 2024', qty:3000, price:21.99, total:65970, orderDate:'2024-10-20', collDate:'2025-05-05', readyDate:'2025-04-10', status:'Ready-to-Collect', notes:'1000 pcs priority ICU grade. Vehicle to bring tarpaulin.', billing:'Lot 234, Jalan Plantation, Taman Industri Miri, 98000 Miri, Sarawak', attachments:{ order_placed:[{name:'Invoice INV-2024-003',type:'PDF',size:'132 KB',icon:'📄'}], confirmed:[{name:'Confirmation Letter',type:'PDF',size:'76 KB',icon:'✅'}], preparing:[{name:'Seedling Prep Report',type:'PDF',size:'210 KB',icon:'📊'}], ready_to_collect:[{name:'Ready Notice',type:'PDF',size:'64 KB',icon:'📬'}], collecting:[], order_completed:[] } },
-  { id:'ORD-005', variety:'Oil Palm Seedling — Aug 2024', qty:2500, price:21.99, total:54975, orderDate:'2024-09-10', collDate:'2025-03-20', readyDate:'2025-02-20', status:'Collecting', notes:'1st batch of 1,000 collected. Remaining 1,500 to be arranged.', billing:'Lot 234, Jalan Plantation, Taman Industri Miri, 98000 Miri, Sarawak', collectedQty:1000, attachments:{ order_placed:[{name:'Invoice INV-2024-005',type:'PDF',size:'128 KB',icon:'📄'}], confirmed:[{name:'Confirmation Letter',type:'PDF',size:'80 KB',icon:'✅'}], preparing:[{name:'Seedling Prep Report',type:'PDF',size:'220 KB',icon:'📊'}], ready_to_collect:[{name:'Ready Notice',type:'PDF',size:'68 KB',icon:'📬'}], collecting:[{name:'Partial Collection DO — Batch 1',type:'PDF',size:'92 KB',icon:'📋'},{name:'Consent Form (Signed)',type:'PDF',size:'48 KB',icon:'✍️'}], order_completed:[] } },
-  { id:'ORD-004', variety:'Oil Palm Seedling — Jul 2024', qty:1000, price:21.99, total:21990, orderDate:'2024-08-05', collDate:'2024-12-15', completedDate:'2024-12-15', status:'Order Completed', notes:'Completed.', billing:'Lot 234, Jalan Plantation, Taman Industri Miri, 98000 Miri, Sarawak', attachments:{ order_placed:[{name:'Invoice INV-2024-004',type:'PDF',size:'118 KB',icon:'📄'}], confirmed:[{name:'Confirmation',type:'PDF',size:'68 KB',icon:'✅'}], preparing:[{name:'Prep Report',type:'PDF',size:'195 KB',icon:'📊'}], ready_to_collect:[{name:'Ready Notice',type:'PDF',size:'58 KB',icon:'📬'}], collecting:[{name:'Consent Form (Signed)',type:'PDF',size:'44 KB',icon:'✍️'}], order_completed:[{name:'Collection Receipt',type:'PDF',size:'85 KB',icon:'🧾'}] } },
-];
+// Real customer orders, populated from Supabase in loadOrdersFromDB() before
+// the first render. Status strings here are the customer-facing display
+// labels ('Order Confirmed', 'Order Completed', 'Ready-to-Collect'). The
+// DB uses the admin canonical labels ('Paid', 'Completed', 'Ready for
+// Collection'); see mapDbStatus() below for the translation.
+let ORDERS = [];
+
+const SB_URL = 'https://kibqjztozokohqmhqqqf.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpYnFqenRvem9rb2hxbWhxcXFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMzQzNjIsImV4cCI6MjA4OTgxMDM2Mn0.J7qJUZhWXYf5b9oey4wXJkjdi66jomEMw_NeV9NWF7M';
+const _sb = supabase.createClient(SB_URL, SB_KEY);
+
+// Translate the admin's canonical status strings into the customer-facing
+// labels the rendering already knows how to badge / step through.
+function mapDbStatus(s){
+  return ({
+    'Paid':'Order Confirmed',
+    'Ready for Collection':'Ready-to-Collect',
+    'Completed':'Order Completed'
+  })[s] || s;  // 'Pending Payment', 'Cancelled', 'Refunded' pass through
+}
+
+function fmtIsoDate(t){ if(!t) return ''; try{ return new Date(t).toISOString().split('T')[0]; }catch(e){ return ''; } }
+
+async function loadOrdersFromDB(){
+  var session = await _sb.auth.getSession();
+  var uid = session && session.data && session.data.session && session.data.session.user && session.data.session.user.id;
+  if (!uid) { ORDERS = []; return; }
+
+  var {data: rows, error} = await _sb.from('salesweb_customer_orders')
+    .select('*').eq('customer_id', uid).order('created_at',{ascending:false});
+  if (error) { console.error('Load orders failed:', error.message); ORDERS = []; return; }
+  if (!rows || !rows.length) { ORDERS = []; return; }
+
+  // Pull line items for every order in one round-trip.
+  var ids = rows.map(function(r){ return r.id; });
+  var {data: items} = await _sb.from('salesweb_order_items')
+    .select('order_id,product_name,quantity,unit_price').in('order_id', ids);
+  var itemsByOrder = {};
+  (items||[]).forEach(function(it){
+    (itemsByOrder[it.order_id] = itemsByOrder[it.order_id] || []).push(it);
+  });
+
+  ORDERS = rows.map(function(o){
+    var its = itemsByOrder[o.id] || [];
+    var qty = its.reduce(function(s,i){ return s + (i.quantity||0); }, 0);
+    var variety = its.length === 0 ? '—'
+                : its.length === 1 ? its[0].product_name
+                : its[0].product_name + ' + ' + (its.length - 1) + ' more';
+    var price = its.length ? (its[0].unit_price || 0) : 0;
+    var status = mapDbStatus(o.status);
+    return {
+      id:          o.order_number ? '#'+o.order_number : (o.id||'').substring(0,8).toUpperCase(),
+      _dbId:       o.id,
+      variety:     variety,
+      qty:         qty,
+      price:       price,
+      total:       Number(o.total) || 0,
+      orderDate:   fmtIsoDate(o.created_at),
+      status:      status,
+      notes:       o.customer_remark || '',
+      billing:     o.billing_name || '',
+      // The DB doesn't yet store a collection date or per-stage attachments;
+      // these stay undefined / empty and the renderer degrades gracefully.
+      collDate:    undefined,
+      completedDate: status === 'Order Completed' ? fmtIsoDate(o.updated_at) : undefined,
+      cancelledDate: status === 'Cancelled'       ? fmtIsoDate(o.updated_at) : undefined,
+      attachments: { order_placed:[], confirmed:[], preparing:[], ready_to_collect:[], collecting:[], order_completed:[] }
+    };
+  });
+}
 
 const POINTS_DATA = { balance:3450, tier:'Gold', totalEarned:5200, redeemed:1200, expiringSoon:200, nextTier:{name:'Platinum',threshold:5000},
   history:[ {type:'earn',desc:'Order ORD-001 — 2,000 seedlings',pts:440,date:'15 Nov 2024'}, {type:'earn',desc:'Order ORD-002 — 1,500 seedlings',pts:330,date:'01 Dec 2024'}, {type:'earn',desc:'Order ORD-003 — 3,000 seedlings',pts:660,date:'20 Oct 2024'}, {type:'redeem',desc:'Voucher SAVE10 redeemed',pts:-200,date:'05 Dec 2024'}, {type:'earn',desc:'Order ORD-004 — 1,000 seedlings',pts:220,date:'05 Aug 2024'}, {type:'expire',desc:'Points expired (Q1 2024)',pts:-200,date:'31 Mar 2024'} ]
@@ -47,7 +110,7 @@ let signDrawing = false, signHasMark = false;
 // ══════════════════════════════════════════════
 // INIT — auto-show portal (auth.html handles login)
 // ══════════════════════════════════════════════
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
   // Get user info from sessionStorage (set by auth.html)
   var userName = sessionStorage.getItem('mjm_user_name') || 'Customer';
   var userEmail = sessionStorage.getItem('mjm_user_email') || '';
@@ -66,7 +129,11 @@ document.addEventListener('DOMContentLoaded', function() {
     var el = document.getElementById('pf-'+k); if (el) el.value = currentUser[k] || '';
   });
 
+  // Render once with empty/demo state so the page isn't blank during the
+  // round-trip, then re-render with real orders.
   renderStats(); renderOrders(); renderCollection(); renderPoints(); renderVouchers();
+  await loadOrdersFromDB();
+  renderStats(); renderOrders(); renderCollection();
 
   // Modal close on overlay click
   document.querySelectorAll('.modal-overlay').forEach(function(m) {
@@ -106,12 +173,12 @@ function overdueReminderText(o) {
 // STATUS
 // ══════════════════════════════════════════════
 function badgeClass(s) {
-  return {'Order Confirmed':'badge-green','Pending Payment':'badge-amber','Ready-to-Collect':'badge-teal','Collecting':'badge-orange','Order Completed':'badge-grey','Cancelled':'badge-red'}[s] || 'badge-grey';
+  return {'Order Confirmed':'badge-green','Pending Payment':'badge-amber','Ready-to-Collect':'badge-teal','Collecting':'badge-orange','Order Completed':'badge-grey','Cancelled':'badge-red','Refunded':'badge-red'}[s] || 'badge-grey';
 }
 
 var STEP_KEYS = ['order_placed','confirmed','preparing','ready_to_collect','collecting','order_completed'];
 var STEP_LABELS = { order_placed:'Order Placed', confirmed:'Confirmed', preparing:'Preparing', ready_to_collect:'Ready-to-Collect', collecting:'Collecting', order_completed:'Order Completed' };
-var STATUS_STEPS = { 'Pending Payment':1, 'Order Confirmed':2, 'Preparing':3, 'Ready-to-Collect':4, 'Collecting':5, 'Order Completed':6, 'Cancelled':0 };
+var STATUS_STEPS = { 'Pending Payment':1, 'Order Confirmed':2, 'Preparing':3, 'Ready-to-Collect':4, 'Collecting':5, 'Order Completed':6, 'Cancelled':0, 'Refunded':0 };
 
 // ══════════════════════════════════════════════
 // TABS
@@ -139,13 +206,20 @@ function renderStats() {
 // ══════════════════════════════════════════════
 // ORDERS
 // ══════════════════════════════════════════════
-// Orders that are no longer in motion — completed OR cancelled. These live
-// in the History section; everything else is Active.
-function isOrderDone(o){ return o.status==='Order Completed' || o.status==='Cancelled'; }
+// Orders that are no longer in motion — completed, cancelled or refunded.
+// These live in the History section; everything else is Active.
+function isOrderDone(o){
+  return o.status==='Order Completed' || o.status==='Cancelled' || o.status==='Refunded';
+}
 
 function renderOrders() {
   var active  = ORDERS.filter(function(o){ return !isOrderDone(o); });
   var history = ORDERS.filter(isOrderDone);
+  if (!active.length && !history.length) {
+    document.getElementById('orders-list').innerHTML =
+      '<div style="text-align:center;padding:2.5rem 1rem;color:var(--ink3);"><div style="font-size:2rem;margin-bottom:.5rem;">📦</div><div style="font-weight:600;color:var(--ink2);">No orders yet</div><div style="font-size:.85rem;margin-top:.3rem;">Browse the shop to place your first order.</div></div>';
+    return;
+  }
   var html = '';
   if (active.length)  { html += '<div class="orders-section-label">📦 Active Orders ('+active.length+')</div><div class="orders-grid">'+active.map(orderCardHTML).join('')+'</div>'; }
   if (history.length) { html += '<div class="orders-section-label">🗂️ Order History ('+history.length+')</div><div class="orders-grid">'+history.map(orderCardHTML).join('')+'</div>'; }

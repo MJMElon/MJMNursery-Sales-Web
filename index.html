@@ -771,6 +771,12 @@
   .tool-result-breakdown .tr-row.total { border-top: 1px solid rgba(255,255,255,.18); margin-top: .35rem; padding-top: .5rem; font-weight: 700; color: var(--white); }
   .tool-result .tool-btn { background: var(--gold); color: var(--green-dark); margin-top: 1.25rem; }
   .tool-result .tool-btn:hover { background: var(--gold-light); }
+  .tool-btn-row { display: flex; gap: .5rem; margin-top: .6rem; }
+  .tool-btn-mini { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: .35rem; padding: .55rem .7rem; font-size: 12px; font-weight: 600; border-radius: 8px; cursor: pointer; transition: all .15s; font-family: 'DM Sans', sans-serif; border: none; line-height: 1.2; }
+  .tool-btn-mini.whatsapp { background: #25D366; color: #fff; }
+  .tool-btn-mini.whatsapp:hover { background: #1ebe5a; }
+  .tool-btn-mini.ghost { background: rgba(255,255,255,.1); color: #fff; border: 1px solid rgba(255,255,255,.25); }
+  .tool-btn-mini.ghost:hover { background: rgba(255,255,255,.18); }
   .tool-empty { text-align: center; padding: 2rem 1rem; color: var(--text-light); font-size: 13px; line-height: 1.6; }
 
   /* ── QUOTATION PAGE ── */
@@ -1721,8 +1727,8 @@
           <div class="tool-field-row">
             <input class="tool-input" type="number" id="calc-area" min="0" step="0.1" placeholder="e.g. 10" oninput="calcSeedlings()">
             <select class="tool-select" id="calc-unit" onchange="calcSeedlings()">
-              <option value="acre" selected>Acres</option>
-              <option value="ha">Hectares</option>
+              <option value="ha" selected>Hectares</option>
+              <option value="acre">Acres</option>
             </select>
           </div>
         </div>
@@ -2253,21 +2259,28 @@ function calcSeedlings(){
   window._calcLastTotal = total;  // stashed for addCalcToCart() and the WhatsApp share
   var fmt = function(n){ return n.toLocaleString('en-MY'); };
 
+  // Area display: show in the input unit only (no parenthesised hectare echo),
+  // since unit=ha already reads "ha" and unit=acre rarely needs a conversion
+  // on screen — the math runs in hectares either way.
+  var areaText = area.toLocaleString() + ' ' + (unit==='acre'?'acres':'ha');
+
   wrap.innerHTML =
     '<div class="tool-result">'+
       '<div class="tool-result-label">Recommended Order</div>'+
       '<div class="tool-result-big">'+fmt(total)+'<em>seedlings</em></div>'+
       '<div class="tool-result-breakdown">'+
-        '<div class="tr-row"><span>Area</span><span>'+area.toLocaleString()+' '+(unit==='acre'?'acres':'ha')+' ('+hectares.toFixed(2)+' ha)</span></div>'+
+        '<div class="tr-row"><span>Area</span><span>'+areaText+'</span></div>'+
         '<div class="tr-row"><span>Density</span><span>'+CALC_DENSITY_PER_HA+' palms / ha</span></div>'+
-        '<div class="tr-row total"><span>Total seedlings</span><span>'+fmt(total)+'</span></div>'+
+        '<div class="tr-row total"><span>Total Required Seedlings</span><span>'+fmt(total)+'</span></div>'+
       '</div>'+
       '<button class="tool-btn" onclick="addCalcToCart()">🛒 Add to Cart</button>'+
-      '<button class="tool-btn secondary" style="margin-top:.5rem;background:#25D366;color:#fff;border:none;" onclick="shareCalcToWhatsApp()">'+
-        '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-2px;margin-right:.3rem;"><path d="M.057 24l1.687-6.163a11.867 11.867 0 0 1-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 0 1 8.413 3.488 11.824 11.824 0 0 1 3.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 0 1-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/></svg>'+
-        'Share to WhatsApp'+
-      '</button>'+
-      '<button class="tool-btn secondary" style="margin-top:.5rem;background:rgba(255,255,255,.1);color:#fff;border-color:rgba(255,255,255,.25);" onclick="addCalcToCartAndQuote()">Generate a Quotation →</button>'+
+      '<div class="tool-btn-row">'+
+        '<button class="tool-btn-mini whatsapp" onclick="shareCalcToWhatsApp()">'+
+          '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163a11.867 11.867 0 0 1-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 0 1 8.413 3.488 11.824 11.824 0 0 1 3.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 0 1-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/></svg>'+
+          'Share to WhatsApp'+
+        '</button>'+
+        '<button class="tool-btn-mini ghost" onclick="addCalcToCartAndQuote()">Generate Quotation →</button>'+
+      '</div>'+
     '</div>';
 }
 
@@ -2282,12 +2295,14 @@ function shareCalcToWhatsApp(){
   var hectares = unit === 'acre' ? area * 0.404686 : area;
   var fmt = function(n){ return n.toLocaleString('en-MY'); };
 
+  var areaLine = 'Land area: ' + area.toLocaleString() + ' ' + (unit==='acre'?'acres':'ha');
+  if (unit === 'acre') areaLine += ' (' + hectares.toFixed(2) + ' ha)';
   var lines = [
     '🌱 *MJM Nursery — Seedling Calculator*',
     '',
-    'Land area: ' + area.toLocaleString() + ' ' + (unit==='acre'?'acres':'ha') + ' (' + hectares.toFixed(2) + ' ha)',
+    areaLine,
     'Planting density: ' + CALC_DENSITY_PER_HA + ' palms / ha (industry standard)',
-    '*Recommended order: ' + fmt(total) + ' seedlings*',
+    '*Total required seedlings: ' + fmt(total) + '*',
     '',
     'Calculate yours at https://buy.mjmnursery.com'
   ];

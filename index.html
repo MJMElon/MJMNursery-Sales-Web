@@ -2694,9 +2694,20 @@ function stripMonth(name){ return String(name||'').replace(/\s+—\s+.*$/, '').t
 
 function pBadge(s){return{
   'Paid':'p-badge-green','Order Confirmed':'p-badge-green',
-  'Pending Payment':'p-badge-amber','Ready-to-Collect':'p-badge-teal',
-  'Collecting':'p-badge-orange','Order Completed':'p-badge-grey'
+  'Pending Payment':'p-badge-amber',
+  'Ready for Collection':'p-badge-teal','Ready-to-Collect':'p-badge-teal',
+  'Collecting':'p-badge-orange',
+  'Completed':'p-badge-grey','Order Completed':'p-badge-grey',
+  'Cancelled':'p-badge-red','Refunded':'p-badge-red'
 }[s]||'p-badge-grey';}
+
+// Terminal statuses that belong in History — completed, cancelled, refunded.
+// DB stores 'Completed' / 'Cancelled' / 'Refunded'; the older demo data used
+// 'Order Completed', kept here for backwards compatibility.
+function pIsOrderDone(o){
+  return o.status==='Completed' || o.status==='Order Completed'
+      || o.status==='Cancelled' || o.status==='Refunded';
+}
 
 async function saveProfileDetails(){
   try{
@@ -2832,7 +2843,7 @@ async function loadCustomerOrders(){
       collDate:o.collection_date||'TBC',
       completedDate:o.completed_at?o.completed_at.substring(0,10):null,
       status:o.status,
-      collectionStatus:o.status==='Order Completed'?'Collected':'Pending Collection',
+      collectionStatus:(o.status==='Completed'||o.status==='Order Completed')?'Collected':(o.status==='Cancelled'?'—':o.status==='Refunded'?'Refunded':'Pending Collection'),
       billingName:o.billing_name||o.customer_name||'—',
       billingTin:o.billing_tax_id||'',
       billingAddr:billingAddr,
@@ -2870,7 +2881,7 @@ function pRenderOrders(){
   // autofill into a "search by order #" box is virtually always wrong.
   var q=(document.getElementById('pp-order-search').value||'').trim().toLowerCase();
   if(q.indexOf('@')>=0) q='';
-  var recent=P_ORDERS.filter(function(o){return o.status!=='Order Completed';});
+  var recent=P_ORDERS.filter(function(o){return !pIsOrderDone(o);});
   if(q)recent=recent.filter(function(o){return pOrderMatchSearch(o,q);});
   var html='';
   if(recent.length){recent.forEach(function(o){html+=pOrderCard(o);});}
@@ -2886,7 +2897,7 @@ function pRenderHistory(){
   // autofill into a "search by order #" box is virtually always wrong.
   var q=(document.getElementById('pp-order-search').value||'').trim().toLowerCase();
   if(q.indexOf('@')>=0) q='';
-  var hist=P_ORDERS.filter(function(o){return o.status==='Order Completed';});
+  var hist=P_ORDERS.filter(pIsOrderDone);
   if(q)hist=hist.filter(function(o){return pOrderMatchSearch(o,q);});
   var html='';
   if(hist.length){hist.forEach(function(o){html+=pOrderCard(o);});}
@@ -2909,7 +2920,7 @@ function pFilterOrders(){
 }
 
 function pOrderCard(o){
-  var isComp=o.status==='Order Completed';
+  var isComp=o.status==='Completed' || o.status==='Order Completed';
   var isPending=o.status==='Pending Payment';
 
   // Items list — handle multiple items

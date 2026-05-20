@@ -10,6 +10,21 @@
 ═══════════════════════════════════════════════════
 */
 
+// True if this profile's permissions JSONB grants any operation-system
+// access. Customers' permissions are null/empty or all modules='none'.
+function isOperationStaff(perms){
+  if(!perms || typeof perms !== 'object') return false;
+  if(perms.manage_users) return true;
+  if(perms.can_verify_operation) return true;
+  if(perms.modules && typeof perms.modules === 'object'){
+    for(var k in perms.modules){
+      var v = perms.modules[k];
+      if(v && v !== 'none') return true;
+    }
+  }
+  return false;
+}
+
 async function loadCustomers(){
   var q=(document.getElementById('cust-search').value||'').trim().toLowerCase();
 
@@ -18,9 +33,15 @@ async function loadCustomers(){
   // auth.html write exactly these markers; operation-system / staff accounts
   // never do. We intentionally do NOT union in "anyone who has an order" —
   // that would leak operation-system users who happen to have orders.
+  //
+  // Extra guard: some legacy rows were marked role='customer' AND later
+  // granted operation-system permissions (shared user table). Filter those
+  // out by inspecting the permissions JSONB — anyone with any non-'none'
+  // module access, manage_users, or can_verify_operation is staff.
   var{data:swCusts,error}=await sb.from('shared_profiles')
     .select('*').or('user_type.eq.customer,role.eq.customer');
   if(error){toast('Error: '+error.message,'error');return;}
+  swCusts=(swCusts||[]).filter(function(p){return !isOperationStaff(p.permissions);});
 
   // Paid-order lookup — still needed for the "Has Paid Order" stat box and
   // to badge customers in the table, but no longer a source of customers.

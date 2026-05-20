@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>MJM Nursery | Payment</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -30,10 +33,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-d
 
 .qr-box{text-align:center;padding:1.2rem;background:var(--cream);border-radius:12px;margin-bottom:1rem;}
 .qr-box img{max-width:220px;border-radius:8px;margin-bottom:.5rem;}
-.qr-note{font-size:11px;color:var(--text-mid);}
+.qr-note{font-size:18px;font-weight:800;color:var(--green-dark);letter-spacing:.08em;text-transform:uppercase;margin-top:.4rem;}
+.qr-save-btn{display:inline-flex;align-items:center;gap:.4rem;margin-top:.8rem;padding:.55rem 1.1rem;background:var(--green-dark);color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:background .2s;}
+.qr-save-btn:hover{background:var(--green-mid);}
+.qr-save-btn svg{width:14px;height:14px;stroke:#fff;fill:none;stroke-width:2;}
 
 .bank-details{font-size:12px;color:var(--text-mid);line-height:1.7;padding:.8rem;background:var(--cream);border-radius:10px;}
 .bank-details strong{color:var(--text-dark);}
+.bank-acc-row{display:inline-flex;align-items:center;gap:.4rem;}
+.copy-btn{display:inline-flex;align-items:center;gap:.25rem;padding:.15rem .5rem;background:#fff;border:1px solid var(--green-pale);border-radius:6px;font-size:10px;font-weight:600;color:var(--green-dark);cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;}
+.copy-btn:hover{background:var(--green-dark);color:#fff;border-color:var(--green-dark);}
+.copy-btn svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2;}
 
 .upload-area{border:2px dashed var(--green-pale);border-radius:12px;padding:1.5rem;text-align:center;cursor:pointer;transition:all .15s;background:var(--cream);margin-top:.5rem;}
 .upload-area:hover{border-color:var(--green-mid);background:rgba(62,107,66,.04);}
@@ -78,13 +88,26 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-d
     <div class="card-title">DuitNow QR Payment</div>
     <div class="qr-box" id="pp-qr-box" style="display:none;">
       <img id="pp-qr-img" alt="DuitNow QR Code">
-      <div class="qr-note">Scan with your banking app to pay</div>
+      <div class="qr-note">SCAN TO PAY</div>
+      <div>
+        <button class="qr-save-btn" type="button" onclick="saveQrImage()">
+          <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Save Image
+        </button>
+      </div>
     </div>
     <div class="bank-details" id="pp-bank-details">
       <strong>Bank Transfer Details:</strong><br>
       Bank: <span id="pp-bank-name">—</span><br>
       Account: <span id="pp-account-name">—</span><br>
-      Account No: <span id="pp-account-number">—</span><br>
+      Account No:
+      <span class="bank-acc-row">
+        <span id="pp-account-number">—</span>
+        <button type="button" class="copy-btn" id="pp-copy-acc-btn" onclick="copyAccountNumber()" style="display:none;" title="Copy account number">
+          <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copy
+        </button>
+      </span><br>
       Reference: Order <span id="pp-ref">—</span>
     </div>
     <div id="pp-payment-empty" style="display:none;font-size:12px;color:var(--text-mid);padding:.5rem 0;">Bank transfer details have not been set up yet. Please contact the seller.</div>
@@ -120,6 +143,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-d
   <div style="text-align:center;margin-top:1rem;">
     <a href="index.html" class="btn-back-shop" onclick="sessionStorage.setItem('mjm_last_page','portal');return true;">Back to My Account</a>
   </div>
+  <div style="text-align:center;font-size:10px;color:var(--text-light);padding:.8rem 0;opacity:.7;">payment-proof build 2026-05-20a · SCAN TO PAY + save QR + copy account</div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -166,7 +190,10 @@ document.getElementById('pp-ref').textContent='#'+orderShort;
     var d = typeof data.value==='string' ? JSON.parse(data.value) : data.value;
     if(d.bank_name)      document.getElementById('pp-bank-name').textContent      = d.bank_name;
     if(d.account_name)   document.getElementById('pp-account-name').textContent   = d.account_name;
-    if(d.account_number) document.getElementById('pp-account-number').textContent = d.account_number;
+    if(d.account_number){
+      document.getElementById('pp-account-number').textContent = d.account_number;
+      document.getElementById('pp-copy-acc-btn').style.display = 'inline-flex';
+    }
     if(d.duitnow_qr_url){
       document.getElementById('pp-qr-img').src = d.duitnow_qr_url;
       document.getElementById('pp-qr-box').style.display = 'block';
@@ -178,6 +205,46 @@ document.getElementById('pp-ref').textContent='#'+orderShort;
     }
   }catch(e){ console.warn('payment details load failed:', e); }
 })();
+
+// Copy account number to clipboard
+async function copyAccountNumber(){
+  var acc=document.getElementById('pp-account-number').textContent.trim();
+  if(!acc||acc==='—')return;
+  try{
+    await navigator.clipboard.writeText(acc);
+    showToast('Account number copied');
+  }catch(e){
+    var ta=document.createElement('textarea');
+    ta.value=acc;ta.style.position='fixed';ta.style.opacity='0';
+    document.body.appendChild(ta);ta.select();
+    try{document.execCommand('copy');showToast('Account number copied');}
+    catch(_){showToast('Copy failed');}
+    document.body.removeChild(ta);
+  }
+}
+
+// Save DuitNow QR image to user's device
+async function saveQrImage(){
+  var img=document.getElementById('pp-qr-img');
+  var src=img&&img.src;
+  if(!src){showToast('No QR available');return;}
+  var filename='duitnow-qr-'+(orderShort||'mjm')+'.png';
+  try{
+    var resp=await fetch(src,{mode:'cors'});
+    if(!resp.ok)throw new Error('fetch failed');
+    var blob=await resp.blob();
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url;a.download=filename;
+    document.body.appendChild(a);a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){URL.revokeObjectURL(url);},1000);
+    showToast('QR image saved');
+  }catch(e){
+    window.open(src,'_blank');
+    showToast('Long-press the image to save it');
+  }
+}
 
 // File preview
 var proofFile=null;

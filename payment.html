@@ -84,17 +84,19 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-d
 .cart-line-total{font-size:13px;font-weight:700;text-align:right;min-width:70px;}
 
 .summary-row{display:flex;justify-content:space-between;padding:.3rem 0;font-size:13px;}
-.summary-discount{display:flex;justify-content:space-between;padding:.3rem 0;font-size:13px;color:#059669;}
+.summary-discount{display:flex;justify-content:space-between;align-items:center;padding:.3rem 0;font-size:13px;color:#059669;}
+.summary-discount .sd-label{display:inline-flex;align-items:center;gap:.4rem;}
 .summary-total{display:flex;justify-content:space-between;padding:.5rem 0;font-size:17px;font-weight:700;border-top:1.5px solid var(--green-pale);margin-top:.3rem;}
+.discount-clear{width:18px;height:18px;border-radius:50%;border:1px solid #d1d5db;background:#fff;color:#6b7280;font-size:13px;line-height:1;cursor:pointer;font-family:inherit;padding:0;display:inline-flex;align-items:center;justify-content:center;}
+.discount-clear:hover{background:#fee2e2;color:#dc2626;border-color:#fca5a5;}
 
-/* Voucher toggle button */
-.btn-apply-voucher{background:none;border:1.5px dashed var(--green-pale);border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;color:var(--green-mid);cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;width:100%;text-align:center;}
-.btn-apply-voucher:hover{border-color:var(--green-mid);background:rgba(62,107,66,.04);}
-.btn-apply-voucher.active{border-style:solid;border-color:var(--green-mid);background:rgba(62,107,66,.04);}
-
-/* Voucher & Points */
+/* Discounts & Rewards section */
 .promo-section{margin-top:.8rem;padding-top:.8rem;border-top:1px solid #f0f0ec;}
-.promo-label{font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.4rem;}
+.promo-label{font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.6rem;}
+.promo-item{margin-top:.6rem;}
+.promo-item:first-of-type{margin-top:0;}
+.promo-item-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem;}
+.promo-item-label{font-size:12px;font-weight:600;color:var(--text-dark);}
 .promo-row{display:flex;gap:.4rem;}
 .promo-input{flex:1;background:var(--cream);border:1.5px solid var(--green-pale);border-radius:8px;padding:8px 10px;font-size:12px;font-weight:500;color:var(--text-dark);outline:none;font-family:'DM Sans',sans-serif;transition:border-color .15s;}
 .promo-input:focus{border-color:var(--green-mid);}
@@ -103,10 +105,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-d
 .promo-btn:disabled{opacity:.5;cursor:not-allowed;}
 .promo-msg{font-size:11px;margin-top:.3rem;font-weight:500;}
 .promo-msg.ok{color:#059669;}.promo-msg.err{color:#dc2626;}.promo-msg.warn{color:#b45309;}
-.points-row{display:flex;align-items:center;gap:.5rem;margin-top:.3rem;}
 .points-bal{font-size:11px;color:var(--text-mid);}
-.points-input{width:80px;background:var(--cream);border:1.5px solid var(--green-pale);border-radius:8px;padding:7px 10px;font-size:12px;font-weight:600;color:var(--text-dark);outline:none;font-family:'DM Sans',sans-serif;text-align:center;}
-.points-input:focus{border-color:var(--green-mid);}
 
 /* Payment method */
 .pay-method-section{margin-top:1rem;padding-top:.8rem;border-top:1px solid #f0f0ec;}
@@ -319,27 +318,30 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-d
       <div class="section-title">Order Summary</div>
       <div id="ck-items"></div>
 
-      <!-- Voucher toggle -->
-      <div style="margin-top:.6rem;">
-        <button class="btn-apply-voucher" id="btn-toggle-voucher" onclick="toggleVoucherBox()">Apply Voucher</button>
-        <div id="voucher-box" style="display:none;margin-top:.5rem;">
+      <!-- Discounts & Rewards (voucher + points, unified) -->
+      <div class="promo-section">
+        <div class="promo-label">Discounts &amp; Rewards</div>
+
+        <div class="promo-item">
+          <div class="promo-item-head"><span class="promo-item-label">Voucher Code</span></div>
           <div class="promo-row">
             <input class="promo-input" type="text" id="ck-voucher" placeholder="Enter voucher code">
             <button class="promo-btn" id="btn-voucher" onclick="applyVoucher()">Apply</button>
           </div>
           <div class="promo-msg" id="voucher-msg"></div>
         </div>
-      </div>
 
-      <!-- Points -->
-      <div class="promo-section" id="points-section" style="display:none;">
-        <div class="promo-label">Use Points</div>
-        <div class="points-row">
-          <input class="points-input" type="number" id="ck-points" value="0" min="0" placeholder="0">
-          <button class="promo-btn" id="btn-redeem-points" onclick="applyPoints()">Redeem</button>
-          <span class="points-bal" id="points-bal">Balance: 0 pts</span>
+        <div class="promo-item" id="points-item" style="display:none;">
+          <div class="promo-item-head">
+            <span class="promo-item-label">Use Points</span>
+            <span class="points-bal" id="points-bal">Balance: 0 pts</span>
+          </div>
+          <div class="promo-row">
+            <input class="promo-input" type="number" id="ck-points" value="0" min="0" placeholder="0">
+            <button class="promo-btn" id="btn-redeem-points" onclick="applyPoints()">Redeem</button>
+          </div>
+          <div class="promo-msg" id="points-msg"></div>
         </div>
-        <div class="promo-msg" id="points-msg"></div>
       </div>
 
       <!-- Summary totals -->
@@ -450,7 +452,7 @@ async function loadPointsBalance(){
   }catch(e){}
 
   if(pointsBalance>0){
-    document.getElementById('points-section').style.display='block';
+    document.getElementById('points-item').style.display='block';
     document.getElementById('points-bal').textContent='Balance: '+pointsBalance.toLocaleString()+' pts';
     document.getElementById('ck-points').max=pointsBalance;
     document.getElementById('ck-points').step=redeemPtsPerRm;  // can only spend whole-chunk amounts
@@ -473,35 +475,48 @@ function updateSummary(){
   var subtotal=cart.reduce(function(s,c){return s+(c.price*c.qty);},0);
   var html='<div class="summary-row"><span>Subtotal</span><span>'+fmtRM(subtotal)+'</span></div>';
   if(voucherDiscount>0){
-    html+='<div class="summary-discount"><span>Voucher ('+voucherCode+')</span><span>- '+fmtRM(voucherDiscount)+'</span></div>';
+    html+='<div class="summary-discount">'+
+            '<span class="sd-label">Voucher ('+voucherCode+')'+
+              '<button type="button" class="discount-clear" onclick="clearVoucher()" title="Remove voucher" aria-label="Remove voucher">&times;</button>'+
+            '</span>'+
+            '<span>- '+fmtRM(voucherDiscount)+'</span>'+
+          '</div>';
   }
   var pointsValue=ptsToRm(pointsUsed);   // uses admin-configured redeem rate
   if(pointsUsed>0){
-    html+='<div class="summary-discount"><span>Points ('+pointsUsed.toLocaleString()+' pts)</span><span>- '+fmtRM(pointsValue)+'</span></div>';
+    html+='<div class="summary-discount">'+
+            '<span class="sd-label">Points ('+pointsUsed.toLocaleString()+' pts)'+
+              '<button type="button" class="discount-clear" onclick="clearPoints()" title="Remove points" aria-label="Remove points">&times;</button>'+
+            '</span>'+
+            '<span>- '+fmtRM(pointsValue)+'</span>'+
+          '</div>';
   }
   var finalTotal=Math.max(0,subtotal-voucherDiscount-pointsValue);
-  html+='<div class="summary-total"><span>Total</span><span>'+fmtRM(finalTotal)+'</span></div>';
+  html+='<div class="summary-total"><span>Final Pay Amount</span><span>'+fmtRM(finalTotal)+'</span></div>';
   document.getElementById('ck-summary').innerHTML=html;
+}
+
+// Remove an applied voucher — clears state and the input field, refreshes summary.
+function clearVoucher(){
+  voucherCode='';
+  voucherDiscount=0;
+  voucherCouponId=null;
+  var input=document.getElementById('ck-voucher'); if(input) input.value='';
+  var msg=document.getElementById('voucher-msg'); if(msg){msg.className='promo-msg';msg.textContent='';}
+  updateSummary();
+}
+
+// Remove a points redemption — resets to 0, refreshes summary.
+function clearPoints(){
+  pointsUsed=0;
+  var input=document.getElementById('ck-points'); if(input) input.value=0;
+  var msg=document.getElementById('points-msg'); if(msg){msg.className='promo-msg';msg.textContent='';}
+  updateSummary();
 }
 
 renderCheckout();
 
 // ── Voucher ──
-function toggleVoucherBox(){
-  var box=document.getElementById('voucher-box');
-  var btn=document.getElementById('btn-toggle-voucher');
-  if(box.style.display==='none'){
-    box.style.display='block';
-    btn.classList.add('active');
-    btn.textContent='Hide Voucher';
-    document.getElementById('ck-voucher').focus();
-  } else {
-    box.style.display='none';
-    btn.classList.remove('active');
-    btn.textContent='Apply Voucher';
-  }
-}
-
 async function applyVoucher(){
   var code=document.getElementById('ck-voucher').value.trim().toUpperCase();
   var msg=document.getElementById('voucher-msg');

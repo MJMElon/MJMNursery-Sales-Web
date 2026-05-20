@@ -1776,11 +1776,11 @@
         <h2>Quotation <em>Details</em></h2>
 
         <div class="tool-field">
-          <label>Company / Recipient Name</label>
+          <label>Company Name / Personal Name</label>
           <input class="tool-input" type="text" id="quote-company" oninput="renderQuotation()">
         </div>
         <div class="tool-field">
-          <label>Attention To</label>
+          <label>Contact Person</label>
           <input class="tool-input" type="text" id="quote-attn" oninput="renderQuotation()">
         </div>
         <div class="tool-field">
@@ -2489,7 +2489,7 @@ function renderQuotation(){
           '<div class="qp-label">Quotation For</div>'+
           '<div class="qp-value">'+
             '<strong>'+escapeQuote(company)+'</strong>'+
-            (attn  ? '<br>Attn: '+escapeQuote(attn)  : '')+
+            (attn  ? '<br>Contact: '+escapeQuote(attn)  : '')+
             (addr  ? '<br>'+escapeQuote(addr)        : '')+
             (phone ? '<br>Tel: '+escapeQuote(phone)  : '')+
             (email ? '<br>Email: '+escapeQuote(email): '')+

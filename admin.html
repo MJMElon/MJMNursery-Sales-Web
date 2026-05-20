@@ -219,6 +219,7 @@ input,select,textarea,button{font-family:inherit;}
       <div class="sb-item" onclick="switchTab('products',this)"><span class="sb-icon">🌱</span><span>Products</span></div>
       <div class="sb-item" onclick="switchTab('promos',this)"><span class="sb-icon">🎁</span><span>Promotions</span></div>
       <div class="sb-item" onclick="switchTab('coupons',this)"><span class="sb-icon">🏷️</span><span>Coupons</span></div>
+      <div class="sb-item" onclick="switchTab('webdesign',this)"><span class="sb-icon">🎨</span><span>Website Design</span></div>
       <div class="sb-item" onclick="switchTab('settings',this)"><span class="sb-icon">⚙️</span><span>Settings</span></div>
     </div>
     <div class="sb-footer">
@@ -341,6 +342,13 @@ input,select,textarea,button{font-family:inherit;}
         </div>
         <div id="coupons-table"><div class="loading">Loading coupons...</div></div>
       </div>
+    </div>
+
+    <!-- WEBSITE DESIGN -->
+    <div class="tab-content" id="tab-webdesign">
+      <div class="main-header"><div class="main-title">Website Design — Our Passion Section</div></div>
+      <p style="color:#64748b;font-size:13px;margin-bottom:1rem;">Upload images and edit text for the "Our Passion" ecosystem flow on the storefront. Changes appear instantly on the live site.</p>
+      <div class="card" id="webdesign-passion-list"><div class="loading">Loading...</div></div>
     </div>
 
     <!-- SETTINGS -->
@@ -654,6 +662,7 @@ function switchTab(tab,el){
   if(tab==='products')loadProducts();
   if(tab==='promos')loadPromos();
   if(tab==='coupons')loadCoupons();
+  if(tab==='webdesign')loadWebDesign();
   if(tab==='settings')loadSettings();
 }
 
@@ -812,6 +821,7 @@ document.addEventListener('DOMContentLoaded',function(){
 <script src="admin-products.js?v=2026-05-18-points-ledger"></script>
 <script src="admin-promotions.js?v=2026-05-18-points-ledger"></script>
 <script src="admin-coupons.js?v=2026-05-18-points-ledger"></script>
+<script src="admin-web-design.js?v=2026-05-20-port-from-umbrella"></script>
 
 </body>
 </html>

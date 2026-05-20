@@ -347,11 +347,15 @@
   .nav-links { display: flex; align-items: center; gap: 2rem; list-style: none; margin-right: auto; margin-left: 2rem; }
   .nav-dropdown-wrap { position: relative; }
   .nav-dropdown-wrap > a { cursor: pointer; }
-  .nav-dropdown-menu { display: none; position: absolute; top: 100%; left: 0; background: var(--green-dark); border-radius: 10px; min-width: 180px; padding: .4rem 0; box-shadow: 0 8px 24px rgba(0,0,0,.3); z-index: 50; margin-top: 0; }
+  .nav-dropdown-menu { display: none; position: absolute; top: 100%; left: 0; background: var(--green-dark); border-radius: 10px; min-width: 240px; padding: .4rem 0; box-shadow: 0 8px 24px rgba(0,0,0,.3); z-index: 50; margin-top: 0; }
   .nav-dropdown-menu::before { content: ''; position: absolute; top: -.8rem; left: 0; right: 0; height: .8rem; }
   .nav-dropdown-wrap:hover .nav-dropdown-menu { display: block; }
   .nav-dropdown-menu a { display: block; padding: .6rem 1.2rem; font-size: 13px; font-weight: 500; color: rgba(255,255,255,.8); cursor: pointer; transition: all .15s; text-decoration: none; letter-spacing: .05em; }
   .nav-dropdown-menu a:hover { background: rgba(255,255,255,.1); color: var(--gold-light); }
+  .nav-dropdown-section { font-size: 10px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: var(--gold-light); padding: .7rem 1.2rem .3rem; opacity: .75; }
+  .nav-dropdown-section + a { border-top: 1px solid rgba(255,255,255,.06); }
+  .nav-dropdown-menu > .nav-dropdown-section:first-child { padding-top: .5rem; }
+  .nav-dropdown-menu > .nav-dropdown-section:first-child + a { border-top: none; }
   .nav-links a { font-size: 13px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: rgba(255,255,255,.8); text-decoration: none; transition: color .2s; cursor: pointer; }
   .nav-links a:hover, .nav-links a.active { color: var(--gold-light); }
   .nav-actions { display: flex; align-items: center; gap: 1.25rem; }
@@ -739,6 +743,66 @@
   .join-resume-box svg { width: 28px; height: 28px; stroke: var(--green-dark); fill: none; stroke-width: 1.5; flex-shrink: 0; margin-top: .2rem; }
   .join-resume-box h4 { font-size: 15px; font-weight: 600; color: var(--text-dark); margin-bottom: .5rem; }
   .join-resume-box p { font-size: 14px; color: var(--text-mid); line-height: 1.7; }
+
+  /* ── SEEDLING CALCULATOR PAGE ── */
+  .tool-page { background: var(--cream); padding: 3rem 1.5rem 4rem; }
+  .tool-grid { max-width: 980px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; align-items: start; }
+  @media (max-width: 800px) { .tool-grid { grid-template-columns: 1fr; } }
+  .tool-card { background: var(--white); border-radius: 16px; padding: 2rem; border: 1px solid rgba(0,0,0,.06); box-shadow: 0 2px 8px rgba(0,0,0,.04); }
+  .tool-card h2 { font-family: 'Cormorant Garamond', serif; font-size: 1.6rem; font-weight: 400; color: var(--text-dark); margin-bottom: .25rem; }
+  .tool-card h2 em { color: var(--green-mid); font-style: italic; }
+  .tool-card .tool-sub { font-size: 12px; color: var(--text-light); margin-bottom: 1.5rem; line-height: 1.5; }
+  .tool-field { margin-bottom: 1.1rem; }
+  .tool-field label { display: block; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-light); margin-bottom: .35rem; }
+  .tool-input, .tool-select { width: 100%; background: var(--cream); border: 1.5px solid var(--green-pale); border-radius: 10px; padding: 10px 14px; font-size: 14px; font-weight: 500; color: var(--text-dark); outline: none; font-family: 'DM Sans', sans-serif; transition: border-color .2s; }
+  .tool-input:focus, .tool-select:focus { border-color: var(--green-mid); }
+  .tool-field-row { display: grid; grid-template-columns: 2fr 1fr; gap: .6rem; }
+  .tool-btn { width: 100%; padding: .9rem 1.5rem; background: var(--green-dark); color: var(--white); border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background .2s; font-family: 'DM Sans', sans-serif; margin-top: .5rem; }
+  .tool-btn:hover { background: var(--green-mid); }
+  .tool-btn.secondary { background: none; border: 1.5px solid var(--green-pale); color: var(--green-mid); }
+  .tool-btn.secondary:hover { background: var(--green-pale); border-color: var(--green-mid); }
+  .tool-result { background: linear-gradient(135deg, var(--green-dark) 0%, var(--green-mid) 100%); color: var(--white); border-radius: 16px; padding: 2rem; }
+  .tool-result-label { font-size: 11px; font-weight: 600; letter-spacing: .15em; text-transform: uppercase; color: var(--gold-light); margin-bottom: .5rem; }
+  .tool-result-big { font-family: 'Cormorant Garamond', serif; font-size: 3rem; font-weight: 400; line-height: 1; margin-bottom: .25rem; }
+  .tool-result-big em { color: var(--gold-light); font-style: italic; font-size: 1.4rem; margin-left: .5rem; }
+  .tool-result-note { font-size: 12px; color: rgba(255,255,255,.7); margin-bottom: 1.25rem; }
+  .tool-result-breakdown { background: rgba(0,0,0,.18); border-radius: 10px; padding: .9rem 1.1rem; font-size: 13px; }
+  .tool-result-breakdown .tr-row { display: flex; justify-content: space-between; padding: .25rem 0; color: rgba(255,255,255,.85); }
+  .tool-result-breakdown .tr-row.total { border-top: 1px solid rgba(255,255,255,.18); margin-top: .35rem; padding-top: .5rem; font-weight: 700; color: var(--white); }
+  .tool-result .tool-btn { background: var(--gold); color: var(--green-dark); margin-top: 1.25rem; }
+  .tool-result .tool-btn:hover { background: var(--gold-light); }
+  .tool-empty { text-align: center; padding: 2rem 1rem; color: var(--text-light); font-size: 13px; line-height: 1.6; }
+
+  /* ── QUOTATION PAGE ── */
+  .quote-wrap { max-width: 900px; margin: 0 auto; }
+  .quote-doc { background: var(--white); border-radius: 16px; padding: 2.5rem; border: 1px solid rgba(0,0,0,.06); box-shadow: 0 2px 8px rgba(0,0,0,.04); margin-top: 1.5rem; }
+  .quote-doc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 2rem; padding-bottom: 1.5rem; border-bottom: 2px solid var(--green-pale); margin-bottom: 1.5rem; }
+  .quote-doc-head .qd-brand { font-family: 'Cormorant Garamond', serif; font-size: 1.8rem; color: var(--green-dark); line-height: 1.1; }
+  .quote-doc-head .qd-brand em { color: var(--gold); font-style: italic; }
+  .quote-doc-head .qd-meta { text-align: right; font-size: 12px; color: var(--text-mid); line-height: 1.7; }
+  .quote-doc-head .qd-meta strong { color: var(--text-dark); }
+  .quote-parties { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 1.5rem; font-size: 13px; line-height: 1.65; }
+  @media (max-width: 600px) { .quote-parties { grid-template-columns: 1fr; } }
+  .quote-parties .qp-label { font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--text-light); margin-bottom: .35rem; }
+  .quote-parties .qp-value { color: var(--text-dark); }
+  .quote-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 1.25rem; }
+  .quote-table thead th { text-align: left; padding: .7rem .8rem; background: var(--cream); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-light); border-bottom: 1.5px solid var(--green-pale); }
+  .quote-table thead th.num { text-align: right; }
+  .quote-table tbody td { padding: .8rem; border-bottom: 1px solid #eee; color: var(--text-dark); }
+  .quote-table tbody td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .quote-totals { margin-left: auto; max-width: 320px; font-size: 13px; }
+  .quote-totals .qt-row { display: flex; justify-content: space-between; padding: .4rem 0; }
+  .quote-totals .qt-row.grand { border-top: 1.5px solid var(--green-pale); margin-top: .35rem; padding-top: .7rem; font-size: 16px; font-weight: 700; color: var(--green-dark); }
+  .quote-footer-note { margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid #eee; font-size: 11px; color: var(--text-light); line-height: 1.7; }
+  .quote-actions { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: 1.5rem; }
+  .quote-actions .tool-btn { flex: 1; margin-top: 0; min-width: 160px; }
+
+  @media print {
+    body * { visibility: hidden; }
+    .quote-doc, .quote-doc * { visibility: visible; }
+    .quote-doc { position: absolute; left: 0; top: 0; width: 100%; border: none; box-shadow: none; margin: 0; padding: 1.5rem 2rem; }
+    nav, footer, .page-hero, .quote-actions, .quote-form-card { display: none !important; }
+  }
 
   /* ── FOOTER (metallic dark green) ── */
   footer {
@@ -1179,9 +1243,13 @@
     <li class="nav-dropdown-wrap">
       <a id="nav-information" style="display:flex;align-items:center;gap:4px;opacity:.7;">Information <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg></a>
       <div class="nav-dropdown-menu">
+        <div class="nav-dropdown-section">About MJM</div>
         <a onclick="showPage('information')">About Us</a>
         <a onclick="showPage('contact')">Contact Us</a>
         <a onclick="showPage('join')">Join Our Team</a>
+        <div class="nav-dropdown-section">Plan Your Purchase</div>
+        <a onclick="showPage('calculator')">Seedling Calculator</a>
+        <a onclick="showPage('quotation')">Generate Quotation</a>
       </div>
     </li>
     <li class="mobile-only-login">
@@ -1635,6 +1703,99 @@
 </div><!-- /page-join -->
 
 
+<!-- ═══════════════════════════════════════ SEEDLING CALCULATOR PAGE ═══════════════════════════════════════ -->
+<div class="page" id="page-calculator">
+  <div class="page-hero">
+    <div class="page-hero-content">
+      <div class="breadcrumb" onclick="showPage('home')">Home <span>/ Plan Your Purchase / Seedling Calculator</span></div>
+      <h1>Seedling <em>Calculator</em></h1>
+    </div>
+  </div>
+  <div class="tool-page">
+    <div class="tool-grid">
+      <div class="tool-card">
+        <h2>How many <em>seedlings</em>?</h2>
+        <div class="tool-sub">Enter your planting area and we'll calculate the recommended number of oil palm seedlings based on standard Malaysian planting densities.</div>
+
+        <div class="tool-field">
+          <label>Land Area</label>
+          <div class="tool-field-row">
+            <input class="tool-input" type="number" id="calc-area" min="0" step="0.1" placeholder="e.g. 10" oninput="calcSeedlings()">
+            <select class="tool-select" id="calc-unit" onchange="calcSeedlings()">
+              <option value="ha">Hectares</option>
+              <option value="acre">Acres</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="tool-field">
+          <label>Planting Density</label>
+          <select class="tool-select" id="calc-density" onchange="calcSeedlings()">
+            <option value="143" selected>Standard — 9 m triangular (143 palms/ha)</option>
+            <option value="148">High density — 8.7 m triangular (148 palms/ha)</option>
+            <option value="136">Wide — 9.2 m triangular (136 palms/ha)</option>
+            <option value="128">Low density — 9.5 m triangular (128 palms/ha)</option>
+          </select>
+        </div>
+
+        <div class="tool-field">
+          <label>Replanting Buffer (%)</label>
+          <input class="tool-input" type="number" id="calc-buffer" min="0" max="30" step="1" value="5" oninput="calcSeedlings()">
+          <div style="font-size:11px;color:var(--text-light);margin-top:.3rem;">Extra seedlings to cover early-stage failures. Industry norm is 5–10 %.</div>
+        </div>
+      </div>
+
+      <div id="calc-result-wrap">
+        <div class="tool-card">
+          <div class="tool-empty">
+            <div style="font-size:2rem;margin-bottom:.5rem;">🌱</div>
+            <div>Enter your land area on the left to see the recommended number of seedlings.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div><!-- /page-calculator -->
+
+
+<!-- ═══════════════════════════════════════ QUOTATION PAGE ═══════════════════════════════════════ -->
+<div class="page" id="page-quotation">
+  <div class="page-hero">
+    <div class="page-hero-content">
+      <div class="breadcrumb" onclick="showPage('home')">Home <span>/ Plan Your Purchase / Generate Quotation</span></div>
+      <h1>Generate a <em>Quotation</em></h1>
+    </div>
+  </div>
+  <div class="tool-page">
+    <div class="quote-wrap">
+      <div class="tool-card quote-form-card">
+        <h2>Quotation <em>Details</em></h2>
+        <div class="tool-sub">We'll build a printable quotation from the items currently in your cart. Fill in your company details and click "Generate Quotation".</div>
+
+        <div class="tool-field">
+          <label>Company / Recipient Name</label>
+          <input class="tool-input" type="text" id="quote-company" placeholder="Your company / plantation name" oninput="renderQuotation()">
+        </div>
+        <div class="tool-field">
+          <label>Attention To</label>
+          <input class="tool-input" type="text" id="quote-attn" placeholder="e.g. Mr. Tan, Procurement Manager" oninput="renderQuotation()">
+        </div>
+        <div class="tool-field">
+          <label>Address</label>
+          <input class="tool-input" type="text" id="quote-addr" placeholder="Delivery / billing address" oninput="renderQuotation()">
+        </div>
+        <div class="tool-field">
+          <label>Quotation Validity (Days)</label>
+          <input class="tool-input" type="number" id="quote-validity" min="1" max="365" value="30" oninput="renderQuotation()">
+        </div>
+      </div>
+
+      <div id="quote-output"></div>
+    </div>
+  </div>
+</div><!-- /page-quotation -->
+
+
 <!-- ═══════════════════════════════════════ MY ACCOUNT / PORTAL PAGE ═══════════════════════════════════════ -->
 <div class="page" id="page-portal">
   <div class="page-hero">
@@ -2051,8 +2212,10 @@ function showPage(page) {
   document.getElementById('page-' + page).classList.add('active');
   // Update active nav link
   document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
-  const navMap = { home: 'nav-shop', information: 'nav-information', contact: 'nav-contact', join: 'nav-join', portal: 'nav-myaccount', 'checkout-login': null };
+  const navMap = { home: 'nav-shop', information: 'nav-information', contact: 'nav-contact', join: 'nav-join', portal: 'nav-myaccount', calculator: 'nav-information', quotation: 'nav-information', 'checkout-login': null };
   if (page === 'portal') { setTimeout(function(){ try { initPortal(); } catch(e) { console.error('Portal init error:', e); } }, 50); }
+  if (page === 'calculator') { setTimeout(function(){ try { calcSeedlings(); } catch(e){} }, 0); }
+  if (page === 'quotation')  { setTimeout(function(){ try { renderQuotation(); } catch(e){} }, 0); }
   if (page === 'checkout-login') {
     // The checkout-login page is a router target only — it opens the login
     // modal then hands control back to whichever page was last active.
@@ -2072,6 +2235,158 @@ function scrollToSection(id) {
     const el = document.getElementById(id);
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, 100);
+}
+
+// ══════════════════════════════════════════════
+// SEEDLING CALCULATOR
+// ══════════════════════════════════════════════
+// 1 acre = 0.404686 hectares. Density values are palms per hectare;
+// the dropdown options carry the spacing context for the customer.
+function calcSeedlings(){
+  var areaEl = document.getElementById('calc-area');
+  if (!areaEl) return; // page not in DOM yet
+  var area    = parseFloat(areaEl.value) || 0;
+  var unit    = document.getElementById('calc-unit').value;
+  var density = parseFloat(document.getElementById('calc-density').value) || 143;
+  var buffer  = Math.max(0, Math.min(30, parseFloat(document.getElementById('calc-buffer').value) || 0));
+  var wrap    = document.getElementById('calc-result-wrap');
+
+  if (area <= 0) {
+    wrap.innerHTML = '<div class="tool-card"><div class="tool-empty"><div style="font-size:2rem;margin-bottom:.5rem;">🌱</div><div>Enter your land area on the left to see the recommended number of seedlings.</div></div></div>';
+    return;
+  }
+
+  var hectares = unit === 'acre' ? area * 0.404686 : area;
+  var base     = Math.round(hectares * density);
+  var extra    = Math.round(base * buffer / 100);
+  var total    = base + extra;
+  var fmt = function(n){ return n.toLocaleString('en-MY'); };
+
+  wrap.innerHTML =
+    '<div class="tool-result">'+
+      '<div class="tool-result-label">Recommended Order</div>'+
+      '<div class="tool-result-big">'+fmt(total)+'<em>seedlings</em></div>'+
+      '<div class="tool-result-note">Based on '+area.toLocaleString()+' '+(unit==='acre'?'acre':'hectare')+(area===1?'':'s')+' at '+density+' palms / ha, with a '+buffer+'% replanting buffer.</div>'+
+      '<div class="tool-result-breakdown">'+
+        '<div class="tr-row"><span>Area</span><span>'+area.toLocaleString()+' '+(unit==='acre'?'acres':'ha')+' ('+hectares.toFixed(2)+' ha)</span></div>'+
+        '<div class="tr-row"><span>Density</span><span>'+density+' palms / ha</span></div>'+
+        '<div class="tr-row"><span>Base count</span><span>'+fmt(base)+'</span></div>'+
+        '<div class="tr-row"><span>Buffer ('+buffer+'%)</span><span>+ '+fmt(extra)+'</span></div>'+
+        '<div class="tr-row total"><span>Total seedlings</span><span>'+fmt(total)+'</span></div>'+
+      '</div>'+
+      '<button class="tool-btn" onclick="showPage(\'home\'); scrollToSection(\'salesweb_products\');">Browse Seedlings →</button>'+
+      '<button class="tool-btn secondary" style="margin-top:.5rem;background:rgba(255,255,255,.1);color:#fff;border-color:rgba(255,255,255,.25);" onclick="showPage(\'quotation\');">Generate a Quotation</button>'+
+    '</div>';
+}
+
+// ══════════════════════════════════════════════
+// QUOTATION GENERATOR
+// ══════════════════════════════════════════════
+// Builds a printable quotation from whatever is in the cart
+// (sessionStorage 'mjm_cart'). Auto-fills company info from the logged-in
+// profile if available, but everything is editable.
+function quoteAutoFill(){
+  var name = sessionStorage.getItem('mjm_user_name') || '';
+  var c = document.getElementById('quote-company');
+  if (c && !c.value && name) c.value = name; // sensible default
+}
+
+function renderQuotation(){
+  var out = document.getElementById('quote-output');
+  if (!out) return;
+
+  var cartItems = [];
+  try { cartItems = JSON.parse(sessionStorage.getItem('mjm_cart') || '[]'); } catch (e) {}
+
+  if (!cartItems.length) {
+    out.innerHTML =
+      '<div class="quote-doc"><div class="tool-empty" style="padding:3rem 1rem;">'+
+        '<div style="font-size:2rem;margin-bottom:.5rem;">🛒</div>'+
+        '<div style="font-weight:600;color:var(--text-dark);margin-bottom:.3rem;">Your cart is empty</div>'+
+        '<div>Add seedlings to your cart, then come back here to generate a quotation.</div>'+
+        '<button class="tool-btn" style="margin-top:1.25rem;max-width:240px;" onclick="showPage(\'home\'); scrollToSection(\'salesweb_products\');">Browse Seedlings</button>'+
+      '</div></div>';
+    return;
+  }
+
+  quoteAutoFill();
+
+  var company  = (document.getElementById('quote-company').value || '').trim() || '—';
+  var attn     = (document.getElementById('quote-attn').value || '').trim();
+  var addr     = (document.getElementById('quote-addr').value || '').trim();
+  var validity = Math.max(1, parseInt(document.getElementById('quote-validity').value) || 30);
+
+  var today = new Date();
+  var expiry = new Date(today.getTime() + validity * 86400000);
+  var fmtDate = function(d){ return d.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }); };
+  // Quote number: QUO-YYMMDD-XXXX. Cached for the day so the number stays
+  // stable as the customer types into the form fields.
+  var pad = function(n){ return ('0'+n).slice(-2); };
+  var stamp = String(today.getFullYear()).slice(-2) + pad(today.getMonth()+1) + pad(today.getDate());
+  var quoteNum = sessionStorage.getItem('mjm_quote_num_'+stamp);
+  if (!quoteNum) {
+    quoteNum = 'QUO-' + stamp + '-' + String(Math.floor(Math.random()*10000)).padStart(4,'0');
+    sessionStorage.setItem('mjm_quote_num_'+stamp, quoteNum);
+  }
+
+  var subtotal = 0;
+  var rows = cartItems.map(function(c){
+    var line = (c.price || 0) * (c.qty || 0);
+    subtotal += line;
+    var label = (c.name || '—') + (c.month ? ' — ' + c.month : '');
+    return '<tr>'+
+      '<td>'+escapeQuote(label)+'</td>'+
+      '<td class="num">'+(c.qty||0).toLocaleString()+'</td>'+
+      '<td class="num">RM '+(c.price||0).toFixed(2)+'</td>'+
+      '<td class="num">RM '+line.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>'+
+    '</tr>';
+  }).join('');
+
+  out.innerHTML =
+    '<div class="quote-doc" id="quote-doc">'+
+      '<div class="quote-doc-head">'+
+        '<div>'+
+          '<div class="qd-brand">MJM <em>Nursery</em></div>'+
+          '<div style="font-size:11px;color:var(--text-light);margin-top:.4rem;line-height:1.6;">Mega Jutamas Sdn. Bhd.<br>2nd Floor (B), Lot 1180, Bangunan BEI, Lorong Dua,<br>Krokop, 98007 Miri, Sarawak<br>085-419907 · info@mjmnursery.com</div>'+
+        '</div>'+
+        '<div class="qd-meta">'+
+          '<div><strong>Quotation</strong></div>'+
+          '<div>No: '+quoteNum+'</div>'+
+          '<div>Date: '+fmtDate(today)+'</div>'+
+          '<div>Valid Until: '+fmtDate(expiry)+'</div>'+
+        '</div>'+
+      '</div>'+
+      '<div class="quote-parties">'+
+        '<div>'+
+          '<div class="qp-label">Quotation For</div>'+
+          '<div class="qp-value"><strong>'+escapeQuote(company)+'</strong>'+(attn?'<br>Attn: '+escapeQuote(attn):'')+(addr?'<br>'+escapeQuote(addr):'')+'</div>'+
+        '</div>'+
+        '<div>'+
+          '<div class="qp-label">Validity</div>'+
+          '<div class="qp-value">'+validity+' days from issue date</div>'+
+        '</div>'+
+      '</div>'+
+      '<table class="quote-table">'+
+        '<thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Unit Price</th><th class="num">Amount</th></tr></thead>'+
+        '<tbody>'+rows+'</tbody>'+
+      '</table>'+
+      '<div class="quote-totals">'+
+        '<div class="qt-row"><span>Subtotal</span><span>RM '+subtotal.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</span></div>'+
+        '<div class="qt-row grand"><span>Total</span><span>RM '+subtotal.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</span></div>'+
+      '</div>'+
+      '<div class="quote-footer-note">'+
+        'This quotation is for planning purposes and is valid for '+validity+' days from the issue date. Prices are subject to seedling availability at the time of order confirmation. '+
+        'To place an order, please proceed to checkout from your cart or contact us at 085-419907.'+
+      '</div>'+
+    '</div>'+
+    '<div class="quote-actions">'+
+      '<button class="tool-btn" onclick="window.print()">🖨️ Print / Save as PDF</button>'+
+      '<button class="tool-btn secondary" onclick="showPage(\'home\'); scrollToSection(\'salesweb_products\');">Add More Items</button>'+
+    '</div>';
+}
+
+function escapeQuote(s){
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/\n/g,'<br>');
 }
 
 // ── POLICY TABS ──

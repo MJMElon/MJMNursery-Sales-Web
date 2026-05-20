@@ -139,22 +139,35 @@ function renderStats() {
 // ══════════════════════════════════════════════
 // ORDERS
 // ══════════════════════════════════════════════
+// Orders that are no longer in motion — completed OR cancelled. These live
+// in the History section; everything else is Active.
+function isOrderDone(o){ return o.status==='Order Completed' || o.status==='Cancelled'; }
+
 function renderOrders() {
-  var recent = ORDERS.filter(function(o){return o.status!=='Order Completed';});
-  var history = ORDERS.filter(function(o){return o.status==='Order Completed';});
+  var active  = ORDERS.filter(function(o){ return !isOrderDone(o); });
+  var history = ORDERS.filter(isOrderDone);
   var html = '';
-  if (recent.length) { html += '<div class="orders-section-label">📦 Recent Orders ('+recent.length+')</div><div class="orders-grid">'+recent.map(orderCardHTML).join('')+'</div>'; }
+  if (active.length)  { html += '<div class="orders-section-label">📦 Active Orders ('+active.length+')</div><div class="orders-grid">'+active.map(orderCardHTML).join('')+'</div>'; }
   if (history.length) { html += '<div class="orders-section-label">🗂️ Order History ('+history.length+')</div><div class="orders-grid">'+history.map(orderCardHTML).join('')+'</div>'; }
   document.getElementById('orders-list').innerHTML = html;
 }
 
 function orderCardHTML(o) {
   var isCompleted = o.status==='Order Completed';
+  var isCancelled = o.status==='Cancelled';
   var dateDisplay = '—';
-  if (isCompleted) { dateDisplay = '<span style="color:var(--green);font-weight:600">'+(o.completedDate||o.collDate||'—')+'</span>'; }
-  else if (o.collDate) { var d=Math.round((new Date(o.collDate)-new Date())/864e5); dateDisplay = d<0?'<span style="color:var(--red);font-weight:700">Overdue</span>':d===0?'<span style="color:var(--amber);font-weight:700">Today!</span>':o.collDate+' <span style="font-size:.72rem;color:'+(d<=14?'var(--amber)':'var(--ink3)')+'">('+d+'d)</span>'; }
+  if (isCompleted) {
+    dateDisplay = '<span style="color:var(--green);font-weight:600">'+(o.completedDate||o.collDate||'—')+'</span>';
+  } else if (isCancelled) {
+    // No countdown / "overdue" for cancelled — just show when it was cancelled.
+    dateDisplay = '<span style="color:var(--ink3);font-weight:600">'+(o.cancelledDate||o.collDate||'—')+'</span>';
+  } else if (o.collDate) {
+    var d=Math.round((new Date(o.collDate)-new Date())/864e5);
+    dateDisplay = d<0?'<span style="color:var(--red);font-weight:700">Overdue</span>':d===0?'<span style="color:var(--amber);font-weight:700">Today!</span>':o.collDate+' <span style="font-size:.72rem;color:'+(d<=14?'var(--amber)':'var(--ink3)')+'">('+d+'d)</span>';
+  }
+  var dateLabel = isCompleted ? 'Completed Date' : isCancelled ? 'Cancelled Date' : 'Collection Date';
   var collectingNote = o.status==='Collecting'&&o.collectedQty?'<div class="oc-row"><span class="oc-row-label">Collected So Far</span><span class="oc-row-val" style="color:var(--teal);font-weight:700">'+o.collectedQty.toLocaleString()+' / '+o.qty.toLocaleString()+' seedlings</span></div>':'';
-  return '<div class="order-card"><div class="oc-header"><div><div class="oc-id">'+o.id+'</div><div class="oc-date">Ordered '+o.orderDate+'</div></div><span class="badge '+badgeClass(o.status)+'">'+o.status+'</span></div><div class="oc-body"><div class="oc-row"><span class="oc-row-label">Seedling Batch</span><span class="oc-row-val">'+o.variety+'</span></div><div class="oc-row"><span class="oc-row-label">Quantity</span><span class="oc-row-val">'+o.qty.toLocaleString()+' seedlings</span></div><div class="oc-row"><span class="oc-row-label">Unit Price</span><span class="oc-row-val">RM '+o.price.toFixed(2)+'</span></div><div class="oc-row"><span class="oc-row-label">'+(isCompleted?'Completed Date':'Collection Date')+'</span><span class="oc-row-val">'+dateDisplay+'</span></div>'+collectingNote+'</div><div class="oc-footer"><div><div class="oc-total-label">Order Total</div><div class="oc-total-val">RM '+o.total.toLocaleString('en-MY',{minimumFractionDigits:2})+'</div>'+(orderRatings[o.id]?'<div class="rating-done-badge">'+'⭐'.repeat(orderRatings[o.id].rating)+' Reviewed</div>':(isCompleted?'<button class="btn-outline" style="margin-top:.4rem;font-size:.74rem" onclick="openRatingModal(\''+o.id+'\')">⭐ Leave a Review</button>':''))+'</div><div class="oc-actions"><button class="btn-outline" onclick="viewDetail(\''+o.id+'\')">View Details</button>'+(o.status==='Pending Payment'?'<button class="btn-outline danger" onclick="showToast(\'Please contact MJM Nursery to cancel.\')">Cancel</button>':'')+'</div></div></div>';
+  return '<div class="order-card"><div class="oc-header"><div><div class="oc-id">'+o.id+'</div><div class="oc-date">Ordered '+o.orderDate+'</div></div><span class="badge '+badgeClass(o.status)+'">'+o.status+'</span></div><div class="oc-body"><div class="oc-row"><span class="oc-row-label">Seedling Batch</span><span class="oc-row-val">'+o.variety+'</span></div><div class="oc-row"><span class="oc-row-label">Quantity</span><span class="oc-row-val">'+o.qty.toLocaleString()+' seedlings</span></div><div class="oc-row"><span class="oc-row-label">Unit Price</span><span class="oc-row-val">RM '+o.price.toFixed(2)+'</span></div><div class="oc-row"><span class="oc-row-label">'+dateLabel+'</span><span class="oc-row-val">'+dateDisplay+'</span></div>'+collectingNote+'</div><div class="oc-footer"><div><div class="oc-total-label">Order Total</div><div class="oc-total-val">RM '+o.total.toLocaleString('en-MY',{minimumFractionDigits:2})+'</div>'+(orderRatings[o.id]?'<div class="rating-done-badge">'+'⭐'.repeat(orderRatings[o.id].rating)+' Reviewed</div>':(isCompleted?'<button class="btn-outline" style="margin-top:.4rem;font-size:.74rem" onclick="openRatingModal(\''+o.id+'\')">⭐ Leave a Review</button>':''))+'</div><div class="oc-actions"><button class="btn-outline" onclick="viewDetail(\''+o.id+'\')">View Details</button>'+(o.status==='Pending Payment'?'<button class="btn-outline danger" onclick="showToast(\'Please contact MJM Nursery to cancel.\')">Cancel</button>':'')+'</div></div></div>';
 }
 
 // ══════════════════════════════════════════════

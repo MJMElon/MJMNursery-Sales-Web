@@ -429,12 +429,18 @@ async function loadPointsBalance(){
   var userId=session?.data?.session?.user?.id;
   if(!userId)return;
 
-  // 1. Real balance from the ledger view (single source of truth).
+  // 1. Real balance from the ledger view (single source of truth). The view
+  //    subtracts points snapshotted on orders still in 'Pending Payment'
+  //    so the same points cannot be redeemed twice across overlapping
+  //    unpaid orders. pending_redeemed is exposed so we can tell the
+  //    customer *why* their balance dropped.
+  var pendingHold=0;
   try{
     var{data:bal}=await _sb.from('salesweb_customer_points_balance')
-      .select('balance').eq('user_id',userId).maybeSingle();
-    if(bal&&Number(bal.balance)>0){
-      pointsBalance=Number(bal.balance);
+      .select('balance,pending_redeemed').eq('user_id',userId).maybeSingle();
+    if(bal){
+      pointsBalance=Math.max(0, Number(bal.balance)||0);
+      pendingHold=Number(bal.pending_redeemed)||0;
     }
   }catch(e){}
 
@@ -451,12 +457,20 @@ async function loadPointsBalance(){
     }
   }catch(e){}
 
-  if(pointsBalance>0){
-    document.getElementById('points-item').style.display='block';
-    document.getElementById('points-bal').textContent='Balance: '+pointsBalance.toLocaleString()+' pts';
-    document.getElementById('ck-points').max=pointsBalance;
-    document.getElementById('ck-points').step=redeemPtsPerRm;  // can only spend whole-chunk amounts
-  }
+  // Always show the section for logged-in customers, even at zero balance,
+  // so the feature is discoverable. Input + Redeem button are disabled
+  // unless there are spendable points; pending holds are surfaced in the
+  // balance label so the customer understands why the number is what it is.
+  document.getElementById('points-item').style.display='block';
+  var balText='Balance: '+pointsBalance.toLocaleString()+' pts';
+  if(pendingHold>0) balText+=' ('+pendingHold.toLocaleString()+' on hold for pending order)';
+  document.getElementById('points-bal').textContent=balText;
+  var input=document.getElementById('ck-points');
+  input.max=pointsBalance;
+  input.step=redeemPtsPerRm;
+  input.disabled=(pointsBalance<=0);
+  var btn=document.getElementById('btn-redeem-points');
+  if(btn) btn.disabled=(pointsBalance<=0);
 }
 loadPointsBalance();
 
@@ -952,10 +966,12 @@ async function placeOrder(){
   // Timeline entry — fire and forget (audit log, doesn't need to block redirect)
   _sb.from('salesweb_order_timeline').insert([{order_id:order.id,status:'Order Placed',note:'Order placed by customer',changed_by:email}]).then(function(){});
 
-  // Don't clear the cart yet — the customer may back-navigate after creating
-  // the order (e.g. to add more items). The cart is cleared only on terminal
-  // success: payment-callback.html (online) or payment-proof.html (offline
-  // after proof upload).
+  // Order row, items and stock holds are all committed at this point — the
+  // cart is no longer the source of truth, the order is. Clear it now so a
+  // customer who back-navigates to the shop doesn't see the same items
+  // sitting in the cart and assume the order failed (which used to lead to
+  // a second order being placed against the same points).
+  try{ sessionStorage.removeItem('mjm_cart'); }catch(e){}
 
   if(selectedPayMethod==='offline'){
     // Redirect to payment proof page

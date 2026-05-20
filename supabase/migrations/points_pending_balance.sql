@@ -59,7 +59,19 @@ SELECT u.user_id,
        (COALESCE(l.ledger_balance, 0) - COALESCE(p.pending_redeemed, 0))::INTEGER AS balance,
        COALESCE(l.lifetime_earned,    0)::INTEGER                                  AS lifetime_earned,
        COALESCE(l.lifetime_redeemed,  0)::INTEGER                                  AS lifetime_redeemed,
-       l.last_activity
+       l.last_activity,
+       -- Exposed so the checkout UI can render "X on hold for pending order"
+       -- next to the balance — without this column payment.html sees only the
+       -- net balance and can't tell the customer *why* their points dropped.
+       COALESCE(p.pending_redeemed, 0)::INTEGER                                   AS pending_redeemed
 FROM all_users u
 LEFT JOIN ledger_totals       l ON l.user_id = u.user_id
 LEFT JOIN pending_redemptions p ON p.user_id = u.user_id;
+
+-- Hard guarantee that the same order can never produce two Earned or two
+-- Redeemed ledger rows even if a status-transition handler is invoked twice
+-- (webhook retry, admin double-click). 'Adjusted' rows are not tied to an
+-- order (order_id NULL) so the partial WHERE keeps them out of the constraint.
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_points_ledger_order_type
+  ON salesweb_points_ledger (order_id, type)
+  WHERE order_id IS NOT NULL;

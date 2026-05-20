@@ -1774,19 +1774,26 @@
     <div class="quote-wrap">
       <div class="tool-card quote-form-card">
         <h2>Quotation <em>Details</em></h2>
-        <div class="tool-sub">We'll build a printable quotation from the items currently in your cart. Fill in your company details and the quotation will render below.</div>
 
         <div class="tool-field">
           <label>Company / Recipient Name</label>
-          <input class="tool-input" type="text" id="quote-company" placeholder="Your company / plantation name" oninput="renderQuotation()">
+          <input class="tool-input" type="text" id="quote-company" oninput="renderQuotation()">
         </div>
         <div class="tool-field">
           <label>Attention To</label>
-          <input class="tool-input" type="text" id="quote-attn" placeholder="e.g. Mr. Tan, Procurement Manager" oninput="renderQuotation()">
+          <input class="tool-input" type="text" id="quote-attn" oninput="renderQuotation()">
+        </div>
+        <div class="tool-field">
+          <label>Contact Number</label>
+          <input class="tool-input" type="tel" id="quote-phone" oninput="renderQuotation()">
+        </div>
+        <div class="tool-field">
+          <label>Email</label>
+          <input class="tool-input" type="email" id="quote-email" oninput="renderQuotation()">
         </div>
         <div class="tool-field">
           <label>Address</label>
-          <input class="tool-input" type="text" id="quote-addr" placeholder="Delivery / billing address" oninput="renderQuotation()">
+          <input class="tool-input" type="text" id="quote-addr" oninput="renderQuotation()">
         </div>
       </div>
 
@@ -2227,7 +2234,7 @@ function showPage(page) {
   if (page === 'quotation') {
     setTimeout(function(){
       try {
-        ['quote-company','quote-attn','quote-addr'].forEach(function(id){
+        ['quote-company','quote-attn','quote-phone','quote-email','quote-addr'].forEach(function(id){
           var el = document.getElementById(id); if (el) el.value = '';
         });
         renderQuotation();
@@ -2432,13 +2439,13 @@ function renderQuotation(){
 
   var company  = (document.getElementById('quote-company').value || '').trim() || '—';
   var attn     = (document.getElementById('quote-attn').value || '').trim();
+  var phone    = (document.getElementById('quote-phone').value || '').trim();
+  var email    = (document.getElementById('quote-email').value || '').trim();
   var addr     = (document.getElementById('quote-addr').value || '').trim();
-  // Quotation validity is fixed at 14 days from the day the customer
-  // generates this quote — non-negotiable per the team's policy.
-  var validity = QUOTE_VALIDITY_DAYS;
-
-  var today = new Date();   // issue date is always "today"
-  var expiry = new Date(today.getTime() + validity * 86400000);
+  // Quotation validity is fixed at 14 days from issue date (policy).
+  // We still need expiry for the meta header "Valid Until" line.
+  var today = new Date();
+  var expiry = new Date(today.getTime() + QUOTE_VALIDITY_DAYS * 86400000);
   var fmtDate = function(d){ return d.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }); };
   // Quote number: QUO-YYMMDD-XXXX. Cached for the day so the number stays
   // stable as the customer types into the form fields.
@@ -2480,11 +2487,13 @@ function renderQuotation(){
       '<div class="quote-parties">'+
         '<div>'+
           '<div class="qp-label">Quotation For</div>'+
-          '<div class="qp-value"><strong>'+escapeQuote(company)+'</strong>'+(attn?'<br>Attn: '+escapeQuote(attn):'')+(addr?'<br>'+escapeQuote(addr):'')+'</div>'+
-        '</div>'+
-        '<div>'+
-          '<div class="qp-label">Validity</div>'+
-          '<div class="qp-value">'+validity+' days from issue date</div>'+
+          '<div class="qp-value">'+
+            '<strong>'+escapeQuote(company)+'</strong>'+
+            (attn  ? '<br>Attn: '+escapeQuote(attn)  : '')+
+            (addr  ? '<br>'+escapeQuote(addr)        : '')+
+            (phone ? '<br>Tel: '+escapeQuote(phone)  : '')+
+            (email ? '<br>Email: '+escapeQuote(email): '')+
+          '</div>'+
         '</div>'+
       '</div>'+
       '<table class="quote-table">'+
@@ -2494,10 +2503,6 @@ function renderQuotation(){
       '<div class="quote-totals">'+
         '<div class="qt-row"><span>Subtotal</span><span>RM '+subtotal.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</span></div>'+
         '<div class="qt-row grand"><span>Total</span><span>RM '+subtotal.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</span></div>'+
-      '</div>'+
-      '<div class="quote-footer-note">'+
-        'This quotation is for planning purposes and is valid for '+validity+' days from the issue date. Prices are subject to seedling availability at the time of order confirmation. '+
-        'To place an order, please proceed to checkout from your cart or contact us at 085-419907.'+
       '</div>'+
     '</div>'+
     '<div class="quote-actions">'+

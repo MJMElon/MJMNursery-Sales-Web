@@ -356,7 +356,8 @@ input,select,textarea,button{font-family:inherit;}
           <h3 style="margin:0;">Payment Details (Bank Transfer / DuitNow QR)</h3>
           <button class="btn btn-primary btn-sm" id="pay-save-btn" onclick="savePaymentDetails()">Save</button>
         </div>
-        <p style="font-size:11px;color:var(--ink4);margin-bottom:.8rem;">These are shown to customers on the offline-payment screen so they know where to transfer money to.</p>
+        <p style="font-size:11px;color:var(--ink4);margin-bottom:.4rem;">These are shown to customers on the offline-payment screen so they know where to transfer money to.</p>
+        <p id="pay-debug" style="font-size:11px;font-weight:600;margin-bottom:.8rem;">Loading saved values…</p>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem;margin-bottom:.8rem;">
           <div>
             <label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.25rem;">Bank Name</label>
@@ -384,7 +385,7 @@ input,select,textarea,button{font-family:inherit;}
 
       <!-- Visible build stamp so an admin can verify they're on the new
            version (and not a cached older HTML). Bump when the page changes. -->
-      <div style="text-align:center;font-size:10px;color:var(--ink4);padding:.5rem 0;">Admin build 2026-05-19c · payment-details + customer-list union filter</div>
+      <div style="text-align:center;font-size:10px;color:var(--ink4);padding:.5rem 0;">Admin build 2026-05-20a · payment-details load diagnostic</div>
     </div>
   </div>
 </div>
@@ -689,16 +690,32 @@ async function loadSettings(){
 var paymentDetails = { bank_name:'', account_name:'', account_number:'', duitnow_qr_url:'' };
 
 async function loadPaymentDetails(){
+  var dbg = document.getElementById('pay-debug');
+  var loadedFromDB = false;
+  var errMsg = '';
   try{
-    var{data}=await sb.from('salesweb_app_settings').select('value').eq('key','payment_details').maybeSingle();
-    if(data && data.value){
-      try{ paymentDetails = typeof data.value==='string' ? JSON.parse(data.value) : data.value; }catch(e){}
+    var{data,error}=await sb.from('salesweb_app_settings').select('value').eq('key','payment_details').maybeSingle();
+    if(error){ errMsg = 'Query error: '+error.message; }
+    else if(data && data.value){
+      try{ paymentDetails = typeof data.value==='string' ? JSON.parse(data.value) : data.value; loadedFromDB = true; }
+      catch(e){ errMsg = 'JSON parse error: '+e.message; }
+    } else {
+      errMsg = 'No row found for key=payment_details';
     }
-  }catch(e){ console.warn('payment details load failed:', e); }
+  }catch(e){ errMsg = 'Exception: '+(e.message||e); console.warn('payment details load failed:', e); }
   document.getElementById('pay-bank-name').value      = paymentDetails.bank_name      || '';
   document.getElementById('pay-account-name').value   = paymentDetails.account_name   || '';
   document.getElementById('pay-account-number').value = paymentDetails.account_number || '';
   renderPaymentQrPreview();
+  if(dbg){
+    if(loadedFromDB){
+      dbg.style.color='var(--green)';
+      dbg.textContent='Loaded saved values from database.';
+    } else {
+      dbg.style.color='var(--red)';
+      dbg.textContent='Could not load saved values — '+errMsg+' (fields stay empty until you Save).';
+    }
+  }
 }
 
 function renderPaymentQrPreview(){

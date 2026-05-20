@@ -2927,6 +2927,17 @@ document.addEventListener('click', function(e) {
   }
 });
 
+// Without this, clicking the per-item ✕ / qty buttons closes the whole cart:
+// removeCartItem/changeCartQty rewrite the cart's innerHTML synchronously, so by
+// the time the click bubbles to the document the original target has been
+// detached from the DOM — `dd.contains(e.target)` then returns false and the
+// outside-click handler above closes the dropdown. Containing the click here
+// prevents that misfire.
+(function(){
+  var cartDD = document.getElementById('cartDropdown');
+  if (cartDD) cartDD.addEventListener('click', function(e){ e.stopPropagation(); });
+})();
+
 function submitContactForm(e) {
   e.preventDefault();
   e.target.innerHTML = '<div style="text-align:center;padding:3rem 1rem"><div style="font-size:3rem;margin-bottom:1rem">✅</div><h3 style="font-family:Cormorant Garamond,serif;font-size:1.8rem;color:var(--green-dark);margin-bottom:.5rem">Message Sent!</h3><p style="color:var(--text-mid)">Thank you for reaching out. We\'ll get back to you shortly.</p></div>';
@@ -3599,12 +3610,13 @@ function openOrderDetail(ordNum){
   document.getElementById('p-order-detail-modal').classList.add('open');
 }
 
-// Customer-initiated order cancel. Allowed only while status === 'Pending Payment'
-// (UI already gates the button). Writes status=Cancelled and an audit timeline row.
+// Customer-initiated order cancel. Allowed only while status === 'Pending Payment'.
+// We re-check the current status against the DB (not the in-memory P_ORDERS cache)
+// because the cache can be stale — a webhook or admin update could have moved the
+// order past Pending Payment after the modal was opened.
 async function pCancelOrder(orderId){
   var ord = P_ORDERS.find(function(x){return x.id === orderId;});
   if (!ord) { showPortalToast('Order not found'); return; }
-  if (ord.status !== 'Pending Payment') { showPortalToast('Only unpaid orders can be cancelled'); return; }
   if (!confirm('Cancel order #' + ord.id + '?\n\nThis will set the order to Cancelled and cannot be undone. The items will be released back to stock by the team.')) return;
 
   try {
@@ -3612,6 +3624,15 @@ async function pCancelOrder(orderId){
     if (!_sb) { showPortalToast('Connection error — try again'); return; }
     var fullId = ord.fullId || orderId;
     var email = sessionStorage.getItem('mjm_user_email') || 'customer';
+
+    var { data: latest, error: readErr } = await _sb.from('salesweb_customer_orders')
+        .select('status').eq('id', fullId).maybeSingle();
+    if (readErr || !latest) { showPortalToast('Could not verify order — try again'); return; }
+    if (latest.status !== 'Pending Payment') {
+      showPortalToast('Order is now "' + latest.status + '" — please contact us to cancel.');
+      return;
+    }
+
     var { error } = await _sb.from('salesweb_customer_orders')
         .update({ status: 'Cancelled', updated_at: new Date().toISOString() })
         .eq('id', fullId);

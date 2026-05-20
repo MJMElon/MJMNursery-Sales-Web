@@ -13,21 +13,17 @@
 async function loadCustomers(){
   var q=(document.getElementById('cust-search').value||'').trim().toLowerCase();
 
-  // ─── Build the customer set as the union of two groups ──────────────
-  //   A) Sales-web signed-up customers
-  //      (shared_profiles.user_type='customer' or legacy role='customer').
-  //      The sales-web signup flow in index.html / auth.html writes exactly
-  //      these markers — staff/operations accounts do not.
-  //   B) Anyone (regardless of sign-up source) who has at least one PAID
-  //      order. "Paid" = order status NOT IN
-  //      ('Pending Payment','Cancelled','Refunded').
-  //
-  //   The previous version showed every shared_profiles row that had ANY
-  //   order, which leaked pending-payment carts and staff accounts.
-  //   ───────────────────────────────────────────────────────────────────
+  // Show ONLY sales-web sign-ups: shared_profiles rows whose user_type or
+  // (legacy) role is 'customer'. The web signup flows in index.html and
+  // auth.html write exactly these markers; operation-system / staff accounts
+  // never do. We intentionally do NOT union in "anyone who has an order" —
+  // that would leak operation-system users who happen to have orders.
+  var{data:swCusts,error}=await sb.from('shared_profiles')
+    .select('*').or('user_type.eq.customer,role.eq.customer');
+  if(error){toast('Error: '+error.message,'error');return;}
 
-  // (B) Customer IDs with a paid order — pull all orders + status, filter
-  //     client-side so we don't have to depend on PostgREST IN-not syntax.
+  // Paid-order lookup — still needed for the "Has Paid Order" stat box and
+  // to badge customers in the table, but no longer a source of customers.
   var{data:orderRows}=await sb.from('salesweb_customer_orders')
     .select('customer_id,status').not('customer_id','is',null);
   var NOT_PAID = {'Pending Payment':1,'Cancelled':1,'Refunded':1};
@@ -36,23 +32,7 @@ async function loadCustomers(){
     if(r.customer_id && !NOT_PAID[r.status]) paidIds[r.customer_id]=true;
   });
 
-  // (A) Sales-web sign-ups.
-  var{data:swCusts,error}=await sb.from('shared_profiles')
-    .select('*').or('user_type.eq.customer,role.eq.customer');
-  if(error){toast('Error: '+error.message,'error');return;}
-
-  var byId={};
-  (swCusts||[]).forEach(function(c){byId[c.id]=c;});
-
-  // Pull profiles for paid-order customers that aren't already in (A).
-  var missingIds=Object.keys(paidIds).filter(function(id){return !byId[id];});
-  if(missingIds.length){
-    var{data:extras}=await sb.from('shared_profiles').select('*').in('id',missingIds);
-    (extras||[]).forEach(function(c){byId[c.id]=c;});
-  }
-
-  var custs=[];
-  for(var k in byId)custs.push(byId[k]);
+  var custs=(swCusts||[]).slice();
   custs.sort(function(a,b){return new Date(b.created_at||0)-new Date(a.created_at||0);});
 
   if(q)custs=custs.filter(function(c){return(c.full_name||'').toLowerCase().includes(q)||(c.email||'').toLowerCase().includes(q);});

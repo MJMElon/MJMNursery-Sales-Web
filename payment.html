@@ -492,7 +492,7 @@ function updateSummary(){
           '</div>';
   }
   var finalTotal=Math.max(0,subtotal-voucherDiscount-pointsValue);
-  html+='<div class="summary-total"><span>Final Pay Amount</span><span>'+fmtRM(finalTotal)+'</span></div>';
+  html+='<div class="summary-total"><span>Amount to Pay</span><span>'+fmtRM(finalTotal)+'</span></div>';
   document.getElementById('ck-summary').innerHTML=html;
 }
 

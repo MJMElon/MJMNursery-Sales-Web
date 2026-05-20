@@ -352,7 +352,7 @@
   .nav-dropdown-wrap:hover .nav-dropdown-menu { display: block; }
   .nav-dropdown-menu a { display: block; padding: .6rem 1.2rem; font-size: 13px; font-weight: 500; color: rgba(255,255,255,.8); cursor: pointer; transition: all .15s; text-decoration: none; letter-spacing: .05em; }
   .nav-dropdown-menu a:hover { background: rgba(255,255,255,.1); color: var(--gold-light); }
-  .nav-dropdown-section { font-size: 10px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: var(--gold-light); padding: .7rem 1.2rem .3rem; opacity: .75; }
+  .nav-dropdown-section { font-size: 15px; font-weight: 700; letter-spacing: .04em; text-transform: none; color: var(--gold-light); padding: .8rem 1.2rem .4rem; font-family: 'Cormorant Garamond', serif; font-style: italic; }
   .nav-dropdown-section + a { border-top: 1px solid rgba(255,255,255,.06); }
   .nav-dropdown-menu > .nav-dropdown-section:first-child { padding-top: .5rem; }
   .nav-dropdown-menu > .nav-dropdown-section:first-child + a { border-top: none; }
@@ -1715,27 +1715,25 @@
     <div class="tool-grid">
       <div class="tool-card">
         <h2>How many <em>seedlings</em>?</h2>
-        <div class="tool-sub">Enter your planting area and we'll calculate the recommended number of oil palm seedlings based on standard Malaysian planting densities.</div>
+        <div class="tool-sub">Enter your planting area and we'll calculate the recommended number of oil palm seedlings based on the Malaysian industry-standard planting density.</div>
 
         <div class="tool-field">
           <label>Land Area</label>
           <div class="tool-field-row">
             <input class="tool-input" type="number" id="calc-area" min="0" step="0.1" placeholder="e.g. 10" oninput="calcSeedlings()">
             <select class="tool-select" id="calc-unit" onchange="calcSeedlings()">
+              <option value="acre" selected>Acres</option>
               <option value="ha">Hectares</option>
-              <option value="acre">Acres</option>
             </select>
           </div>
         </div>
 
         <div class="tool-field">
           <label>Planting Density</label>
-          <select class="tool-select" id="calc-density" onchange="calcSeedlings()">
-            <option value="143" selected>Standard — 9 m triangular (143 palms/ha)</option>
-            <option value="148">High density — 8.7 m triangular (148 palms/ha)</option>
-            <option value="136">Wide — 9.2 m triangular (136 palms/ha)</option>
-            <option value="128">Low density — 9.5 m triangular (128 palms/ha)</option>
-          </select>
+          <div style="background:var(--cream);border:1.5px solid var(--green-pale);border-radius:10px;padding:.7rem 1rem;font-size:13px;color:var(--text-dark);line-height:1.5;">
+            <strong>136 palms per hectare</strong> <span style="color:var(--text-light);">(≈ 55 palms per acre)</span>
+            <div style="font-size:11px;color:var(--text-light);margin-top:.2rem;">9.2 m triangular spacing — Malaysian industry standard.</div>
+          </div>
         </div>
 
         <div class="tool-field">
@@ -2240,43 +2238,115 @@ function scrollToSection(id) {
 // ══════════════════════════════════════════════
 // SEEDLING CALCULATOR
 // ══════════════════════════════════════════════
-// 1 acre = 0.404686 hectares. Density values are palms per hectare;
-// the dropdown options carry the spacing context for the customer.
+// 1 acre = 0.404686 hectares. Density is fixed at the Malaysian
+// industry standard (136 palms/ha, 9.2 m triangular spacing).
+var CALC_DENSITY_PER_HA = 136;
+
 function calcSeedlings(){
   var areaEl = document.getElementById('calc-area');
   if (!areaEl) return; // page not in DOM yet
   var area    = parseFloat(areaEl.value) || 0;
   var unit    = document.getElementById('calc-unit').value;
-  var density = parseFloat(document.getElementById('calc-density').value) || 143;
   var buffer  = Math.max(0, Math.min(30, parseFloat(document.getElementById('calc-buffer').value) || 0));
   var wrap    = document.getElementById('calc-result-wrap');
 
   if (area <= 0) {
     wrap.innerHTML = '<div class="tool-card"><div class="tool-empty"><div style="font-size:2rem;margin-bottom:.5rem;">🌱</div><div>Enter your land area on the left to see the recommended number of seedlings.</div></div></div>';
+    window._calcLastTotal = 0;
     return;
   }
 
   var hectares = unit === 'acre' ? area * 0.404686 : area;
-  var base     = Math.round(hectares * density);
+  var base     = Math.round(hectares * CALC_DENSITY_PER_HA);
   var extra    = Math.round(base * buffer / 100);
   var total    = base + extra;
+  window._calcLastTotal = total;  // stashed for addCalcToCart()
   var fmt = function(n){ return n.toLocaleString('en-MY'); };
 
   wrap.innerHTML =
     '<div class="tool-result">'+
       '<div class="tool-result-label">Recommended Order</div>'+
       '<div class="tool-result-big">'+fmt(total)+'<em>seedlings</em></div>'+
-      '<div class="tool-result-note">Based on '+area.toLocaleString()+' '+(unit==='acre'?'acre':'hectare')+(area===1?'':'s')+' at '+density+' palms / ha, with a '+buffer+'% replanting buffer.</div>'+
+      '<div class="tool-result-note">Based on '+area.toLocaleString()+' '+(unit==='acre'?'acre':'hectare')+(area===1?'':'s')+' at '+CALC_DENSITY_PER_HA+' palms / ha, with a '+buffer+'% replanting buffer.</div>'+
       '<div class="tool-result-breakdown">'+
         '<div class="tr-row"><span>Area</span><span>'+area.toLocaleString()+' '+(unit==='acre'?'acres':'ha')+' ('+hectares.toFixed(2)+' ha)</span></div>'+
-        '<div class="tr-row"><span>Density</span><span>'+density+' palms / ha</span></div>'+
+        '<div class="tr-row"><span>Density</span><span>'+CALC_DENSITY_PER_HA+' palms / ha</span></div>'+
         '<div class="tr-row"><span>Base count</span><span>'+fmt(base)+'</span></div>'+
         '<div class="tr-row"><span>Buffer ('+buffer+'%)</span><span>+ '+fmt(extra)+'</span></div>'+
         '<div class="tr-row total"><span>Total seedlings</span><span>'+fmt(total)+'</span></div>'+
       '</div>'+
-      '<button class="tool-btn" onclick="showPage(\'home\'); scrollToSection(\'salesweb_products\');">Browse Seedlings →</button>'+
-      '<button class="tool-btn secondary" style="margin-top:.5rem;background:rgba(255,255,255,.1);color:#fff;border-color:rgba(255,255,255,.25);" onclick="showPage(\'quotation\');">Generate a Quotation</button>'+
+      '<button class="tool-btn" onclick="addCalcToCart()">🛒 Add to Cart</button>'+
+      '<button class="tool-btn secondary" style="margin-top:.5rem;background:rgba(255,255,255,.1);color:#fff;border-color:rgba(255,255,255,.25);" onclick="addCalcToCartAndQuote()">Generate a Quotation →</button>'+
     '</div>';
+}
+
+// Allocate the calculator's recommended total across available products.
+// Greedy: walk `products` in the order the storefront already shows them
+// (sort_order, then sell-year/month), and take min(remaining, stock) from
+// each. When the first product runs out of stock, the next product picks
+// up the rest. Returns true if any seedlings were added.
+function allocateCalcTotal(total){
+  if (!total || total <= 0) return [];
+  if (!products || !products.length) return null;  // products not loaded yet
+
+  var picks = [];
+  var remaining = total;
+  for (var i = 0; i < products.length && remaining > 0; i++) {
+    var p = products[i];
+    // Skip sold-out / unavailable; treat undefined status as available.
+    if (p.status && p.status !== 'available' && p.status !== 'promo') continue;
+    var stock = p.stock || 0;
+    if (stock <= 0) continue;
+    var take = Math.min(remaining, stock);
+    picks.push({ product: p, qty: take });
+    remaining -= take;
+  }
+  return picks;
+}
+
+function addCalcToCart(){
+  var total = window._calcLastTotal || 0;
+  if (total <= 0) { showPortalToast('Enter your land area first'); return; }
+
+  var picks = allocateCalcTotal(total);
+  if (picks === null) {
+    showPortalToast('Seedlings are still loading — please try again in a moment.');
+    return;
+  }
+  if (!picks.length) {
+    showPortalToast('No seedlings currently in stock. Please contact us at 085-419907.');
+    return;
+  }
+
+  var added = 0;
+  picks.forEach(function(pick){
+    var p = pick.product;
+    var existing = cart.find(function(c){ return c.id === p.id; });
+    var capped = Math.min(pick.qty, p.stock || 999);
+    if (existing) {
+      existing.qty = Math.min((existing.qty || 0) + capped, p.stock || 999);
+    } else {
+      cart.push({
+        id: p.id, name: p.name, month: p.month || '',
+        price: p.priceNum || 0, priceHtml: p.price, qty: capped,
+        image_url: p.image_url || null, stock: p.stock || 0
+      });
+    }
+    added += capped;
+  });
+  updateCartUI();
+
+  if (added < total) {
+    showPortalToast('Added ' + added.toLocaleString() + ' of ' + total.toLocaleString() + ' — that is all the seedlings currently in stock.');
+  } else {
+    showPortalToast('🌱 ' + added.toLocaleString() + ' seedlings added to cart across ' + picks.length + ' batch' + (picks.length>1?'es':''));
+  }
+}
+
+function addCalcToCartAndQuote(){
+  addCalcToCart();
+  // Give the toast a moment to show, then navigate to quotation.
+  setTimeout(function(){ showPage('quotation'); }, 400);
 }
 
 // ══════════════════════════════════════════════

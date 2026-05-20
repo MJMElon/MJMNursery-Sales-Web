@@ -457,21 +457,20 @@ async function loadPointsBalance(){
     }
   }catch(e){}
 
-  // Show the section if the customer either has spendable points OR has
-  // points reserved on a pending order (so they understand why the input
-  // is empty/disabled instead of thinking the feature vanished).
-  if(pointsBalance>0 || pendingHold>0){
-    document.getElementById('points-item').style.display='block';
-    var balText='Balance: '+pointsBalance.toLocaleString()+' pts';
-    if(pendingHold>0) balText+=' ('+pendingHold.toLocaleString()+' on hold for pending order)';
-    document.getElementById('points-bal').textContent=balText;
-    var input=document.getElementById('ck-points');
-    input.max=pointsBalance;
-    input.step=redeemPtsPerRm;
-    input.disabled=(pointsBalance<=0);
-    var btn=document.getElementById('btn-redeem-points');
-    if(btn) btn.disabled=(pointsBalance<=0);
-  }
+  // Always show the section for logged-in customers, even at zero balance,
+  // so the feature is discoverable. Input + Redeem button are disabled
+  // unless there are spendable points; pending holds are surfaced in the
+  // balance label so the customer understands why the number is what it is.
+  document.getElementById('points-item').style.display='block';
+  var balText='Balance: '+pointsBalance.toLocaleString()+' pts';
+  if(pendingHold>0) balText+=' ('+pendingHold.toLocaleString()+' on hold for pending order)';
+  document.getElementById('points-bal').textContent=balText;
+  var input=document.getElementById('ck-points');
+  input.max=pointsBalance;
+  input.step=redeemPtsPerRm;
+  input.disabled=(pointsBalance<=0);
+  var btn=document.getElementById('btn-redeem-points');
+  if(btn) btn.disabled=(pointsBalance<=0);
 }
 loadPointsBalance();
 

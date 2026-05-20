@@ -148,12 +148,23 @@ function updatePointsSummary(){
   var rmPerPt    = redeemRm / redeemPts;
   var cashbackPct = ptsPerRm * rmPerPt * 100;
 
+  // Sample product price: pick the smallest price that earns enough points
+  // for one full redemption, so the worked example is whole-number friendly
+  // (e.g. earn 1pt/RM, redeem 25pts=RM1 → sample RM 25 product → RM 1 off = 4%).
+  var samplePrice = ptsPerRm > 0 ? Math.max(1, Math.ceil(redeemPts / ptsPerRm)) : 0;
+  var samplePtsEarned = samplePrice * ptsPerRm;
+  var sampleRmOff     = samplePtsEarned * rmPerPt;
+
   document.getElementById('pts-summary').innerHTML=
     '<strong>Earning:</strong> RM '+earnRm+' spent = '+earnPts+' point(s)<br>'+
     '<strong>Redemption:</strong> '+redeemPts+' points = RM '+redeemRm.toFixed(2)+' discount<br>'+
     '<strong>Point value:</strong> 1 point = RM '+(rmPerPt).toFixed(4)+'<br>'+
     '<strong>Effective cashback:</strong> '+cashbackPct.toFixed(2)+'% '+
-      '<span style="color:var(--ink4);font-size:11px;">(every RM 100 spent → RM '+(cashbackPct).toFixed(2)+' redeemable discount)</span>';
+      '<span style="color:var(--ink4);font-size:11px;">(every RM 100 spent → RM '+(cashbackPct).toFixed(2)+' redeemable discount)</span><br>'+
+    '<strong>Product discount:</strong> '+cashbackPct.toFixed(2)+'% off '+
+      (ptsPerRm > 0
+        ? '<span style="color:var(--ink4);font-size:11px;">(e.g. RM '+samplePrice+' product → '+samplePtsEarned+' points earned → RM '+sampleRmOff.toFixed(2)+' off ≈ '+cashbackPct.toFixed(2)+'%)</span>'
+        : '<span style="color:var(--ink4);font-size:11px;">(no points earned per RM spent)</span>');
 }
 
 async function savePointsSettings(){

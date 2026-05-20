@@ -1788,10 +1788,6 @@
           <label>Address</label>
           <input class="tool-input" type="text" id="quote-addr" placeholder="Delivery / billing address" oninput="renderQuotation()">
         </div>
-        <div class="tool-field">
-          <label>Quotation Validity (Days)</label>
-          <input class="tool-input" type="number" id="quote-validity" min="1" max="365" value="30" oninput="renderQuotation()">
-        </div>
       </div>
 
       <div id="quote-output"></div>
@@ -2247,6 +2243,9 @@ function scrollToSection(id) {
 // 1 acre = 0.404686 hectares. Density is fixed at the Malaysian
 // industry standard (136 palms/ha, 9.2 m triangular spacing).
 var CALC_DENSITY_PER_HA = 136;
+// Fixed quotation validity window — every quote is valid for 14 days
+// from the issue date. Not user-configurable per company policy.
+var QUOTE_VALIDITY_DAYS = 14;
 
 function calcSeedlings(){
   var areaEl = document.getElementById('calc-area');
@@ -2421,9 +2420,11 @@ function renderQuotation(){
   var company  = (document.getElementById('quote-company').value || '').trim() || '—';
   var attn     = (document.getElementById('quote-attn').value || '').trim();
   var addr     = (document.getElementById('quote-addr').value || '').trim();
-  var validity = Math.max(1, parseInt(document.getElementById('quote-validity').value) || 30);
+  // Quotation validity is fixed at 14 days from the day the customer
+  // generates this quote — non-negotiable per the team's policy.
+  var validity = QUOTE_VALIDITY_DAYS;
 
-  var today = new Date();
+  var today = new Date();   // issue date is always "today"
   var expiry = new Date(today.getTime() + validity * 86400000);
   var fmtDate = function(d){ return d.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }); };
   // Quote number: QUO-YYMMDD-XXXX. Cached for the day so the number stays
@@ -2488,7 +2489,6 @@ function renderQuotation(){
     '</div>'+
     '<div class="quote-actions">'+
       '<button class="tool-btn" onclick="window.print()">🖨️ Print / Save as PDF</button>'+
-      '<button class="tool-btn secondary" onclick="showPage(\'home\'); scrollToSection(\'salesweb_products\');">Add More Items</button>'+
     '</div>';
 }
 

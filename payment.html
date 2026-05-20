@@ -389,6 +389,7 @@ try{cart=JSON.parse(sessionStorage.getItem('mjm_cart'))||[];}catch(e){}
 // ── Discounts & Payment state ──
 var voucherDiscount=0;
 var voucherCode='';
+var voucherCouponId=null;
 var pointsUsed=0;
 var pointsBalance=0;
 var selectedPayMethod='';
@@ -507,23 +508,40 @@ async function applyVoucher(){
   if(!code){msg.className='promo-msg err';msg.textContent='Please enter a voucher code';return;}
   var btn=document.getElementById('btn-voucher');
   btn.disabled=true;btn.textContent='Checking...';
-  // Look up voucher in coupons table
-  var{data,error}=await _sb.from('salesweb_coupons').select('*').eq('code',code).single();
-  btn.disabled=false;btn.textContent='Apply';
-  if(error||!data){msg.className='promo-msg err';msg.textContent='Invalid voucher code';voucherDiscount=0;voucherCode='';updateSummary();return;}
-  // Check if active and not expired
-  if(!data.is_active){msg.className='promo-msg err';msg.textContent='This voucher is no longer active';voucherDiscount=0;voucherCode='';updateSummary();return;}
-  if(data.expires_at&&new Date(data.expires_at)<new Date()){msg.className='promo-msg err';msg.textContent='This voucher has expired';voucherDiscount=0;voucherCode='';updateSummary();return;}
-  // Apply discount
+
+  // Delegate ALL validation (expiry, active, usage_limit, per_customer_limit,
+  // first_order_only, min_order_value, scope, max_discount, discount math) to
+  // the preview_coupon RPC — single source of truth shared with admin.
   var subtotal=cart.reduce(function(s,c){return s+(c.price*c.qty);},0);
-  if(data.type==='percentage'){
-    voucherDiscount=subtotal*(data.value/100);
-    msg.className='promo-msg ok';msg.textContent=data.value+'% discount applied!';
-  } else {
-    voucherDiscount=Math.min(data.value,subtotal);
-    msg.className='promo-msg ok';msg.textContent=fmtRM(voucherDiscount)+' discount applied!';
+  var items=cart.map(function(c){
+    return {product_id:c.id, category:c.category||null, qty:c.qty, price:c.price};
+  });
+  var session=await _sb.auth.getSession();
+  var userId=session?.data?.session?.user?.id||null;
+
+  var{data,error}=await _sb.rpc('preview_coupon',{
+    p_code:code, p_customer_id:userId, p_subtotal:subtotal, p_items:items
+  });
+  btn.disabled=false;btn.textContent='Apply';
+
+  // RPC returns a set; supabase-js gives us an array.
+  var row=Array.isArray(data)?data[0]:data;
+  if(error||!row){
+    msg.className='promo-msg err';
+    msg.textContent=(error&&error.message)||'Could not validate voucher';
+    voucherDiscount=0;voucherCode='';voucherCouponId=null;updateSummary();return;
   }
+  if(!row.valid){
+    msg.className='promo-msg err';
+    msg.textContent=row.reason||'Voucher not valid';
+    voucherDiscount=0;voucherCode='';voucherCouponId=null;updateSummary();return;
+  }
+
+  voucherDiscount=Number(row.discount)||0;
   voucherCode=code;
+  voucherCouponId=row.coupon_id||null;
+  msg.className='promo-msg ok';
+  msg.textContent=fmtRM(voucherDiscount)+' discount applied!'+(row.coupon_name?' ('+row.coupon_name+')':'');
   updateSummary();
 }
 
@@ -893,6 +911,28 @@ async function placeOrder(){
     _sb.from('salesweb_order_items').insert(items),
     Promise.all(stockHolds)
   ]);
+
+  // Record voucher redemption: bumps usage_count and writes the redemption
+  // ledger row atomically. RPC is idempotent on (order_id, coupon_id) so a
+  // back-navigation re-submit won't double-count. Errors here shouldn't
+  // block the order — the discount was already baked into total.
+  if(voucherCode){
+    try{
+      var voucherItems=cart.map(function(c){
+        return {product_id:c.id, category:c.category||null, qty:c.qty, price:c.price};
+      });
+      var{data:redeemRes,error:redeemErr}=await _sb.rpc('redeem_coupon',{
+        p_code:voucherCode,
+        p_customer_id:userId,
+        p_customer_email:email,
+        p_order_id:order.id,
+        p_subtotal:subtotal,
+        p_items:voucherItems
+      });
+      if(redeemErr) console.error('redeem_coupon error:',redeemErr.message);
+      else if(redeemRes && redeemRes.ok===false) console.warn('redeem_coupon refused:',redeemRes.reason);
+    }catch(e){ console.error('redeem_coupon threw:',e); }
+  }
 
   // Timeline entry — fire and forget (audit log, doesn't need to block redirect)
   _sb.from('salesweb_order_timeline').insert([{order_id:order.id,status:'Order Placed',note:'Order placed by customer',changed_by:email}]).then(function(){});

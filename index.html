@@ -2214,8 +2214,26 @@ function showPage(page) {
   document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
   const navMap = { home: 'nav-shop', information: 'nav-information', contact: 'nav-contact', join: 'nav-join', portal: 'nav-myaccount', calculator: 'nav-information', quotation: 'nav-information', 'checkout-login': null };
   if (page === 'portal') { setTimeout(function(){ try { initPortal(); } catch(e) { console.error('Portal init error:', e); } }, 50); }
-  if (page === 'calculator') { setTimeout(function(){ try { calcSeedlings(); } catch(e){} }, 0); }
-  if (page === 'quotation')  { setTimeout(function(){ try { renderQuotation(); } catch(e){} }, 0); }
+  // Calculator + Quotation forms: clear on every visit so each entry
+  // starts fresh — DOM-toggled pages otherwise keep stale typed values.
+  if (page === 'calculator') {
+    setTimeout(function(){
+      try {
+        var el = document.getElementById('calc-area'); if (el) el.value = '';
+        calcSeedlings();
+      } catch(e){}
+    }, 0);
+  }
+  if (page === 'quotation') {
+    setTimeout(function(){
+      try {
+        ['quote-company','quote-attn','quote-addr'].forEach(function(id){
+          var el = document.getElementById(id); if (el) el.value = '';
+        });
+        renderQuotation();
+      } catch(e){}
+    }, 0);
+  }
   if (page === 'checkout-login') {
     // The checkout-login page is a router target only — it opens the login
     // modal then hands control back to whichever page was last active.
@@ -2389,14 +2407,11 @@ function addCalcToCartAndQuote(){
 // QUOTATION GENERATOR
 // ══════════════════════════════════════════════
 // Builds a printable quotation from whatever is in the cart
-// (sessionStorage 'mjm_cart'). Auto-fills company info from the logged-in
-// profile if available, but everything is editable.
-function quoteAutoFill(){
-  var name = sessionStorage.getItem('mjm_user_name') || '';
-  var c = document.getElementById('quote-company');
-  if (c && !c.value && name) c.value = name; // sensible default
-}
-
+// (sessionStorage 'mjm_cart'). Form fields are cleared when the page is
+// opened (see showPage), so the customer always starts from a blank
+// company/address — we no longer prefill from the logged-in profile,
+// because that prefill made the field feel undeletable (re-applied on
+// every oninput render).
 function renderQuotation(){
   var out = document.getElementById('quote-output');
   if (!out) return;
@@ -2414,8 +2429,6 @@ function renderQuotation(){
       '</div></div>';
     return;
   }
-
-  quoteAutoFill();
 
   var company  = (document.getElementById('quote-company').value || '').trim() || '—';
   var attn     = (document.getElementById('quote-attn').value || '').trim();

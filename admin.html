@@ -214,7 +214,7 @@ input,select,textarea,button{font-family:inherit;}
     <div class="sb-watermark">MJM</div>
     <div class="sb-logo"><div><div class="sb-logo-text">MJM</div><div class="sb-logo-sub">Admin Portal</div></div></div>
     <div class="sb-nav">
-      <div class="sb-item active" onclick="switchTab('orders',this)">
+      <div class="sb-item active" id="sb-orders-item" onclick="switchTab('orders',this)">
         <span class="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span>
         <span>Orders</span>
       </div>
@@ -227,33 +227,33 @@ input,select,textarea,button{font-family:inherit;}
         <div class="sb-sub-item active" onclick="switchTab('customers',document.getElementById('sb-customers-parent'));showCustSubTab('list')">Customer List</div>
         <div class="sb-sub-item" onclick="switchTab('customers',document.getElementById('sb-customers-parent'));showCustSubTab('points')">Points &amp; Membership</div>
       </div>
-      <div class="sb-item" onclick="switchTab('products',this)">
+      <div class="sb-item" id="sb-products-item" onclick="switchTab('products',this)">
         <span class="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19.2 2.96c1.4 9.3-3.45 14.5-8.2 16.04Z"/><path d="M2 22c1.59-3.43 3.7-6.45 6.3-9"/></svg></span>
         <span>Products</span>
       </div>
-      <div class="sb-item" onclick="switchTab('payments',this)">
+      <div class="sb-item" id="sb-payments-item" onclick="switchTab('payments',this)">
         <span class="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></span>
         <span>Payments</span>
       </div>
-      <div class="sb-item" onclick="switchTab('promos',this)">
+      <div class="sb-item" id="sb-promos-item" onclick="switchTab('promos',this)">
         <span class="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg></span>
         <span>Promotions</span>
       </div>
-      <div class="sb-item" onclick="switchTab('coupons',this)">
+      <div class="sb-item" id="sb-coupons-item" onclick="switchTab('coupons',this)">
         <span class="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V7a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"/><line x1="13" y1="5" x2="13" y2="19"/></svg></span>
         <span>Coupons</span>
       </div>
-      <div class="sb-item" onclick="switchTab('webdesign',this)">
+      <div class="sb-item" id="sb-webdesign-item" onclick="switchTab('webdesign',this)">
         <span class="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg></span>
         <span>Website Design</span>
+      </div>
+      <div class="sb-item" id="sb-settings-item" onclick="switchTab('settings',this)">
+        <span class="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+        <span>Settings</span>
       </div>
       <div class="sb-item" id="sb-users-item" style="display:none;" onclick="switchTab('users',this)">
         <span class="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><circle cx="12" cy="10" r="3"/><path d="M7 20c.7-2.3 2.7-4 5-4s4.3 1.7 5 4"/></svg></span>
         <span>User Access</span>
-      </div>
-      <div class="sb-item" onclick="switchTab('settings',this)">
-        <span class="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
-        <span>Settings</span>
       </div>
     </div>
     <div class="sb-footer">
@@ -426,11 +426,12 @@ input,select,textarea,button{font-family:inherit;}
       <div class="card" style="margin-top:1rem;background:var(--green-light);border-color:var(--green);">
         <div style="display:flex;gap:.7rem;align-items:flex-start;">
           <div style="font-size:1.4rem;">ⓘ</div>
-          <div style="font-size:12px;line-height:1.6;color:var(--ink2);">
-            <strong>Access levels:</strong>
-            <span style="display:inline-block;margin-left:.3rem;"><span class="badge badge-green">Admin</span> &mdash; full access including User Access management.</span>
-            <span style="display:inline-block;margin-left:.5rem;"><span class="badge badge-blue">Normal</span> &mdash; access to all tabs except User Access.</span>
-            <span style="display:inline-block;margin-left:.5rem;"><span class="badge badge-grey">None</span> &mdash; cannot sign into the salesweb admin portal.</span>
+          <div style="font-size:12px;line-height:1.7;color:var(--ink2);">
+            <strong>How this list works.</strong>
+            Only users granted salesweb access from the <em>umbrella User Access portal</em> appear here.
+            <span style="display:inline-block;margin-left:.2rem;"><span class="badge badge-green">admin</span> users always see every page.</span>
+            <span style="display:inline-block;margin-left:.4rem;"><span class="badge badge-blue">normal</span> users only see pages you tick in <strong>Edit Pages</strong>.</span>
+            Granting / revoking salesweb access itself is still done from the umbrella portal.
           </div>
         </div>
       </div>
@@ -771,21 +772,53 @@ async function checkAdmin(){
   document.getElementById('auth-loading').style.display='none';
   document.getElementById('app').classList.add('show');
   document.getElementById('admin-name').textContent=session.user.user_metadata?.full_name||session.user.email;
-  // User Access tab is admin-only — surface it once we've confirmed the
-  // signed-in profile has admin-level salesweb access (or the legacy flag).
+
   var isAdmin = (swLevel==='admin') || legacyAdmin;
   window.__SW_IS_ADMIN__ = isAdmin;
   window.__SW_USER_ID__  = session.user.id;
-  if (isAdmin) {
-    var sbUsers = document.getElementById('sb-users-item');
-    if (sbUsers) sbUsers.style.display='';
-  }
+  window.__SW_LEVEL__    = swLevel;
+  // Per-tab gating lives in permissions.salesweb_tabs as {tabKey:bool}.
+  // Missing object = grandfather: admins see everything, normals see
+  // everything except User Access (matches the pre-feature behaviour).
+  window.__SW_TABS__ = (profile && profile.permissions && profile.permissions.salesweb_tabs) || null;
+  applyTabVisibility();
+
   loadOrders();
+}
+
+// Set of tabs that exist in the salesweb admin. Update both sides if you
+// add a new tab — the sidebar id pattern is sb-<key>-item.
+var SALESWEB_TAB_KEYS = ['orders','customers','products','payments','promos','coupons','webdesign','settings','users'];
+
+function canSeeTab(key){
+  if (key === 'users') return !!window.__SW_IS_ADMIN__;     // User Access is admin-locked
+  if (window.__SW_IS_ADMIN__) return true;                  // admins see everything else
+  var tabs = window.__SW_TABS__;
+  if (!tabs) return true;                                   // grandfather: no settings yet → allow all
+  return tabs[key] === true;
+}
+
+function applyTabVisibility(){
+  SALESWEB_TAB_KEYS.forEach(function(key){
+    var elId = key === 'customers' ? 'sb-customers-parent' : 'sb-'+key+'-item';
+    var el = document.getElementById(elId);
+    if (!el) return;
+    el.style.display = canSeeTab(key) ? '' : 'none';
+  });
+  // If the user can't see Orders (the default boot tab), bounce them to
+  // the first allowed tab so the page isn't blank.
+  if (!canSeeTab('orders')) {
+    var first = SALESWEB_TAB_KEYS.filter(canSeeTab)[0];
+    if (first && first !== 'orders') {
+      var firstEl = document.getElementById(first === 'customers' ? 'sb-customers-parent' : 'sb-'+first+'-item');
+      switchTab(first, firstEl);
+    }
+  }
 }
 async function doLogout(){await sb.auth.signOut();sessionStorage.clear();window.location.href='auth.html';}
 
 function switchTab(tab,el){
-  if(tab==='users'&&!window.__SW_IS_ADMIN__){toast('Only admins can manage user access','error');return;}
+  if(typeof canSeeTab==='function'&&!canSeeTab(tab)){toast('You do not have access to this page','error');return;}
   document.querySelectorAll('.tab-content').forEach(function(t){t.classList.remove('active');});
   document.querySelectorAll('.sb-item').forEach(function(s){s.classList.remove('active');});
   document.querySelectorAll('.sb-sub-item').forEach(function(s){s.classList.remove('active');});
@@ -1025,7 +1058,7 @@ document.addEventListener('DOMContentLoaded',function(){
 <script src="admin-customers.js?v=2026-05-20-web-only-customers"></script>
 <script src="admin-products.js?v=2026-05-18-points-ledger"></script>
 <script src="admin-payments.js?v=2026-05-20-payment-verification"></script>
-<script src="admin-users.js?v=2026-05-21-user-access"></script>
+<script src="admin-users.js?v=2026-05-21-per-tab-access"></script>
 <script src="admin-promotions.js?v=2026-05-18-points-ledger"></script>
 <script src="admin-coupons.js?v=2026-05-18-points-ledger"></script>
 <script src="admin-web-design.js?v=2026-05-20-port-from-umbrella"></script>

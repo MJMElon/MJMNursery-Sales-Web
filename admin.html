@@ -529,10 +529,14 @@ input,select,textarea,button{font-family:inherit;}
     <div style="margin-bottom:1rem;">
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--ink4);letter-spacing:.05em;margin-bottom:.5rem;">Customer</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;">
-        <div><label style="font-size:11px;color:var(--ink3);">Name *</label><input class="form-input" id="no-cust-name" style="font-size:12px;padding:6px 10px;"></div>
-        <div><label style="font-size:11px;color:var(--ink3);">Phone</label><input class="form-input" id="no-cust-phone" style="font-size:12px;padding:6px 10px;"></div>
-        <div><label style="font-size:11px;color:var(--ink3);">Email</label><input class="form-input" id="no-cust-email" type="email" style="font-size:12px;padding:6px 10px;"></div>
-        <div><label style="font-size:11px;color:var(--ink3);">Existing customer (optional)</label><select class="form-input" id="no-cust-id" onchange="onNewOrderPickCustomer()" style="font-size:12px;padding:6px 10px;"><option value="">— Walk-in / new —</option></select></div>
+        <div style="grid-column:1 / -1;position:relative;">
+          <label style="font-size:11px;color:var(--ink3);">Name *  <span style="color:var(--ink4);font-weight:400;">(type to search existing customers — leave new name and submit to create a profile)</span></label>
+          <input class="form-input" id="no-cust-name" oninput="onNewOrderCustNameInput()" onblur="setTimeout(hideNewOrderCustResults,180)" autocomplete="off" style="font-size:12px;padding:6px 10px;">
+          <div id="no-cust-results" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--rule);border-radius:8px;z-index:10;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.12);margin-top:2px;"></div>
+          <div id="no-cust-status" style="font-size:11px;margin-top:.3rem;display:none;"></div>
+        </div>
+        <div><label style="font-size:11px;color:var(--ink3);">Phone</label><input class="form-input" id="no-cust-phone" oninput="onNewOrderCustFieldEdit()" style="font-size:12px;padding:6px 10px;"></div>
+        <div><label style="font-size:11px;color:var(--ink3);">Email</label><input class="form-input" id="no-cust-email" type="email" oninput="onNewOrderCustFieldEdit()" style="font-size:12px;padding:6px 10px;"></div>
         <div style="grid-column:1 / -1;"><label style="font-size:11px;color:var(--ink3);">Shipping address</label><input class="form-input" id="no-cust-addr" value="Self Collection — MJM Nursery Office, Niah Land District, Miri, 98000, Sarawak" style="font-size:12px;padding:6px 10px;"></div>
       </div>
     </div>

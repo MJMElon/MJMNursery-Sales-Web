@@ -376,7 +376,20 @@ async function executeCancelOrStatusUpdate(orderId,oldStatus,newStatus,order){
   if(newStatus==='Paid'&&oldStatus!=='Paid'){
     await issuePoints(orderId,order.total||0);
     await createALFromOrder(orderId,order);
-    toast('Points issued + AL created + status updated');
+
+    // Fire the same "Payment confirmed" email the Billplz webhook fires for
+    // online payments. send-order-email is idempotent via email_sent_at on
+    // the order, so flipping Pending → Paid → some other status → Paid won't
+    // double-send. Run it in the background so a Resend hiccup doesn't block
+    // the toast / view refresh; surface any error in the console for triage.
+    sb.functions.invoke('send-order-email', { body: { order_id: orderId } })
+      .then(function(res){
+        if(res && res.error){ console.error('[email] invoke error:', res.error); }
+        else if(res && res.data && res.data.error){ console.error('[email] function error:', res.data); }
+      })
+      .catch(function(err){ console.error('[email] invoke threw:', err); });
+
+    toast('Points issued + AL created + confirmation email sent');
   } else {
     toast('Status updated to '+newStatus);
   }

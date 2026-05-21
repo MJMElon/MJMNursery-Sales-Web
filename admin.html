@@ -10,6 +10,7 @@
   ├── admin-orders.js         ← Orders: loadOrders(), viewOrder(), updateOrder()
   ├── admin-customers.js      ← Customers: loadCustomers(), viewCustomer()
   ├── admin-products.js       ← Products: loadProducts(), openProductForm(), saveProduct(), toggleProduct()
+  ├── admin-payments.js       ← Payments: loadPayments(), openPaymentDetail(), markPayment()
   ├── admin-promotions.js     ← Promotions: loadPromos(), openPromoForm(), savePromo()
   └── admin-coupons.js        ← Coupons: loadCoupons(), openCouponForm(), saveCoupon(), toggleCoupon()
 ═══════════════════════════════════════════════════════════════
@@ -217,6 +218,7 @@ input,select,textarea,button{font-family:inherit;}
         <div class="sb-sub-item" onclick="switchTab('customers',document.getElementById('sb-customers-parent'));showCustSubTab('points')">Points &amp; Membership</div>
       </div>
       <div class="sb-item" onclick="switchTab('products',this)"><span class="sb-icon">🌱</span><span>Products</span></div>
+      <div class="sb-item" onclick="switchTab('payments',this)"><span class="sb-icon">💳</span><span>Payments</span></div>
       <div class="sb-item" onclick="switchTab('promos',this)"><span class="sb-icon">🎁</span><span>Promotions</span></div>
       <div class="sb-item" onclick="switchTab('coupons',this)"><span class="sb-icon">🏷️</span><span>Coupons</span></div>
       <div class="sb-item" onclick="switchTab('webdesign',this)"><span class="sb-icon">🎨</span><span>Website Design</span></div>
@@ -298,6 +300,29 @@ input,select,textarea,button{font-family:inherit;}
           <select class="filter-select" id="prod-status-filter" onchange="loadProducts()"><option value="">All Status</option><option value="published">Published</option><option value="unpublished">Unpublished</option></select>
         </div>
         <div id="products-table"><div class="loading">Loading products...</div></div>
+      </div>
+    </div>
+
+    <!-- PAYMENTS — accountant-facing payment verification view -->
+    <div class="tab-content" id="tab-payments">
+      <div class="main-header"><div class="main-title">Payment Verification</div></div>
+      <div class="stats-grid" id="payment-stats"></div>
+      <div class="card">
+        <div class="filter-bar">
+          <input class="filter-input" id="payment-search" placeholder="Search order number or customer..." oninput="loadPayments()">
+          <select class="filter-select" id="payment-filter" onchange="loadPayments()">
+            <option value="awaiting">Awaiting Verification</option>
+            <option value="paid">Paid</option>
+            <option value="refunded">Refunded</option>
+            <option value="">All</option>
+          </select>
+          <select class="filter-select" id="payment-method-filter" onchange="loadPayments()">
+            <option value="">All Methods</option>
+            <option value="cash">Cash / Bank Transfer</option>
+            <option value="credit">Credit Terms</option>
+          </select>
+        </div>
+        <div id="payments-table"><div class="loading">Loading payments...</div></div>
       </div>
     </div>
 
@@ -422,6 +447,9 @@ input,select,textarea,button{font-family:inherit;}
 
 <!-- CANCEL STOCK RESTORE MODAL -->
 <div class="modal-overlay" id="modal-cancel-stock"><div class="modal" style="max-width:600px;"><div class="modal-head" style="background:#fef2f2;"><h2 style="font-size:1.1rem;color:#dc2626;">Cancel Order — Restore Stock</h2><button class="modal-close" onclick="closeModal('modal-cancel-stock')">&#x2715;</button></div><div class="modal-body" id="cancel-stock-body" style="max-height:65vh;overflow-y:auto;"></div><div class="modal-foot" id="cancel-stock-foot"></div></div></div>
+
+<!-- PAYMENT DETAIL MODAL — populated by openPaymentDetail() in admin-payments.js -->
+<div class="modal-overlay" id="modal-payment" style="z-index:255;"><div class="modal" style="max-width:760px;"><div class="modal-head"><h2>Payment Review</h2><button class="modal-close" onclick="closeModal('modal-payment')">&#x2715;</button></div><div class="modal-body" id="payment-detail-body" style="max-height:78vh;overflow-y:auto;"></div></div></div>
 
 <!-- PRODUCT FORM MODAL -->
 <div class="modal-overlay" id="modal-product"><div class="modal" style="max-width:800px;">
@@ -660,6 +688,7 @@ function switchTab(tab,el){
   if(tab==='orders')loadOrders();
   if(tab==='customers')loadCustomers();
   if(tab==='products')loadProducts();
+  if(tab==='payments')loadPayments();
   if(tab==='promos')loadPromos();
   if(tab==='coupons')loadCoupons();
   if(tab==='webdesign')loadWebDesign();
@@ -819,6 +848,7 @@ document.addEventListener('DOMContentLoaded',function(){
 <script src="admin-orders.js?v=2026-05-18-points-ledger"></script>
 <script src="admin-customers.js?v=2026-05-20-web-only-customers"></script>
 <script src="admin-products.js?v=2026-05-18-points-ledger"></script>
+<script src="admin-payments.js?v=2026-05-20-payment-verification"></script>
 <script src="admin-promotions.js?v=2026-05-18-points-ledger"></script>
 <script src="admin-coupons.js?v=2026-05-18-points-ledger"></script>
 <script src="admin-web-design.js?v=2026-05-20-port-from-umbrella"></script>

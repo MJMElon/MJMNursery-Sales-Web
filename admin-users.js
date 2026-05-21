@@ -34,14 +34,22 @@ var SW_TAB_DEFS = [
   { key: 'users',      label: 'User Access', adminOnly: true }
 ];
 
+// Per-user in-memory cache of the most recently saved tabs. Reading
+// this on reopen sidesteps any read-after-write lag where a fresh
+// SELECT comes back before the JSONB column is visible.
+var SW_TABS_CACHE = {};
+
 // Resolves a profile's effective per-tab map for display.
 // - admin / legacy admin → every tab true
 // - normal with saved salesweb_tabs → use as-is
 // - normal without saved salesweb_tabs → grandfather all tabs except 'users'
+// Per-user in-memory cache takes precedence so an immediate reopen
+// after Save reflects the chosen tabs even if the DB read is stale.
 function effectiveTabs(profile){
   var level = profile?.permissions?.modules?.salesweb
            || (profile?.role === 'admin' ? 'admin' : 'none');
-  var saved = profile?.permissions?.salesweb_tabs;
+  var saved = (profile?.id && SW_TABS_CACHE[profile.id])
+           || profile?.permissions?.salesweb_tabs;
   var out = {};
   SW_TAB_DEFS.forEach(function(d){
     if (level === 'admin') out[d.key] = true;
@@ -227,11 +235,33 @@ async function saveUserAccess(){
   var perms = existing?.permissions || {};
   perms.salesweb_tabs = newTabs;
 
-  var { error } = await sb.from('shared_profiles')
+  // Chain .select() so we get the row back AFTER the write. If RLS
+  // silently denies the update (no rows matched), `updated` is null
+  // and we surface a real error instead of a misleading success toast.
+  var { data: updated, error } = await sb.from('shared_profiles')
     .update({ permissions: perms })
-    .eq('id', userId);
+    .eq('id', userId)
+    .select('id, permissions')
+    .maybeSingle();
   if (error) { toast('Save failed: '+error.message, 'error'); return; }
+  if (!updated) {
+    toast('Save blocked — you may not have the manage_users permission. Ask the umbrella admin to grant it.', 'error');
+    return;
+  }
 
+  // Confirm the stored JSONB actually has our tabs. Catches the rare
+  // case where the row updated but the column was reshaped by another
+  // policy (e.g. column DEFAULT or trigger).
+  var savedTabs = updated?.permissions?.salesweb_tabs || {};
+  var match = SW_TAB_DEFS.every(function(d){
+    return (savedTabs[d.key] === true) === (newTabs[d.key] === true);
+  });
+  if (!match) {
+    toast('Save did not take effect. Check RLS on shared_profiles.permissions.', 'error');
+    return;
+  }
+
+  SW_TABS_CACHE[userId] = newTabs;
   toast('Page access updated');
   closeModal('modal-user-access');
   loadUsers();

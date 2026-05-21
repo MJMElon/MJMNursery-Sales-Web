@@ -3220,6 +3220,7 @@ async function initPortal(){
   try{await loadCustomerPoints();}catch(e){console.error('points load:',e);}
   try{pRenderMemberCard();}catch(e){console.error('member:',e);}
   try{pRenderPointsCard();}catch(e){console.error('points:',e);}
+  pActivityRows=null; pActivityShowAll=false;
   try{pRenderPointsActivity();}catch(e){console.error('points activity:',e);}
   try{loadBillingFromDb().then(function(){renderBillingEntries();}).catch(function(){loadBillingFromStorage();renderBillingEntries();});}catch(e){loadBillingFromStorage();renderBillingEntries();}
 
@@ -3745,23 +3746,23 @@ function pRenderMemberCard(){
     '</div>';
 }
 
-// Right side: Points — balance, earned, redeemed only
+// Right side: Points — balance only (big, prominent)
 function pRenderPointsCard(){
   var p=P_POINTS;
   document.getElementById('pp-points-card').innerHTML=
-    '<div class="p-card">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;padding-bottom:.7rem;border-bottom:1px solid #e8ede8;">'+
-        '<h3 style="border:none;padding:0;margin:0;font-family:\'Cormorant Garamond\',serif;font-size:1rem;">Available Points</h3>'+
-        '<div style="font-family:\'Cormorant Garamond\',serif;font-size:1.5rem;font-weight:600;color:var(--green-mid);">'+p.balance.toLocaleString()+' <span style="font-size:.7rem;font-weight:400;color:var(--text-light);">pts</span></div>'+
-      '</div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;">'+
-        '<div style="background:var(--cream);border-radius:8px;padding:.6rem .8rem;text-align:center;"><div style="font-size:.6rem;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.08em;">Earned</div><div style="font-size:1rem;font-weight:700;color:var(--text-dark);">'+p.totalEarned.toLocaleString()+'</div></div>'+
-        '<div style="background:var(--cream);border-radius:8px;padding:.6rem .8rem;text-align:center;"><div style="font-size:.6rem;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.08em;">Redeemed</div><div style="font-size:1rem;font-weight:700;color:var(--text-dark);">'+p.redeemed.toLocaleString()+'</div></div>'+
+    '<div class="p-card" style="text-align:center;padding:1.5rem 1rem;">'+
+      '<div style="font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text-light);margin-bottom:.5rem;">Available Points</div>'+
+      '<div style="font-family:\'Cormorant Garamond\',serif;font-weight:600;color:var(--green-mid);line-height:1;">'+
+        '<span style="font-size:3.5rem;">'+p.balance.toLocaleString()+'</span>'+
+        '<span style="font-size:1rem;font-weight:400;color:var(--text-light);margin-left:.4rem;">pts</span>'+
       '</div>'+
     '</div>';
 }
 
-// Right side: Points Activity — recent earn/redeem entries from the ledger.
+// Right side: Points Activity — current-month entries by default; user can
+// expand to full history. Cached on first fetch so the toggle is instant.
+var pActivityRows=null;
+var pActivityShowAll=false;
 async function pRenderPointsActivity(){
   var el=document.getElementById('pp-points-activity');
   if(!el)return;
@@ -3769,22 +3770,21 @@ async function pRenderPointsActivity(){
   var uid=sess?.data?.session?.user?.id;
   if(!uid){el.innerHTML='';return;}
 
-  var rows=[];
-  try{
-    var{data}=await _sb.from('salesweb_points_ledger')
-      .select('id,change,type,order_id,rm_value,note,created_at')
-      .eq('user_id',uid)
-      .order('created_at',{ascending:false})
-      .limit(10);
-    rows=data||[];
-  }catch(e){ rows=[]; }
-
-  if(!rows.length){
-    el.innerHTML='<div class="p-card"><h3>Points Activity</h3>'+
-      '<div style="font-size:12px;color:var(--text-light);text-align:center;padding:.5rem 0;">No activity yet. Your earn and redeem history will appear here.</div>'+
-    '</div>';
-    return;
+  if(pActivityRows===null){
+    try{
+      var{data}=await _sb.from('salesweb_points_ledger')
+        .select('id,change,type,order_id,rm_value,note,created_at')
+        .eq('user_id',uid)
+        .order('created_at',{ascending:false})
+        .limit(200);
+      pActivityRows=data||[];
+    }catch(e){ pActivityRows=[]; }
   }
+
+  var now=new Date();
+  var monthStart=new Date(now.getFullYear(),now.getMonth(),1).getTime();
+  var thisMonth=pActivityRows.filter(function(r){return new Date(r.created_at).getTime()>=monthStart;});
+  var rows=pActivityShowAll?pActivityRows:thisMonth;
 
   // Map order_id (UUID) → order_number (display) so the activity row can label it.
   var orderMap={};
@@ -3804,10 +3804,36 @@ async function pRenderPointsActivity(){
       '</div>';
   }
 
+  var monthName=now.toLocaleDateString('en-MY',{month:'long',year:'numeric'});
+  var rangeLabel=pActivityShowAll?'All history':monthName;
+  var toggleLabel=pActivityShowAll?'Show this month':'View full history';
+
+  var body;
+  if(!rows.length){
+    body='<div style="font-size:12px;color:var(--text-light);text-align:center;padding:.8rem 0;">'+
+           (pActivityShowAll?'No activity yet. Your earn and redeem history will appear here.':'No activity this month.')+
+         '</div>';
+  } else {
+    body=rows.map(rowHtml).join('');
+  }
+
+  // Only show the toggle if expanding would actually reveal more rows
+  // (otherwise this month already equals all history).
+  var showToggle=pActivityRows.length>thisMonth.length;
+  var toggleHtml=showToggle
+    ? '<div style="text-align:center;padding-top:.7rem;"><a href="javascript:void(0)" onclick="pTogglePointsActivity()" style="font-size:12px;color:var(--green-mid);font-weight:600;text-decoration:none;">'+toggleLabel+' →</a></div>'
+    : '';
+
   el.innerHTML='<div class="p-card">'+
-    '<h3 style="display:flex;justify-content:space-between;align-items:center;"><span>Points Activity</span><span style="font-size:10px;font-weight:400;color:var(--text-light);">Latest 10</span></h3>'+
-    rows.map(rowHtml).join('')+
+    '<h3 style="display:flex;justify-content:space-between;align-items:center;"><span>Points Activity</span><span style="font-size:10px;font-weight:400;color:var(--text-light);">'+rangeLabel+'</span></h3>'+
+    body+
+    toggleHtml+
   '</div>';
+}
+
+function pTogglePointsActivity(){
+  pActivityShowAll=!pActivityShowAll;
+  pRenderPointsActivity();
 }
 
 // Rating

@@ -236,6 +236,27 @@ serve(async (req) => {
           }
         }
       }
+
+      // 4. Send payment-confirmed email to customer (CC admin). Fire-and-forget —
+      // we don't want a Resend hiccup to fail the webhook back to Billplz (which
+      // would trigger a retry storm). The send-order-email function is
+      // idempotent via order.email_sent_at, so retries are safe regardless.
+      try {
+        const fnUrl = `${supabaseUrl}/functions/v1/send-order-email`
+        // Don't await — webhook needs to return 200 to Billplz fast.
+        fetch(fnUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${supabaseKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ order_id: orderId }),
+        }).then(async (r) => {
+          if (!r.ok) console.error('send-order-email returned', r.status, await r.text())
+        }).catch((e) => console.error('send-order-email fetch threw:', e))
+      } catch (e) {
+        console.error('send-order-email dispatch failed:', e)
+      }
     } else {
       await sb.from('salesweb_order_timeline').insert([{
         order_id: orderId,

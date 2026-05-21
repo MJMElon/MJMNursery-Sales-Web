@@ -5,22 +5,33 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MJM Nursery | Payment Status</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-:root{--green-dark:#2D4A30;--green-mid:#3E6B42;--green-pale:#C8DFC9;--gold:#C9A84C;--cream:#F7F3EC;--text-dark:#1A2E1B;--text-mid:#4A6B4C;--text-light:#8AAB8C;}
+:root{--green-dark:#2D4A30;--green-mid:#3E6B42;--green-pale:#C8DFC9;--gold:#C9A84C;--cream:#F7F3EC;--text-dark:#1A2E1B;--text-mid:#4A6B4C;--text-light:#8AAB8C;--wa:#25D366;--wa-dark:#1FAA52;}
 body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-dark);min-height:100vh;}
 .nav{background:var(--green-dark);padding:0 3rem;height:100px;display:flex;align-items:center;}
 .nav img{height:90px;cursor:pointer;transition:transform .3s ease;}
 .nav img:hover{transform:scale(2.5);z-index:100;position:relative;}
-.wrap{max-width:500px;margin:3rem auto;padding:0 1.5rem;text-align:center;}
-.card{background:#fff;border:1px solid var(--green-pale);border-radius:16px;padding:2rem;box-shadow:0 2px 8px rgba(0,0,0,.04);}
+.wrap{max-width:540px;margin:3rem auto;padding:0 1.5rem;text-align:center;}
+.card{background:#fff;border:1px solid var(--green-pale);border-radius:16px;padding:2rem 1.5rem;box-shadow:0 2px 8px rgba(0,0,0,.04);}
 .icon{font-size:3rem;margin-bottom:.5rem;}
-.title{font-family:'Cormorant Garamond',serif;font-size:1.8rem;color:var(--text-dark);margin-bottom:.3rem;}
-.meta{font-size:14px;color:var(--text-mid);margin-bottom:.5rem;}
-.msg{font-size:13px;color:var(--text-mid);line-height:1.6;margin-bottom:1.5rem;}
-.btn{display:inline-block;padding:.7rem 2rem;background:var(--green-dark);color:#fff;border-radius:10px;text-decoration:none;font-weight:600;font-size:13px;transition:background .2s;}
-.btn:hover{background:var(--green-mid);}
+.title{font-family:'Cormorant Garamond',serif;font-size:1.9rem;color:var(--text-dark);margin-bottom:.4rem;}
+.msg{font-size:13px;color:var(--text-mid);line-height:1.6;margin-bottom:1.25rem;}
+.summary{background:var(--cream);border:1px solid var(--green-pale);border-radius:12px;padding:1rem;margin:1rem 0 1.5rem;text-align:left;font-size:13px;}
+.summary-row{display:flex;justify-content:space-between;padding:.25rem 0;}
+.summary-row .lbl{color:var(--text-light);font-weight:500;}
+.summary-row .val{color:var(--text-dark);font-weight:600;}
+.next-step{background:#FFF8EB;border:1px solid #F2D58F;border-radius:12px;padding:.8rem 1rem;font-size:12.5px;color:#8A6314;margin:0 0 1.25rem;text-align:left;line-height:1.5;}
+.next-step b{color:#5C4308;}
+.btn-row{display:flex;flex-direction:column;gap:.55rem;}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;padding:.75rem 1.2rem;border-radius:10px;text-decoration:none;font-weight:600;font-size:13px;transition:background .15s,transform .1s;border:none;cursor:pointer;font-family:inherit;}
+.btn-primary{background:var(--green-dark);color:#fff;}
+.btn-primary:hover{background:var(--green-mid);}
+.btn-wa{background:var(--wa);color:#fff;}
+.btn-wa:hover{background:var(--wa-dark);}
+@media(min-width:480px){.btn-row{flex-direction:row;justify-content:center;}.btn{flex:1;}}
 </style>
 </head>
 <body>
@@ -42,35 +53,96 @@ var SB_URL='https://kibqjztozokohqmhqqqf.supabase.co';
 var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpYnFqenRvem9rb2hxbWhxcXFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMzQzNjIsImV4cCI6MjA4OTgxMDM2Mn0.J7qJUZhWXYf5b9oey4wXJkjdi66jomEMw_NeV9NWF7M';
 var _sb=supabase.createClient(SB_URL,SB_KEY);
 
-function fmtRM(n){return'RM '+n.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fmtRM(n){return'RM '+(Number(n)||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function esc(s){return String(s||'').replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 
-// Parse Billplz redirect params
-var params=new URLSearchParams(window.location.search);
-var billplzId=params.get('billplz[id]')||'';
-var billplzPaid=params.get('billplz[paid]')==='true';
-var billplzPaidAt=params.get('billplz[paid_at]')||'';
+// ── Parse Billplz redirect params + sessionStorage hints ─────────────────────
+var params       = new URLSearchParams(window.location.search);
+var billplzPaid  = params.get('billplz[paid]')==='true';
+var orderId      = sessionStorage.getItem('mjm_pay_order_id')     || '';
+var orderNumber  = sessionStorage.getItem('mjm_pay_order_number') || '';
+var orderTotal   = Number(sessionStorage.getItem('mjm_pay_order_total'))||0;
+
+// Default collection-booking URL — overridden by the admin Settings tab via
+// notification_config in salesweb_app_settings.
+var bookingUrl = 'https://collect.mjmnursery.com/';
+
+async function loadOrderAndConfig(){
+  if(orderId){
+    try{
+      var{data:o}=await _sb.from('salesweb_customer_orders')
+        .select('order_number,total,status')
+        .eq('id',orderId).maybeSingle();
+      if(o){
+        if(o.order_number) orderNumber = o.order_number;
+        if(o.total) orderTotal = Number(o.total);
+      }
+    }catch(e){ /* fall back to sessionStorage hints */ }
+  }
+  try{
+    var{data:cfg}=await _sb.from('salesweb_app_settings')
+      .select('value').eq('key','notification_config').maybeSingle();
+    if(cfg && cfg.value){
+      var parsed = typeof cfg.value==='string' ? JSON.parse(cfg.value) : cfg.value;
+      if(parsed && parsed.booking_url) bookingUrl = parsed.booking_url;
+    }
+  }catch(e){ /* keep default */ }
+}
+
+function renderSuccess(){
+  var el=document.getElementById('result');
+  var orderLabel = orderNumber ? '#'+esc(orderNumber) : '';
+  var totalLabel = orderTotal>0 ? fmtRM(orderTotal) : '';
+
+  // WhatsApp share text — leaves recipient empty so the customer picks who
+  // to send it to. encodeURIComponent handles all special characters.
+  var waText  = 'Hi! Just paid for Order '+orderLabel+' at MJM Nursery'
+              + (totalLabel?(' ('+totalLabel+')'):'')
+              + '. Booking my collection time at '+bookingUrl;
+  var waHref  = 'https://wa.me/?text='+encodeURIComponent(waText);
+  var portalHref = 'index.html';
+
+  el.innerHTML =
+    '<div class="icon">✅</div>'+
+    '<div class="title">Payment Successful</div>'+
+    (orderLabel || totalLabel
+      ? '<div class="summary">'
+        + (orderLabel ? '<div class="summary-row"><span class="lbl">Order</span><span class="val">'+orderLabel+'</span></div>' : '')
+        + (totalLabel ? '<div class="summary-row"><span class="lbl">Amount paid</span><span class="val">'+totalLabel+'</span></div>' : '')
+        + '<div class="summary-row"><span class="lbl">Status</span><span class="val" style="color:var(--green-mid);">Paid</span></div>'
+        + '</div>'
+      : '')+
+    '<div class="next-step"><b>Next step:</b> book your collection time at '
+        + '<a href="'+esc(bookingUrl)+'" target="_blank" rel="noopener" style="color:#8A6314;text-decoration:underline;font-weight:600;">'+esc(bookingUrl)+'</a>. '
+        + 'A confirmation email is on its way.</div>'+
+    '<div class="btn-row">'+
+      '<a href="'+portalHref+'" class="btn btn-primary" onclick="sessionStorage.setItem(\'mjm_last_page\',\'portal\');return true;">'
+        + '<i class="fa-solid fa-receipt"></i> Back to View Order</a>'+
+      '<a href="'+waHref+'" target="_blank" rel="noopener" class="btn btn-wa">'
+        + '<i class="fa-brands fa-whatsapp"></i> Share to WhatsApp</a>'+
+    '</div>';
+
+  // Terminal success: safe to clear cart + pay-in-progress hints now.
+  try{
+    sessionStorage.removeItem('mjm_cart');
+    sessionStorage.removeItem('mjm_pay_order_id');
+    sessionStorage.removeItem('mjm_pay_order_number');
+    sessionStorage.removeItem('mjm_pay_order_total');
+  }catch(e){}
+}
+
+function renderPending(){
+  document.getElementById('result').innerHTML=
+    '<div class="icon">⚠️</div>'+
+    '<div class="title">Payment Not Completed</div>'+
+    '<div class="msg">Your payment was not completed or is still being processed.<br>You can try again from My Account, or choose offline payment.</div>'+
+    '<a href="index.html" class="btn btn-primary" onclick="sessionStorage.setItem(\'mjm_last_page\',\'portal\');return true;">Go to My Account</a>';
+}
 
 (async function(){
-  // Try to find the order by checking the Billplz bill ID in remarks
-  // The Edge Function webhook will update the order status,
-  // but we also check here for immediate feedback
-
-  var el=document.getElementById('result');
-
-  if(billplzPaid){
-    // Payment confirmed — safe to clear the cart now (terminal success state).
-    try{sessionStorage.removeItem('mjm_cart');}catch(e){}
-    el.innerHTML=
-      '<div class="icon">✅</div>'+
-      '<div class="title">Payment Successful!</div>'+
-      '<div class="msg">Thank you. Your payment has been received and your order is now being processed.<br>You will receive an email confirmation shortly.</div>';
-  } else {
-    el.innerHTML=
-      '<div class="icon">⚠️</div>'+
-      '<div class="title">Payment Not Completed</div>'+
-      '<div class="msg">Your payment was not completed or is still being processed.<br>You can try again from My Account, or choose offline payment.</div>'+
-      '<a href="index.html" class="btn" onclick="sessionStorage.setItem(\'mjm_last_page\',\'portal\');return true;">Go to My Account</a>';
-  }
+  if(!billplzPaid){ renderPending(); return; }
+  await loadOrderAndConfig();
+  renderSuccess();
 })();
 </script>
 </body>

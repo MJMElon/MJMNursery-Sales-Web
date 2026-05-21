@@ -391,9 +391,42 @@ input,select,textarea,button{font-family:inherit;}
         </div>
       </div>
 
+      <!-- ─── Notification Config (admin emails + booking URL for post-payment) ─── -->
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+          <h3 style="margin:0;">Notifications (Order-Paid Email)</h3>
+          <button class="btn btn-primary btn-sm" id="notif-save-btn" onclick="saveNotificationConfig()">Save</button>
+        </div>
+        <p style="font-size:11px;color:var(--ink4);margin-bottom:.8rem;">When an order flips to <b>Paid</b>, the customer gets a confirmation email and these admin addresses are CC'd. The booking URL is used in the email and on the post-payment success page.</p>
+        <p id="notif-debug" style="font-size:11px;font-weight:600;margin-bottom:.8rem;">Loading saved values…</p>
+        <div style="display:grid;grid-template-columns:1fr;gap:.8rem;">
+          <div>
+            <label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.25rem;">Admin Notification Emails</label>
+            <textarea class="form-input" id="notif-admin-emails" rows="2" placeholder="one address per line, e.g.&#10;orders@mjmnursery.com&#10;elon.mjm@gmail.com" style="font-size:13px;font-family:monospace;resize:vertical;"></textarea>
+            <div style="font-size:10.5px;color:var(--ink4);margin-top:.2rem;">One per line. These are CC'd on every customer order-paid email.</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem;">
+            <div>
+              <label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.25rem;">From Email</label>
+              <input class="form-input" id="notif-from-email" placeholder="orders@mjmnursery.com" style="font-size:13px;font-family:monospace;">
+              <div style="font-size:10.5px;color:var(--ink4);margin-top:.2rem;">Must be on a domain verified in Resend.</div>
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.25rem;">From Name</label>
+              <input class="form-input" id="notif-from-name" placeholder="MJM Nursery" style="font-size:13px;">
+            </div>
+          </div>
+          <div>
+            <label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.25rem;">Collection Booking URL</label>
+            <input class="form-input" id="notif-booking-url" placeholder="https://collect.mjmnursery.com/" style="font-size:13px;font-family:monospace;">
+            <div style="font-size:10.5px;color:var(--ink4);margin-top:.2rem;">Linked from both the customer email and the post-payment success page.</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Visible build stamp so an admin can verify they're on the new
            version (and not a cached older HTML). Bump when the page changes. -->
-      <div style="text-align:center;font-size:10px;color:var(--ink4);padding:.5rem 0;">Admin build 2026-05-20a · payment-details load diagnostic</div>
+      <div style="text-align:center;font-size:10px;color:var(--ink4);padding:.5rem 0;">Admin build 2026-05-21a · post-payment notifications</div>
     </div>
   </div>
 </div>
@@ -688,6 +721,75 @@ async function loadSettings(){
   renderSettingsList('settings-collections',adminSettings.collections,'coll');
   renderSettingsList('settings-tags',adminSettings.tags,'tag');
   loadPaymentDetails();
+  loadNotificationConfig();
+}
+
+// ═══════════════════════════════════════
+//  NOTIFICATION CONFIG (order-paid email)
+//  Stored in salesweb_app_settings.key='notification_config' as JSON:
+//    { admin_emails: ['a@b.com', ...], from_email, from_name, booking_url }
+//  Consumed by the send-order-email edge function (fired from the Billplz
+//  webhook on Paid) and by payment-callback.html (for the booking URL link).
+// ═══════════════════════════════════════
+var notificationConfig = { admin_emails:[], from_email:'', from_name:'MJM Nursery', booking_url:'https://collect.mjmnursery.com/' };
+
+async function loadNotificationConfig(){
+  var dbg = document.getElementById('notif-debug');
+  var loaded = false, errMsg = '';
+  try{
+    var{data,error}=await sb.from('salesweb_app_settings').select('value').eq('key','notification_config').maybeSingle();
+    if(error){ errMsg = 'Query error: '+error.message; }
+    else if(data && data.value){
+      try{
+        var parsed = typeof data.value==='string' ? JSON.parse(data.value) : data.value;
+        notificationConfig = Object.assign(notificationConfig, parsed||{});
+        loaded = true;
+      }catch(e){ errMsg = 'JSON parse error: '+e.message; }
+    } else {
+      errMsg = 'No row yet for key=notification_config — defaults shown.';
+    }
+  }catch(e){ errMsg = 'Exception: '+(e.message||e); }
+
+  document.getElementById('notif-admin-emails').value = (notificationConfig.admin_emails||[]).join('\n');
+  document.getElementById('notif-from-email').value   = notificationConfig.from_email   || '';
+  document.getElementById('notif-from-name').value    = notificationConfig.from_name    || 'MJM Nursery';
+  document.getElementById('notif-booking-url').value  = notificationConfig.booking_url  || 'https://collect.mjmnursery.com/';
+
+  if(dbg){
+    if(loaded){ dbg.style.color='var(--green)'; dbg.textContent='Loaded saved values from database.'; }
+    else      { dbg.style.color='var(--ink4)';  dbg.textContent=errMsg||'Defaults shown.'; }
+  }
+}
+
+async function saveNotificationConfig(){
+  var btn = document.getElementById('notif-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  // Split textarea by newline or comma; drop blanks; dedupe; lowercase.
+  var raw = document.getElementById('notif-admin-emails').value || '';
+  var emails = raw.split(/[\n,]+/).map(function(s){return s.trim().toLowerCase();}).filter(Boolean);
+  // Cheap sanity check — anything without '@' is almost certainly a typo.
+  var bad = emails.filter(function(e){return e.indexOf('@')===-1;});
+  if(bad.length){
+    btn.disabled = false; btn.textContent = 'Save';
+    toast('Looks like a typo: '+bad.join(', '),'error');
+    return;
+  }
+  var seen = {}; emails = emails.filter(function(e){if(seen[e])return false;seen[e]=1;return true;});
+
+  notificationConfig.admin_emails = emails;
+  notificationConfig.from_email   = (document.getElementById('notif-from-email').value || '').trim();
+  notificationConfig.from_name    = (document.getElementById('notif-from-name').value || 'MJM Nursery').trim();
+  notificationConfig.booking_url  = (document.getElementById('notif-booking-url').value || 'https://collect.mjmnursery.com/').trim();
+
+  var{error} = await sb.from('salesweb_app_settings').upsert({
+    key:'notification_config',
+    value:JSON.stringify(notificationConfig),
+    updated_at:new Date().toISOString()
+  },{onConflict:'key'});
+  btn.disabled = false; btn.textContent = 'Save';
+  if(error){ toast('Save failed: '+error.message,'error'); return; }
+  toast('Notification settings saved');
 }
 
 // ═══════════════════════════════════════

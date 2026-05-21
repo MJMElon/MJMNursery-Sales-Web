@@ -1005,7 +1005,13 @@ async function placeOrder(){
     sessionStorage.setItem('mjm_pay_order_number',orderNum);
     window.location.href='payment-proof.html';
   } else {
-    // Online payment via Billplz
+    // Online payment via Billplz — stash the order info so payment-callback.html
+    // can show the same Order # / total when Billplz redirects back. Webhook is
+    // the authoritative status update; this is just to render the success page.
+    sessionStorage.setItem('mjm_pay_order_id',order.id);
+    sessionStorage.setItem('mjm_pay_order_total',finalTotal);
+    sessionStorage.setItem('mjm_pay_order_number',orderNum);
+
     btn.textContent='Redirecting to payment...';
 
     // Build callback URL

@@ -419,9 +419,18 @@ var selectedPayMethod='';
 })();
 
 // Redeem ratio loaded from points_config — defaults to 100pts = RM1 (1pt = RM0.01).
-var redeemPtsPerRm = 100;   // points needed to get 1 unit of redeem_rm
-var redeemRmPerUnit = 1;    // RM per redeem_pts chunk
-function ptsToRm(pts){ return (Number(pts)||0) * (redeemRmPerUnit / redeemPtsPerRm); }
+// Any integer number of points may be redeemed; the discount is computed
+// proportionally and rounded to 2 decimal places (the database column is
+// NUMERIC(10,2) so we round at the boundary). The previous behaviour
+// snapped the count down to a whole multiple of redeemPtsPerRm, which
+// silently discarded points when the customer's balance wasn't a clean
+// multiple of the chunk size (e.g. 45 pts → snapped to 25 with ratio 25:1).
+var redeemPtsPerRm = 100;   // points per `redeemRmPerUnit` of discount
+var redeemRmPerUnit = 1;    // RM produced by `redeemPtsPerRm` points
+function ptsToRm(pts){
+  var rm = (Number(pts)||0) * (redeemRmPerUnit / redeemPtsPerRm);
+  return Math.round(rm * 100) / 100;
+}
 
 // ── Load points balance + redeem ratio ──
 async function loadPointsBalance(){
@@ -467,7 +476,7 @@ async function loadPointsBalance(){
   document.getElementById('points-bal').textContent=balText;
   var input=document.getElementById('ck-points');
   input.max=pointsBalance;
-  input.step=redeemPtsPerRm;
+  input.step=1;
   input.disabled=(pointsBalance<=0);
   var btn=document.getElementById('btn-redeem-points');
   if(btn) btn.disabled=(pointsBalance<=0);
@@ -594,31 +603,30 @@ function applyPoints(){
   var raw   =typed;
   if(raw>pointsBalance){ raw=pointsBalance; capped=true; }
 
-  // Round down to a whole multiple of redeemPtsPerRm so we never give a
-  // fractional discount (e.g. 100pts=RM1 → must spend 100/200/300/… pts).
-  var below_min = false;
-  if(redeemPtsPerRm>1){
-    var rounded = Math.floor(raw/redeemPtsPerRm)*redeemPtsPerRm;
-    if(typed>0 && rounded===0) below_min = true;
-    raw = rounded;
-  }
+  var rm = ptsToRm(raw);
+
+  // If the chosen count is positive but worth less than RM 0.01 once
+  // rounded to 2dp (only happens with unusual configs where 1 pt is
+  // worth a fraction of a sen), refuse rather than spending the points
+  // for nothing.
+  var below_min = (raw > 0 && rm < 0.01);
+  if(below_min){ raw = 0; rm = 0; }
 
   input.value=raw;
   pointsUsed =raw;
 
   if(below_min){
-    // User typed something positive but it's less than one redeemable chunk —
-    // surface this clearly instead of silently zeroing.
+    var minPts = Math.ceil(0.01 * redeemPtsPerRm / redeemRmPerUnit);
     msg.className='promo-msg warn';
-    msg.textContent='Minimum redemption is '+redeemPtsPerRm.toLocaleString()+' pts '
-                  + '('+fmtRM(redeemRmPerUnit)+' off). Nothing deducted.';
+    msg.textContent='Minimum redemption is '+minPts.toLocaleString()+' pts '
+                  + '(RM 0.01 off). Nothing deducted.';
   } else if(capped){
     msg.className='promo-msg warn';
     msg.textContent='Max value is '+pointsBalance.toLocaleString()+' pts (your balance). '
-                  + (raw>0 ? fmtRM(ptsToRm(raw))+' deducted.' : '');
+                  + (raw>0 ? fmtRM(rm)+' deducted.' : '');
   } else if(raw>0){
     msg.className='promo-msg ok';
-    msg.textContent=fmtRM(ptsToRm(raw))+' deducted from points';
+    msg.textContent=fmtRM(rm)+' deducted from points';
   } else {
     msg.className='promo-msg';
     msg.textContent='';

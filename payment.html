@@ -603,6 +603,16 @@ function applyPoints(){
   var raw   =typed;
   if(raw>pointsBalance){ raw=pointsBalance; capped=true; }
 
+  // Don't let a redemption exceed what the order can actually absorb —
+  // any extra points beyond (subtotal − voucherDiscount) would just be
+  // spent for no benefit. Floor() so the chosen count never overshoots
+  // the chargeable amount once converted back to RM.
+  var subtotal     = cart.reduce(function(s,c){return s+(c.price*c.qty);},0);
+  var maxUsefulRm  = Math.max(0, subtotal - voucherDiscount);
+  var maxUsefulPts = Math.floor(maxUsefulRm * redeemPtsPerRm / redeemRmPerUnit);
+  var overOrder    = false;
+  if(raw > maxUsefulPts){ raw = maxUsefulPts; overOrder = true; }
+
   var rm = ptsToRm(raw);
 
   // If the chosen count is positive but worth less than RM 0.01 once
@@ -620,6 +630,13 @@ function applyPoints(){
     msg.className='promo-msg warn';
     msg.textContent='Minimum redemption is '+minPts.toLocaleString()+' pts '
                   + '(RM 0.01 off). Nothing deducted.';
+  } else if(overOrder){
+    msg.className='promo-msg warn';
+    if(raw>0){
+      msg.textContent='Capped at '+raw.toLocaleString()+' pts — that\'s the most this order can absorb. '+fmtRM(rm)+' deducted.';
+    } else {
+      msg.textContent='Order is already fully covered — no points needed.';
+    }
   } else if(capped){
     msg.className='promo-msg warn';
     msg.textContent='Max value is '+pointsBalance.toLocaleString()+' pts (your balance). '

@@ -41,7 +41,10 @@ async function loadCustomers(){
   var{data:swCusts,error}=await sb.from('shared_profiles')
     .select('*').or('user_type.eq.customer,role.eq.customer');
   if(error){toast('Error: '+error.message,'error');return;}
-  swCusts=(swCusts||[]).filter(function(p){return !isOperationStaff(p.permissions);});
+  // Drop staff: either explicitly marked system, or has operation permissions.
+  swCusts=(swCusts||[]).filter(function(p){
+    return p.user_type !== 'system' && !isOperationStaff(p.permissions);
+  });
 
   // Paid-order lookup — still needed for the "Has Paid Order" stat box and
   // to badge customers in the table, but no longer a source of customers.
@@ -78,7 +81,7 @@ async function loadCustomers(){
     var termsBadge=terms==='credit'
       ? '<span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;">💳 Credit</span>'
       : '<span class="badge badge-grey">💵 Cash</span>';
-    html+='<tr><td style="font-weight:600;">'+esc(c.full_name||'—')+'</td><td>'+esc(c.email||'—')+'</td><td>'+esc(c.phone||'—')+'</td><td>'+termsBadge+'</td><td>'+fmtDate(c.created_at)+'</td><td><button class="btn btn-outline btn-sm" onclick="viewCustomer(\''+c.id+'\')">View</button></td></tr>';
+    html+='<tr><td style="font-weight:600;">'+esc(c.full_name||'—')+'</td><td>'+esc(c.email||'—')+'</td><td>'+esc(c.phone||'—')+'</td><td>'+termsBadge+'</td><td>'+fmtDate(c.created_at)+'</td><td style="white-space:nowrap;"><button class="btn btn-outline btn-sm" onclick="viewCustomer(\''+c.id+'\')">View</button> <button class="btn btn-outline btn-sm" style="color:#92400e;border-color:#fde68a;" onclick="hideAsStaff(\''+c.id+'\')" title="This is a staff/operation user, not a customer">Hide</button></td></tr>';
   });
   html+='</tbody></table>';
   document.getElementById('customers-table').innerHTML=html;
@@ -518,6 +521,16 @@ async function deleteCustomer(id){
   await sb.from('shared_profiles').delete().eq('id',id);
   toast('Customer deleted');
   closeModal('modal-customer');
+  loadCustomers();
+}
+
+// Mark a profile as staff/operation — hides it from the customer list without
+// touching the auth account. Reversible from operation_user_access.html.
+async function hideAsStaff(id){
+  if(!confirm('Hide this profile from the customer list?\n\nUse this when the account belongs to an operation-system / staff user, not a real customer. The account itself is not deleted — you can restore it later from the Operation user-access page.'))return;
+  var{error}=await sb.from('shared_profiles').update({user_type:'system'}).eq('id',id);
+  if(error){toast('Error: '+error.message,'error');return;}
+  toast('Hidden from customer list');
   loadCustomers();
 }
 

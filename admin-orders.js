@@ -1157,3 +1157,250 @@ async function submitInvoiceUpload(){
     btn.disabled=false;btn.textContent='Upload & Issue Invoice';
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════
+//  ADD ORDER (admin-created)
+//  ─ Opens a modal, lets the admin pick an existing customer or fill in
+//    walk-in details, then add line items either by selecting a
+//    published product (price auto-fills) or by typing a custom row.
+//  ─ Persists into the same tables as the customer-portal checkout
+//    (salesweb_customer_orders + salesweb_order_items + timeline),
+//    so the order shows up in the existing dashboard with no special
+//    casing downstream.
+// ═══════════════════════════════════════════════════════════════════
+var _newOrderProducts=[];
+var _newOrderItems=[];
+var _newOrderCustomers=[];
+
+function genOrderNumberAdmin(){
+  var chars='ABCDEFGHJKLMNPQRSTUVWXYZ';
+  var nums='0123456789';
+  return chars[Math.floor(Math.random()*chars.length)]+nums[Math.floor(Math.random()*nums.length)]+
+         chars[Math.floor(Math.random()*chars.length)]+nums[Math.floor(Math.random()*nums.length)]+
+         chars[Math.floor(Math.random()*chars.length)]+nums[Math.floor(Math.random()*nums.length)];
+}
+
+async function openNewOrder(){
+  _newOrderItems=[];
+
+  // Reset form fields
+  document.getElementById('no-cust-name').value='';
+  document.getElementById('no-cust-phone').value='';
+  document.getElementById('no-cust-email').value='';
+  document.getElementById('no-cust-addr').value='Self Collection — MJM Nursery Office, Niah Land District, Miri, 98000, Sarawak';
+  document.getElementById('no-cust-id').value='';
+  document.getElementById('no-status').value='Pending Payment';
+  document.getElementById('no-terms').value='cash';
+  document.getElementById('no-internal-note').value='';
+  document.getElementById('no-discount').value='0';
+  document.getElementById('no-submit').disabled=false;
+  document.getElementById('no-submit').textContent='Create Order';
+  openModal('modal-new-order');
+
+  // Load products + existing customers in parallel
+  Promise.all([
+    sb.from('salesweb_products').select('id,name,price,stock_qty,sell_month,sell_year').eq('is_published',true).order('name'),
+    sb.from('shared_profiles').select('id,full_name,email').order('full_name').limit(500),
+  ]).then(function(results){
+    _newOrderProducts=(results[0]&&results[0].data)||[];
+    _newOrderCustomers=(results[1]&&results[1].data)||[];
+    var statusEl=document.getElementById('no-products-status');
+    if(!_newOrderProducts.length){
+      statusEl.textContent='⚠️ No published products — use the Custom row option.';
+    } else {
+      statusEl.textContent=_newOrderProducts.length+' published product'+(_newOrderProducts.length===1?'':'s')+' available · prices auto-fill on select.';
+    }
+    // Populate existing-customer dropdown
+    var sel=document.getElementById('no-cust-id');
+    var opts='<option value="">— Walk-in / new —</option>';
+    _newOrderCustomers.forEach(function(c){
+      if(!c.full_name&&!c.email)return;
+      opts+='<option value="'+esc(c.id)+'">'+esc(c.full_name||c.email||'(unnamed)')+(c.email?' · '+esc(c.email):'')+'</option>';
+    });
+    sel.innerHTML=opts;
+
+    // Start with one empty item row
+    addNewOrderItem();
+  });
+}
+
+function onNewOrderPickCustomer(){
+  var id=document.getElementById('no-cust-id').value;
+  if(!id) return;
+  var c=_newOrderCustomers.find(function(x){return x.id===id;});
+  if(!c) return;
+  if(c.full_name) document.getElementById('no-cust-name').value=c.full_name;
+  if(c.email)     document.getElementById('no-cust-email').value=c.email;
+}
+
+function addNewOrderItem(){
+  _newOrderItems.push({product_id:'',product_name:'',unit_price:0,quantity:1,line_total:0});
+  renderNewOrderItems();
+}
+function removeNewOrderItem(idx){
+  _newOrderItems.splice(idx,1);
+  if(!_newOrderItems.length) addNewOrderItem();
+  renderNewOrderItems();
+  recalcNewOrderTotal();
+}
+function onNewOrderProductSelect(idx,value){
+  var it=_newOrderItems[idx];
+  if(!it) return;
+  if(value==='__custom__'){
+    it.product_id='';
+    it.product_name='';
+  } else if(value){
+    var p=_newOrderProducts.find(function(x){return x.id===value;});
+    if(p){
+      it.product_id=p.id;
+      it.product_name=p.name;
+      it.unit_price=Number(p.price)||0;
+    }
+  } else {
+    it.product_id='';
+    it.product_name='';
+  }
+  it.line_total=(Number(it.quantity)||0)*(Number(it.unit_price)||0);
+  renderNewOrderItems();
+  recalcNewOrderTotal();
+}
+function updateNewOrderItem(idx,field,value){
+  var it=_newOrderItems[idx];
+  if(!it) return;
+  if(field==='quantity')        it.quantity=parseInt(value)||0;
+  else if(field==='unit_price') it.unit_price=parseFloat(value)||0;
+  else                          it[field]=value;
+  it.line_total=(Number(it.quantity)||0)*(Number(it.unit_price)||0);
+  // Patch only the line-total cell, keep input focus
+  var cell=document.getElementById('no-line-total-'+idx);
+  if(cell) cell.textContent='RM '+it.line_total.toFixed(2);
+  recalcNewOrderTotal();
+}
+
+function renderNewOrderItems(){
+  var container=document.getElementById('no-items-container');
+  var html='<table class="data-table" style="font-size:12px;"><thead><tr><th style="width:38%;">Product</th><th style="width:90px;text-align:right;">Qty</th><th style="width:100px;text-align:right;">Unit Price (RM)</th><th style="width:100px;text-align:right;">Amount (RM)</th><th style="width:40px;"></th></tr></thead><tbody>';
+  _newOrderItems.forEach(function(it,idx){
+    // Product cell — dropdown + name field
+    var opts='<option value="">— Select product —</option>';
+    _newOrderProducts.forEach(function(p){
+      var sel=(it.product_id===p.id)?' selected':'';
+      var hint=' (RM '+Number(p.price||0).toFixed(2)+(p.stock_qty!=null?' · '+p.stock_qty+' avail':'')+')';
+      opts+='<option value="'+esc(p.id)+'"'+sel+'>'+esc(p.name)+hint+'</option>';
+    });
+    var isCustom=!it.product_id&&(it.product_name||'').length>0;
+    opts+='<option value="__custom__"'+(isCustom?' selected':'')+'>— Custom (free text) —</option>';
+
+    var nameInput=it.product_id
+      ? '<input class="form-input" type="text" value="'+esc(it.product_name||'')+'" readonly style="background:#f8fafc;color:#475569;font-size:12px;padding:4px 8px;margin-top:.3rem;">'
+      : '<input class="form-input" type="text" value="'+esc(it.product_name||'')+'" placeholder="Item name" oninput="updateNewOrderItem('+idx+',\'product_name\',this.value)" style="font-size:12px;padding:4px 8px;margin-top:.3rem;">';
+
+    html+='<tr>'+
+      '<td><select class="form-input" onchange="onNewOrderProductSelect('+idx+',this.value)" style="font-size:12px;padding:4px 8px;">'+opts+'</select>'+nameInput+'</td>'+
+      '<td style="text-align:right;"><input class="form-input" type="number" min="0" step="1" value="'+(it.quantity||0)+'" oninput="updateNewOrderItem('+idx+',\'quantity\',this.value)" style="text-align:right;font-size:12px;padding:4px 8px;"></td>'+
+      '<td style="text-align:right;"><input class="form-input" type="number" min="0" step="0.01" value="'+(it.unit_price||0)+'" oninput="updateNewOrderItem('+idx+',\'unit_price\',this.value)" style="text-align:right;font-size:12px;padding:4px 8px;"></td>'+
+      '<td style="text-align:right;font-weight:600;" id="no-line-total-'+idx+'">RM '+(Number(it.line_total)||0).toFixed(2)+'</td>'+
+      '<td style="text-align:center;"><button class="btn btn-outline btn-sm" onclick="removeNewOrderItem('+idx+')" style="color:var(--red);font-size:11px;padding:2px 6px;">✕</button></td>'+
+    '</tr>';
+  });
+  html+='</tbody></table>';
+  container.innerHTML=html;
+}
+
+function recalcNewOrderTotal(){
+  var subtotal=_newOrderItems.reduce(function(s,it){return s+(Number(it.quantity)||0)*(Number(it.unit_price)||0);},0);
+  var discount=parseFloat(document.getElementById('no-discount').value)||0;
+  var total=Math.max(0,subtotal-discount);
+  document.getElementById('no-subtotal').textContent='RM '+subtotal.toFixed(2);
+  document.getElementById('no-total').textContent='RM '+total.toFixed(2);
+}
+
+async function submitNewOrder(){
+  var name=document.getElementById('no-cust-name').value.trim();
+  var phone=document.getElementById('no-cust-phone').value.trim();
+  var email=document.getElementById('no-cust-email').value.trim();
+  var addr=document.getElementById('no-cust-addr').value.trim();
+  var custId=document.getElementById('no-cust-id').value||null;
+  var status=document.getElementById('no-status').value;
+  var terms=document.getElementById('no-terms').value;
+  var internalNote=document.getElementById('no-internal-note').value.trim();
+  var discount=parseFloat(document.getElementById('no-discount').value)||0;
+
+  // Validation
+  if(!name){toast('Customer name is required','error');return;}
+  var validItems=_newOrderItems.filter(function(it){
+    return (it.product_name||'').trim() && (Number(it.quantity)||0)>0 && (Number(it.unit_price)||0)>=0;
+  });
+  if(!validItems.length){toast('Add at least one item with quantity > 0','error');return;}
+
+  var subtotal=validItems.reduce(function(s,it){return s+(Number(it.quantity)||0)*(Number(it.unit_price)||0);},0);
+  var total=Math.max(0,Math.round((subtotal-discount)*100)/100);
+
+  var remarkParts=['Admin-created order'];
+  if(phone) remarkParts.push('Phone: '+phone);
+
+  var btn=document.getElementById('no-submit');
+  btn.disabled=true; btn.textContent='Creating…';
+
+  // Generate order number — retry on duplicate
+  var order=null,orderErr=null,orderNum='';
+  for(var attempt=0;attempt<5;attempt++){
+    orderNum=genOrderNumberAdmin();
+    var payload={
+      order_number:orderNum,
+      customer_id:custId||null,
+      customer_name:name,
+      customer_email:email||null,
+      status:status,
+      total:total,
+      shipping_address:addr||null,
+      customer_remark:remarkParts.join(' | '),
+      payment_terms:terms,
+      discount_amount:discount,
+      points_redeemed:0,
+      points_discount_rm:0,
+    };
+    if(internalNote) payload.internal_notes=internalNote;
+    var r=await sb.from('salesweb_customer_orders').insert([payload]).select().single();
+    order=r.data; orderErr=r.error;
+    if(!orderErr) break;
+    if(orderErr && !/duplicate|unique/i.test(orderErr.message||'')) break;
+  }
+  if(orderErr || !order){
+    toast('Error: '+(orderErr?.message||'Could not create order'),'error');
+    btn.disabled=false; btn.textContent='Create Order';
+    return;
+  }
+
+  // Insert items
+  var itemRows=validItems.map(function(it){
+    var qty=Number(it.quantity)||0, up=Number(it.unit_price)||0;
+    return {
+      order_id:order.id,
+      product_id:it.product_id||null,
+      product_name:it.product_name,
+      quantity:qty,
+      unit_price:up,
+      subtotal:Math.round(qty*up*100)/100,
+    };
+  });
+  var ir=await sb.from('salesweb_order_items').insert(itemRows);
+  if(ir.error){
+    toast('Items error: '+ir.error.message,'error');
+    btn.disabled=false; btn.textContent='Create Order';
+    return;
+  }
+
+  // Timeline — audit trail
+  var{data:{user}}=await sb.auth.getUser();
+  var by=user?.email||'admin';
+  sb.from('salesweb_order_timeline').insert([{
+    order_id:order.id, status:status,
+    note:'Order created via admin panel ('+terms+' · RM '+total.toFixed(2)+')',
+    changed_by:by
+  }]).then(function(){});
+
+  closeModal('modal-new-order');
+  toast('Order #'+orderNum+' created');
+  loadOrders();
+}

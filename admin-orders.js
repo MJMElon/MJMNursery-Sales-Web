@@ -1170,7 +1170,9 @@ async function submitInvoiceUpload(){
 // ═══════════════════════════════════════════════════════════════════
 var _newOrderProducts=[];
 var _newOrderItems=[];
-var _newOrderCustomers=[];
+var _newOrderSelectedCustomerId=null;   // null = walk-in / create new on save
+var _newOrderCustSearchTimer=null;
+var _newOrderCustResultsCache={};
 
 function genOrderNumberAdmin(){
   var chars='ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -1182,55 +1184,132 @@ function genOrderNumberAdmin(){
 
 async function openNewOrder(){
   _newOrderItems=[];
+  _newOrderSelectedCustomerId=null;
+  _newOrderCustResultsCache={};
 
   // Reset form fields
   document.getElementById('no-cust-name').value='';
   document.getElementById('no-cust-phone').value='';
   document.getElementById('no-cust-email').value='';
   document.getElementById('no-cust-addr').value='Self Collection — MJM Nursery Office, Niah Land District, Miri, 98000, Sarawak';
-  document.getElementById('no-cust-id').value='';
   document.getElementById('no-status').value='Pending Payment';
   document.getElementById('no-terms').value='cash';
   document.getElementById('no-internal-note').value='';
   document.getElementById('no-discount').value='0';
+  document.getElementById('no-cust-results').style.display='none';
+  document.getElementById('no-cust-status').style.display='none';
   document.getElementById('no-submit').disabled=false;
   document.getElementById('no-submit').textContent='Create Order';
   openModal('modal-new-order');
 
-  // Load products + existing customers in parallel
-  Promise.all([
-    sb.from('salesweb_products').select('id,name,price,stock_qty,sell_month,sell_year').eq('is_published',true).order('name'),
-    sb.from('shared_profiles').select('id,full_name,email').order('full_name').limit(500),
-  ]).then(function(results){
-    _newOrderProducts=(results[0]&&results[0].data)||[];
-    _newOrderCustomers=(results[1]&&results[1].data)||[];
+  // Load published products in the background
+  sb.from('salesweb_products').select('id,name,price,stock_qty,sell_month,sell_year').eq('is_published',true).order('name').then(function(r){
+    _newOrderProducts=(r&&r.data)||[];
     var statusEl=document.getElementById('no-products-status');
     if(!_newOrderProducts.length){
       statusEl.textContent='⚠️ No published products — use the Custom row option.';
     } else {
       statusEl.textContent=_newOrderProducts.length+' published product'+(_newOrderProducts.length===1?'':'s')+' available · prices auto-fill on select.';
     }
-    // Populate existing-customer dropdown
-    var sel=document.getElementById('no-cust-id');
-    var opts='<option value="">— Walk-in / new —</option>';
-    _newOrderCustomers.forEach(function(c){
-      if(!c.full_name&&!c.email)return;
-      opts+='<option value="'+esc(c.id)+'">'+esc(c.full_name||c.email||'(unnamed)')+(c.email?' · '+esc(c.email):'')+'</option>';
-    });
-    sel.innerHTML=opts;
-
-    // Start with one empty item row
     addNewOrderItem();
   });
 }
 
-function onNewOrderPickCustomer(){
-  var id=document.getElementById('no-cust-id').value;
-  if(!id) return;
-  var c=_newOrderCustomers.find(function(x){return x.id===id;});
+// ── CUSTOMER NAME SEARCH (debounced) ─────────────────────────────
+// Typing in the name field searches shared_profiles for matching
+// customers. Picking one links the order. Typing a name that doesn't
+// match anything signals that submitNewOrder() should create a new
+// customer profile.
+function onNewOrderCustNameInput(){
+  // Any edit invalidates a previous selection — the admin is either
+  // searching for a different customer or typing in a new name.
+  _newOrderSelectedCustomerId=null;
+  updateNewOrderCustStatus();
+
+  var q=document.getElementById('no-cust-name').value.trim();
+  if(_newOrderCustSearchTimer) clearTimeout(_newOrderCustSearchTimer);
+  if(q.length<2){
+    document.getElementById('no-cust-results').style.display='none';
+    return;
+  }
+  _newOrderCustSearchTimer=setTimeout(function(){ searchCustomersForNewOrder(q); },200);
+}
+
+function onNewOrderCustFieldEdit(){
+  // Touching the phone/email fields after picking a customer breaks
+  // the link — the admin is likely typing new details.
+  if(_newOrderSelectedCustomerId){
+    _newOrderSelectedCustomerId=null;
+  }
+  updateNewOrderCustStatus();
+}
+
+async function searchCustomersForNewOrder(q){
+  // Escape % and _ so the ilike is taken literally.
+  var like=q.replace(/[%_\\]/g,function(c){return '\\'+c;});
+  var ors=[
+    'full_name.ilike.%'+like+'%',
+    'email.ilike.%'+like+'%',
+    'phone.ilike.%'+like+'%',
+  ].join(',');
+  var{data}=await sb.from('shared_profiles')
+    .select('id,full_name,email,phone,user_type,role')
+    .or(ors)
+    .limit(25);
+  var results=(data||[]).filter(function(c){
+    return (c.user_type==='customer' || c.role==='customer')
+        && (c.user_type!=='system')
+        && !isOperationStaff(c.permissions);
+  }).slice(0,8);
+
+  _newOrderCustResultsCache={};
+  results.forEach(function(c){ _newOrderCustResultsCache[c.id]=c; });
+
+  var el=document.getElementById('no-cust-results');
+  if(!results.length){
+    el.innerHTML='<div style="padding:.6rem .8rem;font-size:11px;color:var(--ink4);">No match — a profile will be created on save.</div>';
+    el.style.display='block';
+    updateNewOrderCustStatus();
+    return;
+  }
+  el.innerHTML=results.map(function(c){
+    return '<div onmousedown="selectNewOrderCustomer(\''+esc(c.id)+'\')" style="padding:.5rem .7rem;cursor:pointer;border-bottom:1px solid var(--rule);font-size:12px;" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'#fff\'">'+
+      '<div style="font-weight:600;">'+esc(c.full_name||'(no name)')+'</div>'+
+      '<div style="color:var(--ink4);font-size:11px;">'+esc(c.email||'')+(c.phone?'  ·  '+esc(c.phone):'')+'</div>'+
+    '</div>';
+  }).join('');
+  el.style.display='block';
+}
+
+function selectNewOrderCustomer(id){
+  var c=_newOrderCustResultsCache[id];
   if(!c) return;
-  if(c.full_name) document.getElementById('no-cust-name').value=c.full_name;
-  if(c.email)     document.getElementById('no-cust-email').value=c.email;
+  _newOrderSelectedCustomerId=id;
+  document.getElementById('no-cust-name').value=c.full_name||'';
+  document.getElementById('no-cust-email').value=c.email||'';
+  document.getElementById('no-cust-phone').value=c.phone||'';
+  document.getElementById('no-cust-results').style.display='none';
+  updateNewOrderCustStatus();
+}
+
+function hideNewOrderCustResults(){
+  document.getElementById('no-cust-results').style.display='none';
+}
+
+function updateNewOrderCustStatus(){
+  var el=document.getElementById('no-cust-status');
+  var name=(document.getElementById('no-cust-name').value||'').trim();
+  if(_newOrderSelectedCustomerId){
+    el.textContent='✓ Linked to existing customer';
+    el.style.color='#065f46';
+    el.style.display='block';
+  } else if(name.length>=2){
+    el.textContent='+ New customer profile will be created on save';
+    el.style.color='#92400e';
+    el.style.display='block';
+  } else {
+    el.style.display='none';
+  }
 }
 
 function addNewOrderItem(){
@@ -1320,7 +1399,7 @@ async function submitNewOrder(){
   var phone=document.getElementById('no-cust-phone').value.trim();
   var email=document.getElementById('no-cust-email').value.trim();
   var addr=document.getElementById('no-cust-addr').value.trim();
-  var custId=document.getElementById('no-cust-id').value||null;
+  var custId=_newOrderSelectedCustomerId||null;
   var status=document.getElementById('no-status').value;
   var terms=document.getElementById('no-terms').value;
   var internalNote=document.getElementById('no-internal-note').value.trim();
@@ -1341,6 +1420,73 @@ async function submitNewOrder(){
 
   var btn=document.getElementById('no-submit');
   btn.disabled=true; btn.textContent='Creating…';
+
+  // If no existing customer is linked, try to find one by email; if none
+  // exists yet, create a new customer profile via auth.signUp so the
+  // order is properly linked to a `shared_profiles` row for future
+  // lookups / loyalty / credit terms.
+  if(!custId){
+    if(email){
+      var{data:byEmail}=await sb.from('shared_profiles')
+        .select('id').ilike('email',email).limit(1);
+      if(byEmail && byEmail.length){
+        custId=byEmail[0].id;
+      }
+    }
+    if(!custId){
+      try {
+        // Placeholder email when none is supplied. The customer can
+        // never actually log in with this address — it just satisfies
+        // the auth.users requirement for shared_profiles.id.
+        var signupEmail = email || ('walkin-' + Date.now() + '-' + Math.random().toString(36).slice(2,8) + '@admin.mjmnursery.local');
+        // Strong random password — customer doesn't need to know it.
+        var signupPw = (crypto && crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2))) + '!Aa1';
+        // Isolated client so this signUp doesn't clobber the admin's
+        // session (persistSession:false + private storageKey).
+        var tempSb = supabase.createClient(SB_URL, SB_KEY, {
+          auth: { persistSession:false, autoRefreshToken:false, storageKey:'admin-new-order-'+Date.now() }
+        });
+        var{data:signUpData,error:signUpErr} = await tempSb.auth.signUp({
+          email: signupEmail,
+          password: signupPw,
+          options: { data: { full_name: name, user_type: 'customer' } }
+        });
+        if(signUpErr){
+          if(/already|exists|registered/i.test(signUpErr.message||'')){
+            // Existing auth user — look the profile up by email
+            var{data:dup}=await sb.from('shared_profiles').select('id').ilike('email',signupEmail).limit(1);
+            if(dup && dup.length) custId=dup[0].id;
+          }
+          if(!custId){
+            console.warn('[Add Order] profile creation failed:', signUpErr.message);
+          }
+        } else if(signUpData && signUpData.user){
+          custId = signUpData.user.id;
+          // Upsert the profile row with the customer-facing fields the
+          // dashboard expects (name, phone, type, role).
+          await sb.from('shared_profiles').upsert({
+            id: custId,
+            email: signupEmail,
+            full_name: name,
+            phone: phone || null,
+            user_type: 'customer',
+            role: 'customer',
+          },{ onConflict:'id' });
+        }
+      } catch (e) {
+        console.warn('[Add Order] signUp threw:', e);
+      }
+    } else {
+      // Found by email — fill in any missing profile fields so the
+      // customer view shows the new info too.
+      var patch = {};
+      if(name)  patch.full_name = name;
+      if(phone) patch.phone = phone;
+      if(Object.keys(patch).length){
+        sb.from('shared_profiles').update(patch).eq('id',custId).then(function(){});
+      }
+    }
+  }
 
   // Generate order number — retry on duplicate
   var order=null,orderErr=null,orderNum='';

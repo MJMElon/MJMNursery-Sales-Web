@@ -41,14 +41,19 @@ var SW_TABS_CACHE = {};
 
 // Resolves a profile's effective per-tab map for display.
 // - admin / legacy admin → every tab true
-// - normal with saved salesweb_tabs → use as-is
-// - normal without saved salesweb_tabs → grandfather all tabs except 'users'
+// - normal with saved tabs → use as-is
+// - normal without saved tabs → grandfather all tabs except 'users'
 // Per-user in-memory cache takes precedence so an immediate reopen
 // after Save reflects the chosen tabs even if the DB read is stale.
-function effectiveTabs(profile){
+//
+// `savedTabs` is the row from salesweb_user_tab_access.tabs (preferred)
+// — falls back to the legacy permissions.salesweb_tabs blob for users
+// whose data was written before the migration to the dedicated table.
+function effectiveTabs(profile, savedTabs){
   var level = profile?.permissions?.modules?.salesweb
            || (profile?.role === 'admin' ? 'admin' : 'none');
   var saved = (profile?.id && SW_TABS_CACHE[profile.id])
+           || savedTabs
            || profile?.permissions?.salesweb_tabs;
   var out = {};
   SW_TAB_DEFS.forEach(function(d){
@@ -72,19 +77,26 @@ async function loadUsers(){
   var q      = (document.getElementById('user-search')?.value || '').trim().toLowerCase();
   var filter = document.getElementById('user-filter')?.value || '';
 
-  // Pull the whole list, then filter client-side to anyone the umbrella
-  // has granted salesweb access. The list is small and this keeps the
-  // query simple — no JSONB path conditions needed.
-  var { data, error } = await sb.from('shared_profiles')
-    .select('id, email, full_name, role, permissions, created_at')
-    .order('created_at', { ascending: false });
-  if (error) { toast('Error loading users: '+error.message, 'error'); return; }
+  // Profiles + per-tab access in parallel. The new table is the source
+  // of truth; if it doesn't exist yet (migration not applied) we
+  // gracefully fall back to the legacy permissions.salesweb_tabs blob
+  // via effectiveTabs().
+  var [profileRes, accessRes] = await Promise.all([
+    sb.from('shared_profiles')
+      .select('id, email, full_name, role, permissions, created_at')
+      .order('created_at', { ascending: false }),
+    sb.from('salesweb_user_tab_access').select('user_id, tabs')
+  ]);
+  if (profileRes.error) { toast('Error loading users: '+profileRes.error.message, 'error'); return; }
 
-  var users = (data || [])
+  var accessByUser = {};
+  (accessRes.data || []).forEach(function(r){ accessByUser[r.user_id] = r.tabs; });
+
+  var users = (profileRes.data || [])
     .map(function(u){
       var lvl = u.permissions?.modules?.salesweb;
       if (!lvl) lvl = (u.role === 'admin') ? 'admin' : 'none';
-      return Object.assign({}, u, { _swLevel: lvl });
+      return Object.assign({}, u, { _swLevel: lvl, _tabs: accessByUser[u.id] });
     })
     // ONLY users assigned to salesweb by the umbrella operation portal.
     .filter(function(u){ return u._swLevel === 'admin' || u._swLevel === 'normal'; });
@@ -109,7 +121,7 @@ async function loadUsers(){
     var idJs  = String(u.id||'').replace(/[\\'"<>]/g,'');
     var lvlBadge = u._swLevel === 'admin' ? 'badge-green' : 'badge-blue';
     var isSelf   = u.id === window.__SW_USER_ID__;
-    var tabs     = effectiveTabs(u);
+    var tabs     = effectiveTabs(u, u._tabs);
     var allowedKeys = SW_TAB_DEFS.filter(function(d){ return tabs[d.key]; });
     var pagesHtml;
     if (u._swLevel === 'admin') {
@@ -147,19 +159,23 @@ async function openUserEdit(userId){
   body.innerHTML = '<div class="loading">Loading…</div>';
   body.setAttribute('data-user-id', userId);
 
-  var { data: u, error } = await sb.from('shared_profiles')
-    .select('id, email, full_name, role, permissions')
-    .eq('id', userId).single();
-  if (error || !u) {
+  // Profile + tab access row in parallel.
+  var [profileRes, accessRes] = await Promise.all([
+    sb.from('shared_profiles').select('id, email, full_name, role, permissions').eq('id', userId).single(),
+    sb.from('salesweb_user_tab_access').select('tabs').eq('user_id', userId).maybeSingle()
+  ]);
+  var u = profileRes.data;
+  if (profileRes.error || !u) {
     body.innerHTML = '<div class="loading">User not found.</div>';
     return;
   }
 
-  var level    = u.permissions?.modules?.salesweb
-              || (u.role === 'admin' ? 'admin' : 'none');
-  var tabs     = effectiveTabs(u);
-  var isSelf   = u.id === window.__SW_USER_ID__;
-  var isAdmin  = level === 'admin';
+  var savedTabs = accessRes.data?.tabs;
+  var level     = u.permissions?.modules?.salesweb
+               || (u.role === 'admin' ? 'admin' : 'none');
+  var tabs      = effectiveTabs(u, savedTabs);
+  var isSelf    = u.id === window.__SW_USER_ID__;
+  var isAdmin   = level === 'admin';
 
   var togglesHtml = SW_TAB_DEFS.map(function(d){
     var checked = tabs[d.key] ? 'checked' : '';
@@ -213,8 +229,11 @@ function setAllTabs(value){
 }
 
 // ═══════════════════════════════════════
-//  SAVE
+//  SAVE — writes to salesweb_user_tab_access (NOT shared_profiles)
 // ═══════════════════════════════════════
+// The dedicated table sidesteps the umbrella's manage_users RLS gate.
+// Its policy lets any salesweb_admin write any row, which is exactly
+// what we want: a salesweb admin should own salesweb tab access.
 async function saveUserAccess(){
   var body   = document.getElementById('user-access-body');
   var userId = body?.getAttribute('data-user-id');
@@ -226,38 +245,33 @@ async function saveUserAccess(){
     newTabs[cb.value] = true;
   });
 
-  // Merge into the existing permissions object so we don't blow away
-  // cross-module flags the umbrella User Access page wrote.
-  var { data: existing, error: readErr } = await sb.from('shared_profiles')
-    .select('permissions').eq('id', userId).single();
-  if (readErr) { toast('Read failed: '+readErr.message, 'error'); return; }
-
-  var perms = existing?.permissions || {};
-  perms.salesweb_tabs = newTabs;
-
-  // Chain .select() so we get the row back AFTER the write. If RLS
-  // silently denies the update (no rows matched), `updated` is null
-  // and we surface a real error instead of a misleading success toast.
-  var { data: updated, error } = await sb.from('shared_profiles')
-    .update({ permissions: perms })
-    .eq('id', userId)
-    .select('id, permissions')
+  var updatedBy = window.__SW_USER_ID__ || null;
+  var { data: updated, error } = await sb
+    .from('salesweb_user_tab_access')
+    .upsert({ user_id: userId, tabs: newTabs, updated_by: updatedBy }, { onConflict: 'user_id' })
+    .select('user_id, tabs')
     .maybeSingle();
-  if (error) { toast('Save failed: '+error.message, 'error'); return; }
+
+  if (error) {
+    // Most common cause is the migration not having been applied yet.
+    if (/relation .* does not exist|42P01/i.test(error.message || '')) {
+      toast('salesweb_user_tab_access table is missing — apply supabase/migrations/salesweb_user_tab_access.sql in the Supabase SQL editor first.', 'error');
+    } else {
+      toast('Save failed: '+error.message, 'error');
+    }
+    return;
+  }
   if (!updated) {
-    toast('Save blocked — you may not have the manage_users permission. Ask the umbrella admin to grant it.', 'error');
+    toast('Save blocked by RLS — confirm you are a salesweb admin in the umbrella User Access page.', 'error');
     return;
   }
 
-  // Confirm the stored JSONB actually has our tabs. Catches the rare
-  // case where the row updated but the column was reshaped by another
-  // policy (e.g. column DEFAULT or trigger).
-  var savedTabs = updated?.permissions?.salesweb_tabs || {};
+  var savedTabs = updated?.tabs || {};
   var match = SW_TAB_DEFS.every(function(d){
     return (savedTabs[d.key] === true) === (newTabs[d.key] === true);
   });
   if (!match) {
-    toast('Save did not take effect. Check RLS on shared_profiles.permissions.', 'error');
+    toast('Save did not take effect. Please reload and try again.', 'error');
     return;
   }
 

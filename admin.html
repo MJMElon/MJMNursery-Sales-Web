@@ -832,9 +832,21 @@ async function checkAdmin(){
   window.__SW_USER_ID__  = session.user.id;
   window.__SW_LEVEL__    = swLevel;
   // Per-tab gating lives in permissions.salesweb_tabs as {tabKey:bool}.
-  // Missing object = grandfather: admins see everything, normals see
+  // Missing row = grandfather: admins see everything, normals see
   // everything except User Access (matches the pre-feature behaviour).
-  window.__SW_TABS__ = (profile && profile.permissions && profile.permissions.salesweb_tabs) || null;
+  // Reads from salesweb_user_tab_access (owned by salesweb, not gated
+  // by the umbrella manage_users meta-permission); legacy fallback
+  // reads permissions.salesweb_tabs for profiles written before the
+  // dedicated table existed.
+  var tabsFromTable = null;
+  try {
+    var tabRes = await sb.from('salesweb_user_tab_access')
+      .select('tabs').eq('user_id', session.user.id).maybeSingle();
+    if (tabRes && tabRes.data && tabRes.data.tabs) tabsFromTable = tabRes.data.tabs;
+  } catch(e) { /* table may not exist yet pre-migration */ }
+  window.__SW_TABS__ = tabsFromTable
+    || (profile && profile.permissions && profile.permissions.salesweb_tabs)
+    || null;
   applyTabVisibility();
 
   loadOrders();
@@ -1112,7 +1124,7 @@ document.addEventListener('DOMContentLoaded',function(){
 <script src="admin-customers.js?v=2026-05-20-web-only-customers"></script>
 <script src="admin-products.js?v=2026-05-18-points-ledger"></script>
 <script src="admin-payments.js?v=2026-05-20-payment-verification"></script>
-<script src="admin-users.js?v=2026-05-21-verify-save"></script>
+<script src="admin-users.js?v=2026-05-21-tab-access-table"></script>
 <script src="admin-promotions.js?v=2026-05-18-points-ledger"></script>
 <script src="admin-coupons.js?v=2026-05-18-points-ledger"></script>
 <script src="admin-web-design.js?v=2026-05-20-port-from-umbrella"></script>

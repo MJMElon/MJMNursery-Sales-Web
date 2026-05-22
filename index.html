@@ -807,6 +807,7 @@
   .quote-totals .qt-row { display: flex; justify-content: space-between; padding: .4rem 0; }
   .quote-totals .qt-row.grand { border-top: 1.5px solid var(--green-pale); margin-top: .35rem; padding-top: .7rem; font-size: 16px; font-weight: 700; color: var(--green-dark); }
   .quote-footer-note { margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid #eee; font-size: 11px; color: var(--text-light); line-height: 1.7; }
+  .quote-source-note { margin-top: 2rem; padding-top: 1rem; border-top: 1px dashed #e5e7eb; font-size: 10px; color: var(--text-light); font-style: italic; text-align: center; letter-spacing: .02em; }
   .quote-actions { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: 1.5rem; }
   .quote-actions .tool-btn { flex: 1; margin-top: 0; min-width: 160px; }
 
@@ -2465,15 +2466,14 @@ function renderQuotation(){
   var today = new Date();
   var expiry = new Date(today.getTime() + QUOTE_VALIDITY_DAYS * 86400000);
   var fmtDate = function(d){ return d.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }); };
-  // Quote number: QUO-YYMMDD-XXXX. Cached for the day so the number stays
-  // stable as the customer types into the form fields.
+  // Quote number is the shared QOPS<n>/MM/YY counter held in the ops system's
+  // shared_quotations table. Pulled async via fetchQopsNumber() and cached
+  // in sessionStorage so the number stays stable while the customer edits
+  // form fields. Shows a placeholder until the first fetch lands.
   var pad = function(n){ return ('0'+n).slice(-2); };
-  var stamp = String(today.getFullYear()).slice(-2) + pad(today.getMonth()+1) + pad(today.getDate());
-  var quoteNum = sessionStorage.getItem('mjm_quote_num_'+stamp);
-  if (!quoteNum) {
-    quoteNum = 'QUO-' + stamp + '-' + String(Math.floor(Math.random()*10000)).padStart(4,'0');
-    sessionStorage.setItem('mjm_quote_num_'+stamp, quoteNum);
-  }
+  var quoteNum = sessionStorage.getItem('mjm_quote_qops') || 'Generating…';
+  if (quoteNum === 'Generating…') fetchQopsNumber();
+  var ddmmyy = pad(today.getDate()) + pad(today.getMonth()+1) + String(today.getFullYear()).slice(-2);
 
   var subtotal = 0;
   var rows = cartItems.map(function(c){
@@ -2522,14 +2522,186 @@ function renderQuotation(){
         '<div class="qt-row"><span>Subtotal</span><span>RM '+subtotal.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</span></div>'+
         '<div class="qt-row grand"><span>Total</span><span>RM '+subtotal.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</span></div>'+
       '</div>'+
+      '<div class="quote-source-note">This quotation is generated from MJM Nursery Sales Web by customer on '+ddmmyy+'.</div>'+
     '</div>'+
     '<div class="quote-actions">'+
-      '<button class="tool-btn" onclick="window.print()">🖨️ Print / Save as PDF</button>'+
+      '<button id="quote-print-btn" class="tool-btn" onclick="saveAndPrintQuotation()">🖨️ Print / Save as PDF</button>'+
     '</div>';
 }
 
 function escapeQuote(s){
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/\n/g,'<br>');
+}
+
+// Pull the next QOPS<n>/MM/YY running number from the shared ops counter.
+// Calls a SECURITY DEFINER RPC so anon customers can ask for a number
+// without us having to grant SELECT on shared_quotations to the anon role.
+// Re-renders the quotation once the number lands so the placeholder is
+// replaced in place.
+async function fetchQopsNumber(){
+  if (window._fetchingQopsNumber) return;
+  window._fetchingQopsNumber = true;
+  try {
+    var res = await fetch(SUPA_URL + '/rest/v1/rpc/shared_quotations_next_number', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPA_KEY,
+        'Authorization': 'Bearer ' + SUPA_KEY
+      },
+      body: '{}'
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var num = await res.json();
+    if (typeof num === 'string' && /^QOPS\d+\//.test(num)) {
+      sessionStorage.setItem('mjm_quote_qops', num);
+      renderQuotation();
+    }
+  } catch (e) {
+    console.warn('Could not fetch next quotation number:', e);
+  } finally {
+    window._fetchingQopsNumber = false;
+  }
+}
+
+// Save the current quotation into the ops shared_quotations table (so the
+// sales team can follow up) and then trigger the browser's print/save-as-PDF
+// flow with the QOPS running number as the document title — which most
+// browsers use as the default PDF filename.
+async function saveAndPrintQuotation(){
+  var btn = document.getElementById('quote-print-btn');
+  var origText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    var cartItems = [];
+    try { cartItems = JSON.parse(sessionStorage.getItem('mjm_cart') || '[]'); } catch (_) {}
+    if (!cartItems.length) throw new Error('Your cart is empty.');
+
+    if (!sessionStorage.getItem('mjm_quote_qops')) {
+      await fetchQopsNumber();
+    }
+    var quoteNum = sessionStorage.getItem('mjm_quote_qops');
+    if (!quoteNum) throw new Error('Could not get a quotation number — check your connection and try again.');
+
+    // Skip the DB save on repeat print clicks for the same number — the
+    // record was already inserted by the first click in this session.
+    var alreadySaved = sessionStorage.getItem('mjm_quote_saved_'+quoteNum) === '1';
+
+    if (!alreadySaved) {
+      var company = (document.getElementById('quote-company').value || '').trim();
+      var attn    = (document.getElementById('quote-attn').value || '').trim();
+      var phone   = (document.getElementById('quote-phone').value || '').trim();
+      var email   = (document.getElementById('quote-email').value || '').trim();
+      var addr    = (document.getElementById('quote-addr').value || '').trim();
+
+      var userName  = sessionStorage.getItem('mjm_user_name')  || '';
+      var userPhone = sessionStorage.getItem('mjm_user_phone') || '';
+      var userEmail = sessionStorage.getItem('mjm_user_email') || '';
+      var custName  = company || attn || userName || 'Web Customer';
+
+      var subtotal = 0;
+      var items = cartItems.map(function(c){
+        var line = (c.price || 0) * (c.qty || 0);
+        subtotal += line;
+        return {
+          product_id: c.id || null,
+          description: c.name || '',
+          details: c.month || '',
+          qty: c.qty || 0,
+          unit: 'Palm',
+          unit_price: c.price || 0,
+          line_total: line
+        };
+      });
+
+      var today  = new Date();
+      var expiry = new Date(today.getTime() + QUOTE_VALIDITY_DAYS * 86400000);
+      var toIso  = function(d){ return d.toISOString().slice(0,10); };
+
+      var notes = [];
+      if (attn)  notes.push('Attn: ' + attn);
+      notes.push('Auto-saved from Sales Web on ' + today.toLocaleString('en-GB'));
+
+      var row = {
+        quote_number: quoteNum,
+        quote_date: toIso(today),
+        valid_until: toIso(expiry),
+        customer_name: custName,
+        customer_company: company || null,
+        customer_contact: phone || userPhone || null,
+        customer_email: email || userEmail || null,
+        customer_address: addr || null,
+        items: items,
+        subtotal: subtotal,
+        discount: 0,
+        tax_rate: 0,
+        tax_amount: 0,
+        total: subtotal,
+        notes: notes.join(' · '),
+        terms: 'Cash Only',
+        status: 'web_pending',
+        source: 'salesweb',
+        created_by_name: userName ? (userName + ' (Web)') : 'Sales Web Customer'
+      };
+
+      // Retry up to 3 times on unique-violation (another visitor grabbed the
+      // same number in the gap between fetchQopsNumber() and our INSERT).
+      var attempt = 0;
+      while (true) {
+        attempt++;
+        var insertRes = await fetch(SUPA_URL + '/rest/v1/shared_quotations', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPA_KEY,
+            'Authorization': 'Bearer ' + SUPA_KEY,
+            'Prefer': 'return=representation'
+          },
+          body: JSON.stringify(row)
+        });
+        if (insertRes.ok) break;
+        var errBody = '';
+        try { errBody = await insertRes.text(); } catch (_) {}
+        var isConflict = insertRes.status === 409 ||
+                         /duplicate key|unique/i.test(errBody);
+        if (isConflict && attempt < 3) {
+          sessionStorage.removeItem('mjm_quote_qops');
+          await fetchQopsNumber();
+          var fresh = sessionStorage.getItem('mjm_quote_qops');
+          if (!fresh) throw new Error('Could not get a fresh quotation number.');
+          quoteNum = fresh;
+          row.quote_number = fresh;
+          continue;
+        }
+        throw new Error('Save failed (HTTP ' + insertRes.status + '): ' + errBody.slice(0, 160));
+      }
+
+      sessionStorage.setItem('mjm_quote_saved_'+quoteNum, '1');
+      // Refresh the on-screen quote so it shows the saved number (in case
+      // of a retry that changed it).
+      renderQuotation();
+    }
+
+    // Filename = quote number. Slashes aren't valid in filenames on most
+    // platforms, so swap them for dashes.
+    var safeName = quoteNum.replace(/[\/\\:*?"<>|]/g, '-');
+    var origTitle = document.title;
+    document.title = safeName;
+    var restore = function(){
+      document.title = origTitle;
+      window.removeEventListener('afterprint', restore);
+    };
+    window.addEventListener('afterprint', restore);
+    // Safety net — some browsers (notably mobile Safari) don't fire
+    // afterprint reliably. Restore the original title regardless after 8s.
+    setTimeout(restore, 8000);
+
+    setTimeout(function(){ window.print(); }, 60);
+  } catch (e) {
+    alert('Could not generate quotation: ' + (e.message || e));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = origText || '🖨️ Print / Save as PDF'; }
+  }
 }
 
 // ── POLICY TABS ──

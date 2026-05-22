@@ -58,6 +58,7 @@ function esc(s){return String(s||'').replace(/[&<>"']/g,function(c){return{'&':'
 
 // ── Parse Billplz redirect params + sessionStorage hints ─────────────────────
 var params       = new URLSearchParams(window.location.search);
+var billplzId    = params.get('billplz[id]')||'';
 var billplzPaid  = params.get('billplz[paid]')==='true';
 var orderId      = sessionStorage.getItem('mjm_pay_order_id')     || '';
 var orderNumber  = sessionStorage.getItem('mjm_pay_order_number') || '';
@@ -128,6 +129,7 @@ function renderSuccess(){
     sessionStorage.removeItem('mjm_pay_order_id');
     sessionStorage.removeItem('mjm_pay_order_number');
     sessionStorage.removeItem('mjm_pay_order_total');
+    sessionStorage.removeItem('mjm_pay_bill_id');
   }catch(e){}
 }
 
@@ -139,8 +141,37 @@ function renderPending(){
     '<a href="index.html" class="btn btn-primary" onclick="sessionStorage.setItem(\'mjm_last_page\',\'portal\');return true;">Go to My Account</a>';
 }
 
+// Server-side verification — the redirect query params (`billplz[paid]=true`)
+// can be forged by anyone, so we never trust them alone. verify-billplz-bill
+// queries the Billplz REST API with the secret BILLPLZ_API_KEY and, on a
+// confirmed paid bill, promotes the order to Paid (idempotent — won't
+// double-credit if the webhook also fired). Also serves as the safety net
+// for the case where the server-to-server webhook never reaches us, so the
+// order never sits at "Pending Payment" forever after a successful FPX
+// payment.
+async function verifyServerSide(){
+  if(!billplzId) return { paid:false };
+  try{
+    var verifyRes=await _sb.functions.invoke('verify-billplz-bill',{
+      body:{bill_id:billplzId, order_id:orderId||undefined}
+    });
+    var verifyData=verifyRes&&verifyRes.data;
+    if(typeof verifyData==='string'){try{verifyData=JSON.parse(verifyData);}catch(e){}}
+    return verifyData||{paid:false};
+  }catch(e){
+    console.error('verify-billplz-bill failed:',e);
+    // Network failure — let the redirect param decide so a paying customer
+    // still sees a success card while the webhook / admin reconciles.
+    return { paid:billplzPaid, fallback:true };
+  }
+}
+
 (async function(){
-  if(!billplzPaid){ renderPending(); return; }
+  var result=await verifyServerSide();
+  if(!result.paid){
+    renderPending();
+    return;
+  }
   await loadOrderAndConfig();
   renderSuccess();
 })();

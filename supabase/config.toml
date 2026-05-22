@@ -1,0 +1,13 @@
+# Per-function configuration for `supabase functions deploy`.
+# Billplz cannot attach a JWT to the webhook it POSTs, so we must disable
+# JWT verification for the receiving function (and the browser-side
+# verifier, which is reached from an unauthenticated page after redirect).
+# Both functions still verify authenticity themselves — the webhook checks
+# the X-Signature HMAC, and verify-billplz-bill queries the Billplz API
+# directly using the secret BILLPLZ_API_KEY.
+
+[functions.billplz-webhook]
+verify_jwt = false
+
+[functions.verify-billplz-bill]
+verify_jwt = false

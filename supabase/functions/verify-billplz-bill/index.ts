@@ -211,6 +211,27 @@ serve(async (req) => {
       }
     }
 
+    // 4. Send payment-confirmed email to customer (CC admin). Mirrors the
+    //    webhook's behaviour. Fire-and-forget so a Resend hiccup doesn't
+    //    fail the verification; send-order-email is idempotent via
+    //    order.email_sent_at so a duplicate dispatch (webhook + verifier
+    //    both firing) won't send two emails.
+    try {
+      const fnUrl = `${supabaseUrl}/functions/v1/send-order-email`
+      fetch(fnUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ order_id }),
+      }).then(async (r) => {
+        if (!r.ok) console.error('send-order-email returned', r.status, await r.text())
+      }).catch((e) => console.error('send-order-email fetch threw:', e))
+    } catch (e) {
+      console.error('send-order-email dispatch failed:', e)
+    }
+
     return jsonResp({ paid: true, updated: true, order_id }, 200)
 
   } catch (err) {

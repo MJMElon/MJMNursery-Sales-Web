@@ -40,11 +40,19 @@ async function loadCustomers(){
   // module access, manage_users, or can_verify_operation is staff.
   var{data:swCusts,error}=await sb.from('shared_profiles')
     .select('*').or('user_type.eq.customer,role.eq.customer');
-  if(error){toast('Error: '+error.message,'error');return;}
+  if(error){
+    console.error('shared_profiles read failed:',error);
+    toast('Error: '+error.message,'error');
+    document.getElementById('customers-table').innerHTML='<div class="loading" style="color:#dc2626;">Could not load customers — '+esc(error.message)+'</div>';
+    return;
+  }
+  var rawRowCount = (swCusts||[]).length;
+  console.log('[loadCustomers] shared_profiles returned',rawRowCount,'rows before staff filter');
   // Drop staff: either explicitly marked system, or has operation permissions.
   swCusts=(swCusts||[]).filter(function(p){
     return p.user_type !== 'system' && !isOperationStaff(p.permissions);
   });
+  console.log('[loadCustomers]',swCusts.length,'rows after staff filter');
 
   // Paid-order lookup — still needed for the "Has Paid Order" stat box and
   // to badge customers in the table, but no longer a source of customers.
@@ -64,7 +72,19 @@ async function loadCustomers(){
   if(!custs.length){
     document.getElementById('cust-stats').innerHTML=
       '<div class="stat-box"><div class="stat-label">Total Customers</div><div class="stat-val">0</div></div>';
-    document.getElementById('customers-table').innerHTML='<div class="loading">No customers yet</div>';
+    // Distinguish the three zero-result cases so the next debugger isn't lost:
+    //  - rawRowCount === 0 → RLS gap (admin can't read shared_profiles)
+    //  - rawRowCount > 0 but after-filter 0 → all rows are staff (data tagging)
+    //  - search query filtered them out
+    var emptyMsg;
+    if (q) {
+      emptyMsg = 'No customers match your search.';
+    } else if (rawRowCount === 0) {
+      emptyMsg = 'No customers loaded. The admin account may be missing read access to <code>shared_profiles</code>. Run <code>supabase/migrations/shared_profiles_admin_read.sql</code> in the Supabase SQL editor.';
+    } else {
+      emptyMsg = 'No customers — all '+rawRowCount+' profiles look like staff. Check sign-up flow is writing role/user_type=customer.';
+    }
+    document.getElementById('customers-table').innerHTML='<div class="loading">'+emptyMsg+'</div>';
     return;
   }
 

@@ -3640,8 +3640,16 @@ function openOrderDetail(ordNum){
     }
   }
 
-  steps.forEach(function(t,i){
-    var isCurrent = !t.done && i === steps.length-1;
+  // Render newest first — the current/next step sits at the top so the
+  // customer sees what's actionable without scrolling. Compute the
+  // current-step index off the original forward-ordered array (it's the
+  // last non-done step), then reverse for display.
+  var currentIdx = -1;
+  for(var ci=steps.length-1; ci>=0; ci--){ if(!steps[ci].done){ currentIdx=ci; break; } }
+  var stepsReversed = steps.slice().reverse();
+  stepsReversed.forEach(function(t,i){
+    var origIdx = steps.length - 1 - i;
+    var isCurrent = !t.done && origIdx === currentIdx;
     var dt = t.date ? new Date(t.date).toLocaleString('en-MY',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
     var dotColor = t.isCancelled ? '#dc2626' : (isCurrent ? 'var(--gold)' : (t.isFinal ? '#15803d' : (t.done ? 'var(--green-mid)' : 'var(--green-pale)')));
     var highlight = isCurrent ? 'background:rgba(201,168,76,.10);border:1px solid #F2D58F;border-radius:8px;padding:.55rem .7rem .6rem;margin-left:-.7rem;' : '';

@@ -337,8 +337,8 @@ input,select,textarea,button{font-family:inherit;}
           <div class="fd-title">Status</div>
           <label class="fd-check"><input type="checkbox" class="fd-status" value="Open"> Open</label>
           <label class="fd-check"><input type="checkbox" class="fd-status" value="Cancelled"> Cancelled</label>
-          <label class="fd-check"><input type="checkbox" class="fd-status" value="Archived"> Archived <span class="fd-note">*</span></label>
-          <label class="fd-check"><input type="checkbox" class="fd-status" value="Deleted"> Deleted <span class="fd-note">*</span></label>
+          <label class="fd-check"><input type="checkbox" class="fd-status" value="Archived"> Archived</label>
+          <label class="fd-check"><input type="checkbox" class="fd-status" value="Deleted"> Deleted</label>
         </div>
         <div class="fd-section">
           <div class="fd-title">Payment</div>
@@ -351,17 +351,16 @@ input,select,textarea,button{font-family:inherit;}
           <div class="fd-title">Channel</div>
           <label class="fd-check"><input type="checkbox" class="fd-channel" value="online_store"> Online Store</label>
           <label class="fd-check"><input type="checkbox" class="fd-channel" value="admin_panel"> Admin Panel</label>
-          <label class="fd-check"><input type="checkbox" class="fd-channel" value="shopping_app"> Shopping App</label>
-          <label class="fd-check"><input type="checkbox" class="fd-channel" value="google"> Google</label>
-          <label class="fd-check"><input type="checkbox" class="fd-channel" value="whatsapp"> WhatsApp</label>
-          <div class="fd-footnote">* No <code>channel</code> column on orders yet — selecting these returns no results until the backend captures channel at order creation.</div>
+          <label class="fd-check"><input type="checkbox" class="fd-channel" value="shopping_app"> Shopping App <span class="fd-note">†</span></label>
+          <label class="fd-check"><input type="checkbox" class="fd-channel" value="google"> Google <span class="fd-note">†</span></label>
+          <label class="fd-check"><input type="checkbox" class="fd-channel" value="whatsapp"> WhatsApp <span class="fd-note">†</span></label>
         </div>
         <div class="fd-section">
           <div class="fd-title">Product</div>
           <input type="text" id="fd-product" class="fd-input" placeholder="e.g. Oil Palm Seedling">
         </div>
         <div class="fd-section" style="border-bottom:none;">
-          <div class="fd-footnote">* These options need additional backend support to filter properly. The UI is in place; data will follow.</div>
+          <div class="fd-footnote">* Partially Paid needs per-order paid-amount tracking — not captured yet.<br>† Reserved channel values; no orders enter through these paths yet.</div>
         </div>
       </div>
       <div class="fd-foot">

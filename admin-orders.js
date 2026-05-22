@@ -23,7 +23,7 @@
 ═══════════════════════════════════════════════════
 */
 
-var ORDER_STATUSES = ['Pending Payment','Paid','Ready for Collection','Completed','Cancelled','Refunded'];
+var ORDER_STATUSES = ['Pending Payment','Partially Paid','Paid','Ready for Collection','Completed','Cancelled','Refunded'];
 
 // ═══════════════════════════════════════
 //  ADVANCED FILTER DRAWER (right sidebar)
@@ -131,20 +131,21 @@ async function loadOrders(){
       return ok;
     });
   }
-  // ── Payment filter ──
-  //   Unpaid         → status === 'Pending Payment'
-  //   Paid           → status IN ('Paid','Ready for Collection','Completed')
-  //   Refunded       → status === 'Refunded'
-  //   Partially Paid → no schema support (would need deposit/paid-amount tracking)
+  // ── Payment filter ── (uses amount_paid as the source of truth, with a
+  // fallback to status for legacy rows that pre-date the amount_paid column)
   if(f.payments && f.payments.length){
     orders = orders.filter(function(o){
       var s = o.status;
-      var paid = (s === 'Paid' || s === 'Ready for Collection' || s === 'Completed');
+      var tot = Number(o.total||0);
+      var paid = Number(o.amount_paid||0);
+      var fullyPaid = (tot > 0 && paid >= tot) || s === 'Paid' || s === 'Ready for Collection' || s === 'Completed';
+      var partiallyPaid = paid > 0 && paid < tot;
+      var unpaid = paid <= 0 && s === 'Pending Payment';
       var ok = false;
-      if(f.payments.indexOf('Unpaid')         !== -1 && s === 'Pending Payment') ok = true;
-      if(f.payments.indexOf('Paid')           !== -1 && paid) ok = true;
+      if(f.payments.indexOf('Unpaid')         !== -1 && unpaid)        ok = true;
+      if(f.payments.indexOf('Partially Paid') !== -1 && partiallyPaid) ok = true;
+      if(f.payments.indexOf('Paid')           !== -1 && fullyPaid && !partiallyPaid) ok = true;
       if(f.payments.indexOf('Refunded')       !== -1 && s === 'Refunded') ok = true;
-      // 'Partially Paid' has no backing data → never matches.
       return ok;
     });
   }
@@ -189,13 +190,22 @@ async function loadOrders(){
     } else {
       termsBadge='<span class="badge badge-grey">💵 Cash</span>';
     }
+    var totalRM = Number(o.total||0);
+    var paidRM = Number(o.amount_paid||0);
+    var balRM = Math.max(0, totalRM - paidRM);
+    var totalCell = 'RM ' + totalRM.toFixed(2);
+    if(paidRM > 0 && paidRM < totalRM){
+      totalCell += '<div style="font-size:10px;color:#a16207;font-weight:600;margin-top:2px;">Paid RM '+paidRM.toFixed(2)+' · Bal RM '+balRM.toFixed(2)+'</div>';
+    } else if(paidRM >= totalRM && totalRM > 0){
+      totalCell += '<div style="font-size:10px;color:var(--green);font-weight:600;margin-top:2px;">Paid in full</div>';
+    }
     html+='<tr onclick="viewOrder(\''+idJs+'\')" style="cursor:pointer;">'+
       '<td style="font-weight:600;">#'+esc(shortId)+'</td>'+
       '<td>'+esc(o.customer_name||'—')+'<div style="font-size:11px;color:var(--ink4);">'+esc(o.customer_email||'')+'</div></td>'+
       '<td style="font-size:12px;">'+fmtDate(o.created_at)+'</td>'+
       '<td>'+termsBadge+'</td>'+
       '<td style="text-align:center;">—</td>'+
-      '<td style="font-weight:600;">RM '+(o.total||0).toFixed(2)+'</td>'+
+      '<td style="font-weight:600;">'+totalCell+'</td>'+
       '<td><span class="badge '+statusCls+'">'+esc(o.status)+'</span></td>'+
       '<td><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();viewOrder(\''+idJs+'\')">View</button></td>'+
     '</tr>';
@@ -205,7 +215,7 @@ async function loadOrders(){
 }
 
 function orderBadgeCls(s){
-  return{'Pending Payment':'badge-amber','Paid':'badge-blue','Ready for Collection':'badge-green','Completed':'badge-grey','Cancelled':'badge-red','Refunded':'badge-red'}[s]||'badge-grey';
+  return{'Pending Payment':'badge-amber','Partially Paid':'badge-amber','Paid':'badge-blue','Ready for Collection':'badge-green','Completed':'badge-grey','Cancelled':'badge-red','Refunded':'badge-red'}[s]||'badge-grey';
 }
 
 // ═══════════════════════════════════════
@@ -345,6 +355,31 @@ async function viewOrder(id){
   if(order.discount_amount>0)html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;color:var(--red);"><span>Discount</span><span>-RM '+order.discount_amount.toFixed(2)+'</span></div>';
   if(order.coupon_code)html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;color:var(--red);"><span>Coupon ('+esc(order.coupon_code)+')</span><span>-RM '+(order.coupon_discount||0).toFixed(2)+'</span></div>';
   html+='<div style="display:flex;justify-content:space-between;padding:.4rem 0;border-top:1.5px solid var(--border);margin-top:.3rem;font-size:15px;font-weight:700;"><span>Total</span><span>RM '+(order.total||0).toFixed(2)+'</span></div>';
+
+  // Paid / Balance line inside the totals card
+  var paidNow = Number(order.amount_paid||0);
+  var totalNow = Number(order.total||0);
+  var balanceNow = Math.max(0, totalNow - paidNow);
+  var payState = paidNow <= 0 ? 'unpaid' : (paidNow >= totalNow ? 'paid' : 'partial');
+  var payColor = payState === 'paid' ? 'var(--green)' : payState === 'partial' ? '#a16207' : 'var(--ink3)';
+  html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;color:'+payColor+';"><span>Paid</span><span>RM '+paidNow.toFixed(2)+'</span></div>';
+  html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;font-weight:600;color:'+(balanceNow>0?'var(--red)':'var(--green)')+';"><span>Balance</span><span>RM '+balanceNow.toFixed(2)+'</span></div>';
+  html+='</div>';
+
+  // ── Payment Received (record / update amount_paid) ──
+  html+='<div style="background:var(--bg);border-radius:10px;padding:1rem;margin-bottom:1rem;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">';
+  html+='<div style="font-size:13px;font-weight:600;">Payment Received</div>';
+  var payBadge = payState === 'paid' ? '<span class="badge badge-blue" style="font-size:11px;padding:4px 10px;">Fully Paid</span>'
+               : payState === 'partial' ? '<span class="badge badge-amber" style="font-size:11px;padding:4px 10px;">Partially Paid</span>'
+               : '<span class="badge badge-grey" style="font-size:11px;padding:4px 10px;">Unpaid</span>';
+  html+=payBadge+'</div>';
+  html+='<div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;">';
+  html+='<label style="font-size:11px;color:var(--ink3);">Amount paid (RM)</label>';
+  html+='<input class="form-input" id="mo-amount-paid" type="number" step="0.01" min="0" value="'+paidNow.toFixed(2)+'" style="width:120px;font-size:12px;padding:6px 10px;">';
+  html+='<button class="btn btn-primary btn-sm" onclick="updateOrderAmountPaid(\''+id+'\','+totalNow+')">Update</button>';
+  html+='</div>';
+  html+='<div style="margin-top:.5rem;font-size:11px;color:var(--ink3);">Total RM '+totalNow.toFixed(2)+' · Outstanding <strong style="color:'+(balanceNow>0?'var(--red)':'var(--green)')+';">RM '+balanceNow.toFixed(2)+'</strong></div>';
   html+='</div>';
 
   // Discount + Coupon controls (collapsible)
@@ -506,6 +541,25 @@ async function restoreOrder(orderId){
   if(error){toast('Error: '+error.message,'error');return;}
   toast('Order restored');
   closeModal('modal-order'); loadOrders();
+}
+
+// Record a partial / full payment against the order. The number the
+// admin types in is treated as the cumulative amount received — not
+// an increment — so they can correct typos without compounding.
+async function updateOrderAmountPaid(orderId, totalAmount){
+  var raw = document.getElementById('mo-amount-paid').value;
+  var amt = Number(raw);
+  if(isNaN(amt) || amt < 0){ toast('Enter a valid amount (≥ 0)','error'); return; }
+  // Round to 2dp to avoid floating-point dust in DB.
+  amt = Math.round(amt * 100) / 100;
+  var{error}=await sb.from('salesweb_customer_orders').update({amount_paid:amt}).eq('id',orderId);
+  if(error){toast('Error: '+error.message,'error');return;}
+  // Helpful nudge — but don't auto-change status, leave that to the admin.
+  var tot = Number(totalAmount)||0;
+  if(amt >= tot && tot > 0) toast('Payment received in full. Remember to set status to Paid if needed.');
+  else if(amt > 0 && amt < tot) toast('Partial payment saved · Balance RM '+(tot-amt).toFixed(2));
+  else toast('Amount paid updated');
+  viewOrder(orderId); // re-render the modal with the new figures
 }
 
 // ═══════════════════════════════════════

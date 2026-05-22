@@ -26,17 +26,106 @@
 var ORDER_STATUSES = ['Pending Payment','Paid','Ready for Collection','Completed','Cancelled','Refunded'];
 
 // ═══════════════════════════════════════
+//  ADVANCED FILTER DRAWER (right sidebar)
+//  Persists the active filter state across re-renders. UI lives in
+//  admin.html (#orderFilterDrawer). loadOrders() reads from this state.
+// ═══════════════════════════════════════
+var ORDER_FILTERS = { dateFrom:'', dateTo:'', statuses:[], terms:[], credit:[], product:'' };
+
+function openOrderFilterDrawer(){
+  // Sync UI inputs from current state before opening
+  document.getElementById('fd-date-from').value = ORDER_FILTERS.dateFrom || '';
+  document.getElementById('fd-date-to').value = ORDER_FILTERS.dateTo || '';
+  document.querySelectorAll('.fd-status').forEach(function(cb){ cb.checked = ORDER_FILTERS.statuses.indexOf(cb.value) !== -1; });
+  document.querySelectorAll('.fd-terms').forEach(function(cb){ cb.checked = ORDER_FILTERS.terms.indexOf(cb.value) !== -1; });
+  document.querySelectorAll('.fd-credit').forEach(function(cb){ cb.checked = ORDER_FILTERS.credit.indexOf(cb.value) !== -1; });
+  document.getElementById('fd-product').value = ORDER_FILTERS.product || '';
+  document.getElementById('orderFilterOverlay').classList.add('open');
+  document.getElementById('orderFilterDrawer').classList.add('open');
+  document.getElementById('orderFilterDrawer').setAttribute('aria-hidden','false');
+}
+function closeOrderFilterDrawer(){
+  document.getElementById('orderFilterOverlay').classList.remove('open');
+  document.getElementById('orderFilterDrawer').classList.remove('open');
+  document.getElementById('orderFilterDrawer').setAttribute('aria-hidden','true');
+}
+function readCheckedValues(selector){
+  var out = [];
+  document.querySelectorAll(selector).forEach(function(cb){ if(cb.checked) out.push(cb.value); });
+  return out;
+}
+function applyOrderFilters(){
+  ORDER_FILTERS.dateFrom = document.getElementById('fd-date-from').value || '';
+  ORDER_FILTERS.dateTo   = document.getElementById('fd-date-to').value || '';
+  ORDER_FILTERS.statuses = readCheckedValues('.fd-status');
+  ORDER_FILTERS.terms    = readCheckedValues('.fd-terms');
+  ORDER_FILTERS.credit   = readCheckedValues('.fd-credit');
+  ORDER_FILTERS.product  = (document.getElementById('fd-product').value || '').trim();
+  updateOrderFilterBadge();
+  closeOrderFilterDrawer();
+  loadOrders();
+}
+function clearOrderFilters(){
+  ORDER_FILTERS = { dateFrom:'', dateTo:'', statuses:[], terms:[], credit:[], product:'' };
+  document.getElementById('fd-date-from').value = '';
+  document.getElementById('fd-date-to').value = '';
+  document.querySelectorAll('.fd-status, .fd-terms, .fd-credit').forEach(function(cb){ cb.checked = false; });
+  document.getElementById('fd-product').value = '';
+  updateOrderFilterBadge();
+  loadOrders();
+}
+function countActiveOrderFilters(){
+  var c = 0;
+  if(ORDER_FILTERS.dateFrom || ORDER_FILTERS.dateTo) c++;
+  if(ORDER_FILTERS.statuses.length) c++;
+  if(ORDER_FILTERS.terms.length) c++;
+  if(ORDER_FILTERS.credit.length) c++;
+  if(ORDER_FILTERS.product) c++;
+  return c;
+}
+function updateOrderFilterBadge(){
+  var n = countActiveOrderFilters();
+  var btn = document.getElementById('orders-filter-btn');
+  var badge = document.getElementById('orders-filter-count');
+  if(!btn || !badge) return;
+  if(n > 0){ btn.classList.add('has-active'); badge.style.display = 'inline-flex'; badge.textContent = String(n); }
+  else { btn.classList.remove('has-active'); badge.style.display = 'none'; }
+}
+
+// ═══════════════════════════════════════
 //  LOAD ORDERS — DASHBOARD
 // ═══════════════════════════════════════
 async function loadOrders(){
   var q=document.getElementById('order-search').value.trim().toLowerCase();
   var status=document.getElementById('order-filter').value;
+  var f = ORDER_FILTERS || {};
   var query=sb.from('salesweb_customer_orders').select('*').order('created_at',{ascending:false});
   if(status)query=query.eq('status',status);
+  // Date range: created_at is a timestamp; use start-of-day to next-day midnight.
+  if(f.dateFrom) query = query.gte('created_at', f.dateFrom + 'T00:00:00');
+  if(f.dateTo)   query = query.lte('created_at', f.dateTo   + 'T23:59:59');
   var{data,error}=await query;
   if(error){toast('Error: '+error.message,'error');return;}
   var orders=data||[];
   if(q)orders=orders.filter(function(o){return(o.order_number||'').toLowerCase().includes(q)||(o.id||'').toLowerCase().includes(q)||(o.customer_name||'').toLowerCase().includes(q)||(o.customer_email||'').toLowerCase().includes(q);});
+  // Multi-select status (sidebar): the simple dropdown above is a single value,
+  // the sidebar lets the user pick several at once.
+  if(f.statuses && f.statuses.length) orders = orders.filter(function(o){return f.statuses.indexOf(o.status) !== -1;});
+  if(f.terms && f.terms.length)       orders = orders.filter(function(o){return f.terms.indexOf(o.payment_terms||'cash') !== -1;});
+  if(f.credit && f.credit.length){
+    orders = orders.filter(function(o){
+      if(o.payment_terms !== 'credit') return false;
+      var isBilled = !!o.credit_billed_at;
+      return (isBilled && f.credit.indexOf('billed') !== -1) || (!isBilled && f.credit.indexOf('unbilled') !== -1);
+    });
+  }
+  // Product filter: query order_items separately, get matching order_ids.
+  if(f.product){
+    var{data:items}=await sb.from('salesweb_order_items').select('order_id').ilike('product_name','%'+f.product+'%');
+    var ids = {};
+    (items||[]).forEach(function(it){ ids[it.order_id] = true; });
+    orders = orders.filter(function(o){ return ids[o.id]; });
+  }
 
   // Stats
   var all=data||[];

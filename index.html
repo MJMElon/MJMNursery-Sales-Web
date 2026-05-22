@@ -466,11 +466,26 @@
   .product-card:hover { transform: translateY(-4px); box-shadow: 0 12px 40px rgba(0,0,0,.1); }
   .product-img { aspect-ratio: 3/4; overflow: hidden; position: relative; background: linear-gradient(135deg, #e8f0e9, #c8dfc9); display: flex; align-items: center; justify-content: center; }
   .product-img svg { width: 80px; height: 80px; opacity: .3; }
-  .product-badge { position: absolute; top: .75rem; left: .75rem; background: var(--gold); color: var(--green-dark); font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; padding: .2rem .6rem; border-radius: 4px; }
+  .product-badge { position: absolute; top: .75rem; left: .75rem; background: var(--gold); color: var(--green-dark); font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; padding: .2rem .6rem; border-radius: 4px; z-index: 2; }
   .product-badge.sold-out { background: #e8d4d4; color: #8b4949; }
   .product-badge.coming-soon { background: var(--green-pale); color: var(--green-dark); }
+  /* Sold-out card: dim image, center the SOLD OUT pill, mute text */
+  .product-card.is-sold-out .product-img > img,
+  .product-card.is-sold-out .product-img > svg { opacity: .35; filter: grayscale(.55); transition: opacity .2s, filter .2s; }
+  .product-card.is-sold-out .product-img::after {
+    content: ''; position: absolute; inset: 0;
+    background: rgba(245,245,245,.45); pointer-events: none; z-index: 1;
+  }
+  .product-card.is-sold-out .product-badge.sold-out {
+    top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: rgba(60,60,60,.82); color: #fff;
+    padding: .4rem 1.1rem; font-size: 12px; letter-spacing: .12em;
+  }
+  .product-card.is-sold-out .product-name,
+  .product-card.is-sold-out .product-month { color: var(--text-light); }
+  .product-card.is-sold-out .product-stock { color: #c0392b; font-weight: 600; }
   .product-info { padding: 1rem 1.1rem 1.2rem; }
-  .product-name { font-size: 14px; font-weight: 500; color: var(--text-dark); margin-bottom: .3rem; }
+  .product-name { font-size: 14px; font-weight: 500; color: var(--text-dark); margin-bottom: .15rem; line-height: 1.3; }
   .product-month { font-size: 12px; color: var(--text-light); }
   .product-footer { display: flex; align-items: center; justify-content: space-between; margin-top: .75rem; }
   .product-price { font-family: 'Cormorant Garamond', serif; font-size: 20px; font-weight: 600; color: var(--green-dark); }
@@ -1279,7 +1294,7 @@
       <a id="nav-information" style="display:flex;align-items:center;gap:4px;opacity:.7;">Information <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg></a>
       <div class="nav-dropdown-menu">
         <div class="nav-dropdown-section">About MJM</div>
-        <a onclick="showPage('information')">About Us</a>
+        <a onclick="showPage('information')">Our Policies</a>
         <a onclick="showPage('contact')">Contact Us</a>
         <a onclick="showPage('join')">Join Our Team</a>
         <div class="nav-dropdown-section">Plan Your Purchase</div>
@@ -1417,6 +1432,7 @@
         <button class="policy-tab active" onclick="switchPolicyTab('terms',this)">Terms & Conditions</button>
         <button class="policy-tab" onclick="switchPolicyTab('privacy',this)">Privacy Policy</button>
         <button class="policy-tab" onclick="switchPolicyTab('refund',this)">Non Refund Policy</button>
+        <button class="policy-tab" onclick="switchPolicyTab('collection',this)">Customer Collection Policy</button>
       </div>
 
       <!-- Terms & Conditions -->
@@ -1513,6 +1529,24 @@
           <p>Rescheduling may require additional payment for any price difference, subject to availability. Additional payment must be made before a new date is confirmed.</p>
           <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">5. Final Payment</h3>
           <p>Deposits will be automatically deducted from the total invoice amount during final payment.</p>
+        </div>
+      </div>
+
+      <!-- Customer Collection Policy -->
+      <div class="policy-content" id="pol-collection">
+        <div style="background:#fff;border-radius:16px;padding:2.5rem;border:1px solid rgba(0,0,0,.06);line-height:1.8;color:var(--text-mid);font-size:14px;">
+          <p style="background:var(--green-pale);color:var(--green-dark);padding:1rem 1.5rem;border-radius:10px;font-weight:500;margin-bottom:1.5rem;">The following customer responsibilities apply at the point of collection. Please read carefully before arriving at the nursery.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:0 0 .5rem;">1. Physical Verification</h3>
+          <p>Customer must verify the number of identification stickers matches the total purchase quantity before proceeding to the nursery.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">2. Selection &amp; Quality Control</h3>
+          <p>Seedling selection is the sole responsibility of the customer. Applying a sticker to a polybag constitutes formal and final acceptance of that seedling's health, size, and quality.</p>
+          <p><strong>Worker Assistance Disclaimer:</strong> If the customer requests nursery staff to assist with or perform the marking/sticking on their behalf, the customer assumes all risk regarding the selection. The company shall not be held liable for the quality or characteristics of seedlings selected by staff under the customer's instruction.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">3. Loading Accuracy</h3>
+          <p>Customer is responsible for verifying the final count loaded onto the vehicle. Any discrepancies must be raised before signing the Delivery Order (DO).</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">4. Finality of Sale</h3>
+          <p>Post-signature of the DO, the company is absolved of all liability regarding seedling health, replacement, or exchange.</p>
+          <h3 style="color:var(--text-dark);font-size:15px;margin:1.5rem 0 .5rem;">5. Administrative Accuracy</h3>
+          <p>Upon completion, the Borang Akuan (L3) must be checked. Any administrative errors must be corrected at the site office immediately prior to departure.</p>
         </div>
       </div>
     </div>
@@ -2406,7 +2440,7 @@ function addCalcToCart(){
       existing.qty = Math.min((existing.qty || 0) + capped, p.stock || 999);
     } else {
       cart.push({
-        id: p.id, name: p.name, month: p.month || '',
+        id: p.id, name: p.fullName || p.name, month: p.month || '',
         price: p.priceNum || 0, priceHtml: p.price, qty: capped,
         image_url: p.image_url || null, stock: p.stock || 0
       });
@@ -2479,7 +2513,9 @@ function renderQuotation(){
   var rows = cartItems.map(function(c){
     var line = (c.price || 0) * (c.qty || 0);
     subtotal += line;
-    var label = (c.name || '—') + (c.month ? ' — ' + c.month : '');
+    // c.name is canonical ("Name — Month Year"); legacy cart items may still need the suffix.
+    var hasMonth = c.month && c.name && c.name.indexOf(c.month) !== -1;
+    var label = (c.name || '—') + (c.month && !hasMonth ? ' — ' + c.month : '');
     return '<tr>'+
       '<td>'+escapeQuote(label)+'</td>'+
       '<td class="num">'+(c.qty||0).toLocaleString()+'</td>'+
@@ -2623,6 +2659,17 @@ async function fetchProducts() {
     // the description field, since description is reserved for the product
     // popup and must never bleed onto the main card.
     var sellLabel = (p.sell_month && p.sell_year) ? p.sell_month + ' ' + p.sell_year : '';
+    // Strip any trailing " — Month YYYY" / " - Month YYYY" from the name so the
+    // month never renders twice (in the title AND as the subtitle).
+    var rawName = p.name || '';
+    var monthRe = /\s*[-—–]\s*(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})\s*$/i;
+    var match = rawName.match(monthRe);
+    var displayName = rawName.replace(monthRe, '').trim();
+    if (!sellLabel && match) { sellLabel = match[1] + ' ' + match[2]; }
+    // Render the title as "<name> -" when there's a month subtitle to anchor below it.
+    var titleLine = sellLabel ? displayName + ' -' : displayName;
+    // Canonical full label used by the cart, popup, and toast (always "Name — Month Year" if applicable).
+    var canonicalName = displayName + (sellLabel ? ' — ' + sellLabel : '');
     var status = 'available';
     var badge = null;
     if (p.stock_qty <= 0) { status = 'sold-out'; badge = 'Sold Out'; }
@@ -2635,7 +2682,8 @@ async function fetchProducts() {
     }
     return {
       id: p.id,
-      name: p.name,
+      name: titleLine,
+      fullName: canonicalName,
       month: sellLabel,
       description: p.description || '',
       price: priceHtml,
@@ -2655,7 +2703,7 @@ function renderProductCard(p) {
   var badge = p.badge ? '<div class="product-badge ' + bc + '">' + esc(p.badge) + '</div>' : '';
   var canAdd = p.status === 'available' || p.status === 'promo';
   var imgHtml = p.image_url
-    ? '<img src="' + esc(p.image_url) + '" loading="lazy" decoding="async" fetchpriority="low" style="width:100%;height:100%;object-fit:cover;" alt="' + esc(p.name) + '">'
+    ? '<img src="' + esc(p.image_url) + '" loading="lazy" decoding="async" fetchpriority="low" style="width:100%;height:100%;object-fit:cover;" alt="' + esc(p.fullName || p.name) + '">'
     : '<svg viewBox="0 0 80 100" fill="none"><path d="M40 85 Q25 65 25 50 Q25 30 40 15 Q55 30 55 50 Q55 65 40 85Z" fill="#6A9B6E" opacity=".4"/><path d="M40 85 Q20 70 18 55 Q16 38 30 25" stroke="#3E6B42" stroke-width="1.5" fill="none" opacity=".5"/><path d="M40 85 Q60 70 62 55 Q64 38 50 25" stroke="#3E6B42" stroke-width="1.5" fill="none" opacity=".5"/><rect x="32" y="85" width="16" height="12" rx="2" fill="#2D4A30" opacity=".6"/></svg>';
   var idx = products.indexOf(p);
 
@@ -2670,16 +2718,17 @@ function renderProductCard(p) {
       + '<button class="card-qty-btn" type="button" onclick="event.stopPropagation();changeCardQty(' + idx + ',1)" aria-label="Increase quantity">+</button>'
       + '</div>'
     : '';
-  var addLabel = p.status === 'sold-out' ? 'Sold Out' : p.status === 'coming-soon' ? 'Coming Soon' : 'Add to Cart';
+  var priceTxt = 'RM ' + (p.priceNum || 0).toFixed(2);
+  var addLabel = p.status === 'sold-out' ? 'Sold Out' : p.status === 'coming-soon' ? 'Coming Soon' : 'Add to Cart · ' + priceTxt;
   var addBtn = '<button class="btn-add card-add-btn" type="button" ' + (canAdd ? '' : 'disabled ') + 'onclick="event.stopPropagation();addCardToCart(' + idx + ')">' + addLabel + '</button>';
+  var cardClass = 'product-card' + (p.status === 'sold-out' ? ' is-sold-out' : '');
 
-  return '<div class="product-card" onclick="openProductPopup(' + idx + ')">'
+  return '<div class="' + cardClass + '" onclick="openProductPopup(' + idx + ')">'
        +   '<div class="product-img">' + badge + imgHtml + '</div>'
        +   '<div class="product-info">'
        +     '<div class="product-name">' + esc(p.name) + '</div>'
        +     (p.month ? '<div class="product-month">' + esc(p.month) + '</div>' : '')
-       +     '<div class="product-price" style="margin-top:.3rem;">' + esc(p.price) + '</div>'
-       +     '<div class="product-stock">' + (p.stock > 0 ? p.stock.toLocaleString() + ' left' : 'Out of stock') + '</div>'
+       +     '<div class="product-stock" style="margin-top:.4rem;">' + (p.stock > 0 ? p.stock.toLocaleString() + ' left' : 'Out of stock') + '</div>'
        +     qtyRow
        +     addBtn
        +   '</div>'
@@ -2754,7 +2803,7 @@ function openProductPopup(idx) {
   if (p.image_url) imgEl.innerHTML = '<img src="' + esc(p.image_url) + '">';
   else imgEl.innerHTML = '<div style="font-size:3rem;">🌱</div>';
 
-  document.getElementById('ppName').textContent = p.name + (p.month ? ' — ' + p.month : '');
+  document.getElementById('ppName').textContent = p.fullName || p.name;
   // ppDesc now shows the REAL product description (or a graceful fallback).
   var descEl = document.getElementById('ppDesc');
   if (p.description) {
@@ -2809,13 +2858,13 @@ function addCardToCart(idx) {
     existing.qty = Math.min((existing.qty || 0) + qty, p.stock || 999);
   } else {
     cart.push({
-      id: p.id, name: p.name, month: p.month || '',
+      id: p.id, name: p.fullName || p.name, month: p.month || '',
       price: priceNum, priceHtml: p.price, qty: qty,
       image_url: p.image_url || null, stock: p.stock || 0
     });
   }
   updateCartUI();
-  if (typeof showPortalToast === 'function') showPortalToast(p.name + ' × ' + qty + ' added to cart');
+  if (typeof showPortalToast === 'function') showPortalToast((p.fullName || p.name) + ' × ' + qty + ' added to cart');
   if (input) input.value = 1;
 }
 
@@ -2832,7 +2881,7 @@ function addPopupToCart() {
   } else {
     cart.push({
       id: p.id,
-      name: p.name,
+      name: p.fullName || p.name,
       month: p.month || '',
       price: priceNum,
       priceHtml: p.price,
@@ -2880,7 +2929,7 @@ function updateCartUI() {
     html += '<div class="cart-item">' +
       imgHtml +
       '<div class="cart-item-info">' +
-        '<div class="cart-item-name" title="' + c.name + (c.month ? ' — ' + c.month : '') + '">' + c.name + (c.month ? ' — ' + c.month : '') + '</div>' +
+        '<div class="cart-item-name" title="' + c.name + (c.month && c.name.indexOf(c.month) === -1 ? ' — ' + c.month : '') + '">' + c.name + (c.month && c.name.indexOf(c.month) === -1 ? ' — ' + c.month : '') + '</div>' +
         '<div class="cart-item-price">' + fmtRM(c.price) + ' each</div>' +
       '</div>' +
       '<button class="cart-item-remove" onclick="removeCartItem(' + i + ')" title="Remove">✕</button>' +

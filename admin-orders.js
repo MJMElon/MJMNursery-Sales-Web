@@ -108,16 +108,24 @@ async function loadOrders(){
   if(error){toast('Error: '+error.message,'error');return;}
   var orders=data||[];
   if(q)orders=orders.filter(function(o){return(o.order_number||'').toLowerCase().includes(q)||(o.id||'').toLowerCase().includes(q)||(o.customer_name||'').toLowerCase().includes(q)||(o.customer_email||'').toLowerCase().includes(q);});
+
+  // Default visibility rule: hide soft-deleted and soft-archived orders
+  // unless the user explicitly asks for them via the sidebar Status filter.
+  var wantArchived = f.statuses && f.statuses.indexOf('Archived') !== -1;
+  var wantDeleted  = f.statuses && f.statuses.indexOf('Deleted')  !== -1;
+  if(!wantDeleted)  orders = orders.filter(function(o){ return !o.deleted_at; });
+  if(!wantArchived) orders = orders.filter(function(o){ return !o.archived_at; });
+
   // ── Status filter (Shopify-style buckets mapped onto MJM's status field) ──
   //   Open      → not Cancelled, not Refunded, not Completed, not archived/deleted
   //   Cancelled → status === 'Cancelled'
-  //   Archived  → archived_at IS NOT NULL  (column not present yet → no matches)
-  //   Deleted   → deleted_at  IS NOT NULL  (column not present yet → no matches)
+  //   Archived  → archived_at IS NOT NULL
+  //   Deleted   → deleted_at  IS NOT NULL
   if(f.statuses && f.statuses.length){
     orders = orders.filter(function(o){
       var ok = false;
       if(f.statuses.indexOf('Open')      !== -1 && o.status !== 'Cancelled' && o.status !== 'Refunded' && o.status !== 'Completed' && !o.archived_at && !o.deleted_at) ok = true;
-      if(f.statuses.indexOf('Cancelled') !== -1 && o.status === 'Cancelled') ok = true;
+      if(f.statuses.indexOf('Cancelled') !== -1 && o.status === 'Cancelled' && !o.archived_at && !o.deleted_at) ok = true;
       if(f.statuses.indexOf('Archived')  !== -1 && !!o.archived_at) ok = true;
       if(f.statuses.indexOf('Deleted')   !== -1 && !!o.deleted_at) ok = true;
       return ok;
@@ -140,7 +148,8 @@ async function loadOrders(){
       return ok;
     });
   }
-  // ── Channel filter ── (no channel column yet — selecting any returns no rows)
+  // ── Channel filter ── (channel captured at order creation: 'online_store',
+  // 'admin_panel'. Reserved values: 'shopping_app', 'google', 'whatsapp'.)
   if(f.channels && f.channels.length){
     orders = orders.filter(function(o){ return o.channel && f.channels.indexOf(o.channel) !== -1; });
   }
@@ -450,12 +459,53 @@ async function viewOrder(id){
   html+='<div id="mo-timeline"><div style="font-size:12px;color:var(--ink4);">Loading...</div></div></div>';
 
   document.getElementById('mo-body').innerHTML=html;
-  document.getElementById('mo-foot').innerHTML='<button class="btn btn-outline" onclick="closeModal(\'modal-order\');loadOrders();">Close</button>';
+  // Footer: archive / unarchive / delete-or-restore actions + Close.
+  var archiveBtn = order.archived_at
+    ? '<button class="btn btn-outline" onclick="unarchiveOrder(\''+id+'\')">Unarchive</button>'
+    : '<button class="btn btn-outline" onclick="archiveOrder(\''+id+'\')">Archive</button>';
+  var deleteBtn = order.deleted_at
+    ? '<button class="btn btn-outline" style="color:var(--green);border-color:var(--green);" onclick="restoreOrder(\''+id+'\')">Restore</button>'
+    : '<button class="btn btn-outline" style="color:var(--red);border-color:var(--red);" onclick="deleteOrder(\''+id+'\')">Delete</button>';
+  document.getElementById('mo-foot').innerHTML=
+    archiveBtn + deleteBtn +
+    '<button class="btn btn-outline" onclick="closeModal(\'modal-order\');loadOrders();">Close</button>';
   openModal('modal-order');
 
   // Load async data
   loadAttachments(id);
   loadTimeline(id);
+}
+
+// ═══════════════════════════════════════
+//  ARCHIVE / DELETE (soft) — wired to the Archived / Deleted filter
+//  checkboxes. Archived orders are hidden from the default list but
+//  remain accessible via the filter. Deleted orders are hidden
+//  everywhere unless the Deleted filter is explicitly selected.
+// ═══════════════════════════════════════
+async function archiveOrder(orderId){
+  var{error}=await sb.from('salesweb_customer_orders').update({archived_at:new Date().toISOString()}).eq('id',orderId);
+  if(error){toast('Error: '+error.message,'error');return;}
+  toast('Order archived');
+  closeModal('modal-order'); loadOrders();
+}
+async function unarchiveOrder(orderId){
+  var{error}=await sb.from('salesweb_customer_orders').update({archived_at:null}).eq('id',orderId);
+  if(error){toast('Error: '+error.message,'error');return;}
+  toast('Order unarchived');
+  closeModal('modal-order'); loadOrders();
+}
+async function deleteOrder(orderId){
+  if(!confirm('Delete this order? It will be hidden from the default list but kept for audit. You can restore it later via the "Deleted" filter.'))return;
+  var{error}=await sb.from('salesweb_customer_orders').update({deleted_at:new Date().toISOString()}).eq('id',orderId);
+  if(error){toast('Error: '+error.message,'error');return;}
+  toast('Order deleted');
+  closeModal('modal-order'); loadOrders();
+}
+async function restoreOrder(orderId){
+  var{error}=await sb.from('salesweb_customer_orders').update({deleted_at:null}).eq('id',orderId);
+  if(error){toast('Error: '+error.message,'error');return;}
+  toast('Order restored');
+  closeModal('modal-order'); loadOrders();
 }
 
 // ═══════════════════════════════════════
@@ -1613,6 +1663,7 @@ async function submitNewOrder(){
       customer_email:email||null,
       status:status,
       total:total,
+      channel:'admin_panel',
       shipping_address:addr||null,
       customer_remark:remarkParts.join(' | '),
       payment_terms:terms,

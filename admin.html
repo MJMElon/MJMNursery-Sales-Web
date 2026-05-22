@@ -195,6 +195,9 @@ input,select,textarea,button{font-family:inherit;}
 .fd-input:focus{border-color:var(--green);}
 .fd-check{display:flex;align-items:center;gap:.55rem;padding:.32rem 0;font-size:13px;color:var(--ink2);cursor:pointer;font-weight:500;}
 .fd-check input{accent-color:var(--green);width:15px;height:15px;cursor:pointer;}
+.fd-note{color:var(--amber);font-weight:700;margin-left:.2rem;}
+.fd-footnote{font-size:10px;color:var(--ink4);line-height:1.5;margin-top:.5rem;font-style:italic;}
+.fd-footnote code{background:var(--bg);padding:1px 4px;border-radius:3px;font-size:10px;font-family:ui-monospace,monospace;color:var(--ink3);font-style:normal;}
 .fd-foot{padding:1rem 1.5rem;border-top:1px solid var(--border);display:flex;gap:.5rem;flex-shrink:0;}
 .fd-foot .btn{flex:1;}
 .btn-filter{display:inline-flex;align-items:center;gap:.4rem;background:var(--surface);border:1.5px solid var(--border);color:var(--ink2);padding:7px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;font-family:inherit;}
@@ -332,26 +335,33 @@ input,select,textarea,button{font-family:inherit;}
         </div>
         <div class="fd-section">
           <div class="fd-title">Status</div>
-          <label class="fd-check"><input type="checkbox" class="fd-status" value="Pending Payment"> Pending Payment</label>
-          <label class="fd-check"><input type="checkbox" class="fd-status" value="Paid"> Paid</label>
-          <label class="fd-check"><input type="checkbox" class="fd-status" value="Ready for Collection"> Ready for Collection</label>
-          <label class="fd-check"><input type="checkbox" class="fd-status" value="Completed"> Completed</label>
+          <label class="fd-check"><input type="checkbox" class="fd-status" value="Open"> Open</label>
           <label class="fd-check"><input type="checkbox" class="fd-status" value="Cancelled"> Cancelled</label>
-          <label class="fd-check"><input type="checkbox" class="fd-status" value="Refunded"> Refunded</label>
+          <label class="fd-check"><input type="checkbox" class="fd-status" value="Archived"> Archived <span class="fd-note">*</span></label>
+          <label class="fd-check"><input type="checkbox" class="fd-status" value="Deleted"> Deleted <span class="fd-note">*</span></label>
         </div>
         <div class="fd-section">
-          <div class="fd-title">Payment Terms</div>
-          <label class="fd-check"><input type="checkbox" class="fd-terms" value="cash"> Cash</label>
-          <label class="fd-check"><input type="checkbox" class="fd-terms" value="credit"> Credit</label>
+          <div class="fd-title">Payment</div>
+          <label class="fd-check"><input type="checkbox" class="fd-pay" value="Unpaid"> Unpaid</label>
+          <label class="fd-check"><input type="checkbox" class="fd-pay" value="Partially Paid"> Partially Paid <span class="fd-note">*</span></label>
+          <label class="fd-check"><input type="checkbox" class="fd-pay" value="Paid"> Paid</label>
+          <label class="fd-check"><input type="checkbox" class="fd-pay" value="Refunded"> Refunded</label>
         </div>
         <div class="fd-section">
-          <div class="fd-title">Credit Billing</div>
-          <label class="fd-check"><input type="checkbox" class="fd-credit" value="billed"> Billed</label>
-          <label class="fd-check"><input type="checkbox" class="fd-credit" value="unbilled"> Unbilled</label>
+          <div class="fd-title">Channel</div>
+          <label class="fd-check"><input type="checkbox" class="fd-channel" value="online_store"> Online Store</label>
+          <label class="fd-check"><input type="checkbox" class="fd-channel" value="admin_panel"> Admin Panel</label>
+          <label class="fd-check"><input type="checkbox" class="fd-channel" value="shopping_app"> Shopping App</label>
+          <label class="fd-check"><input type="checkbox" class="fd-channel" value="google"> Google</label>
+          <label class="fd-check"><input type="checkbox" class="fd-channel" value="whatsapp"> WhatsApp</label>
+          <div class="fd-footnote">* No <code>channel</code> column on orders yet — selecting these returns no results until the backend captures channel at order creation.</div>
         </div>
         <div class="fd-section">
           <div class="fd-title">Product</div>
           <input type="text" id="fd-product" class="fd-input" placeholder="e.g. Oil Palm Seedling">
+        </div>
+        <div class="fd-section" style="border-bottom:none;">
+          <div class="fd-footnote">* These options need additional backend support to filter properly. The UI is in place; data will follow.</div>
         </div>
       </div>
       <div class="fd-foot">

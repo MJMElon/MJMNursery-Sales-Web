@@ -30,15 +30,15 @@ var ORDER_STATUSES = ['Pending Payment','Paid','Ready for Collection','Completed
 //  Persists the active filter state across re-renders. UI lives in
 //  admin.html (#orderFilterDrawer). loadOrders() reads from this state.
 // ═══════════════════════════════════════
-var ORDER_FILTERS = { dateFrom:'', dateTo:'', statuses:[], terms:[], credit:[], product:'' };
+var ORDER_FILTERS = { dateFrom:'', dateTo:'', statuses:[], payments:[], channels:[], product:'' };
 
 function openOrderFilterDrawer(){
   // Sync UI inputs from current state before opening
   document.getElementById('fd-date-from').value = ORDER_FILTERS.dateFrom || '';
   document.getElementById('fd-date-to').value = ORDER_FILTERS.dateTo || '';
   document.querySelectorAll('.fd-status').forEach(function(cb){ cb.checked = ORDER_FILTERS.statuses.indexOf(cb.value) !== -1; });
-  document.querySelectorAll('.fd-terms').forEach(function(cb){ cb.checked = ORDER_FILTERS.terms.indexOf(cb.value) !== -1; });
-  document.querySelectorAll('.fd-credit').forEach(function(cb){ cb.checked = ORDER_FILTERS.credit.indexOf(cb.value) !== -1; });
+  document.querySelectorAll('.fd-pay').forEach(function(cb){ cb.checked = ORDER_FILTERS.payments.indexOf(cb.value) !== -1; });
+  document.querySelectorAll('.fd-channel').forEach(function(cb){ cb.checked = ORDER_FILTERS.channels.indexOf(cb.value) !== -1; });
   document.getElementById('fd-product').value = ORDER_FILTERS.product || '';
   document.getElementById('orderFilterOverlay').classList.add('open');
   document.getElementById('orderFilterDrawer').classList.add('open');
@@ -58,18 +58,18 @@ function applyOrderFilters(){
   ORDER_FILTERS.dateFrom = document.getElementById('fd-date-from').value || '';
   ORDER_FILTERS.dateTo   = document.getElementById('fd-date-to').value || '';
   ORDER_FILTERS.statuses = readCheckedValues('.fd-status');
-  ORDER_FILTERS.terms    = readCheckedValues('.fd-terms');
-  ORDER_FILTERS.credit   = readCheckedValues('.fd-credit');
+  ORDER_FILTERS.payments = readCheckedValues('.fd-pay');
+  ORDER_FILTERS.channels = readCheckedValues('.fd-channel');
   ORDER_FILTERS.product  = (document.getElementById('fd-product').value || '').trim();
   updateOrderFilterBadge();
   closeOrderFilterDrawer();
   loadOrders();
 }
 function clearOrderFilters(){
-  ORDER_FILTERS = { dateFrom:'', dateTo:'', statuses:[], terms:[], credit:[], product:'' };
+  ORDER_FILTERS = { dateFrom:'', dateTo:'', statuses:[], payments:[], channels:[], product:'' };
   document.getElementById('fd-date-from').value = '';
   document.getElementById('fd-date-to').value = '';
-  document.querySelectorAll('.fd-status, .fd-terms, .fd-credit').forEach(function(cb){ cb.checked = false; });
+  document.querySelectorAll('.fd-status, .fd-pay, .fd-channel').forEach(function(cb){ cb.checked = false; });
   document.getElementById('fd-product').value = '';
   updateOrderFilterBadge();
   loadOrders();
@@ -78,8 +78,8 @@ function countActiveOrderFilters(){
   var c = 0;
   if(ORDER_FILTERS.dateFrom || ORDER_FILTERS.dateTo) c++;
   if(ORDER_FILTERS.statuses.length) c++;
-  if(ORDER_FILTERS.terms.length) c++;
-  if(ORDER_FILTERS.credit.length) c++;
+  if(ORDER_FILTERS.payments.length) c++;
+  if(ORDER_FILTERS.channels.length) c++;
   if(ORDER_FILTERS.product) c++;
   return c;
 }
@@ -108,16 +108,41 @@ async function loadOrders(){
   if(error){toast('Error: '+error.message,'error');return;}
   var orders=data||[];
   if(q)orders=orders.filter(function(o){return(o.order_number||'').toLowerCase().includes(q)||(o.id||'').toLowerCase().includes(q)||(o.customer_name||'').toLowerCase().includes(q)||(o.customer_email||'').toLowerCase().includes(q);});
-  // Multi-select status (sidebar): the simple dropdown above is a single value,
-  // the sidebar lets the user pick several at once.
-  if(f.statuses && f.statuses.length) orders = orders.filter(function(o){return f.statuses.indexOf(o.status) !== -1;});
-  if(f.terms && f.terms.length)       orders = orders.filter(function(o){return f.terms.indexOf(o.payment_terms||'cash') !== -1;});
-  if(f.credit && f.credit.length){
+  // ── Status filter (Shopify-style buckets mapped onto MJM's status field) ──
+  //   Open      → not Cancelled, not Refunded, not Completed, not archived/deleted
+  //   Cancelled → status === 'Cancelled'
+  //   Archived  → archived_at IS NOT NULL  (column not present yet → no matches)
+  //   Deleted   → deleted_at  IS NOT NULL  (column not present yet → no matches)
+  if(f.statuses && f.statuses.length){
     orders = orders.filter(function(o){
-      if(o.payment_terms !== 'credit') return false;
-      var isBilled = !!o.credit_billed_at;
-      return (isBilled && f.credit.indexOf('billed') !== -1) || (!isBilled && f.credit.indexOf('unbilled') !== -1);
+      var ok = false;
+      if(f.statuses.indexOf('Open')      !== -1 && o.status !== 'Cancelled' && o.status !== 'Refunded' && o.status !== 'Completed' && !o.archived_at && !o.deleted_at) ok = true;
+      if(f.statuses.indexOf('Cancelled') !== -1 && o.status === 'Cancelled') ok = true;
+      if(f.statuses.indexOf('Archived')  !== -1 && !!o.archived_at) ok = true;
+      if(f.statuses.indexOf('Deleted')   !== -1 && !!o.deleted_at) ok = true;
+      return ok;
     });
+  }
+  // ── Payment filter ──
+  //   Unpaid         → status === 'Pending Payment'
+  //   Paid           → status IN ('Paid','Ready for Collection','Completed')
+  //   Refunded       → status === 'Refunded'
+  //   Partially Paid → no schema support (would need deposit/paid-amount tracking)
+  if(f.payments && f.payments.length){
+    orders = orders.filter(function(o){
+      var s = o.status;
+      var paid = (s === 'Paid' || s === 'Ready for Collection' || s === 'Completed');
+      var ok = false;
+      if(f.payments.indexOf('Unpaid')         !== -1 && s === 'Pending Payment') ok = true;
+      if(f.payments.indexOf('Paid')           !== -1 && paid) ok = true;
+      if(f.payments.indexOf('Refunded')       !== -1 && s === 'Refunded') ok = true;
+      // 'Partially Paid' has no backing data → never matches.
+      return ok;
+    });
+  }
+  // ── Channel filter ── (no channel column yet — selecting any returns no rows)
+  if(f.channels && f.channels.length){
+    orders = orders.filter(function(o){ return o.channel && f.channels.indexOf(o.channel) !== -1; });
   }
   // Product filter: query order_items separately, get matching order_ids.
   if(f.product){

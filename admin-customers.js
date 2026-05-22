@@ -11,7 +11,17 @@
 */
 
 // True if this profile's permissions JSONB grants any operation-system
-// access. Customers' permissions are null/empty or all modules='none'.
+// access. Customers' permissions are null/empty, all modules='none', or
+// carry a customer-level marker like 'customer' that does NOT grant
+// staff-level access. Only staff-grade module values are treated as
+// operations staff; anything else is a customer.
+//
+// Earlier versions flagged anyone with a non-'none' module value as
+// staff, which was too aggressive — the salesweb signup path appears to
+// populate at least one customer-level marker on new profiles (so
+// every legit customer was being filtered out and the list rendered
+// empty even though shared_profiles read access was working).
+var STAFF_MODULE_VALUES = {admin:1, normal:1, view:1, edit:1, manage:1, read:1, write:1, full:1, staff:1};
 function isOperationStaff(perms){
   if(!perms || typeof perms !== 'object') return false;
   if(perms.manage_users) return true;
@@ -19,7 +29,7 @@ function isOperationStaff(perms){
   if(perms.modules && typeof perms.modules === 'object'){
     for(var k in perms.modules){
       var v = perms.modules[k];
-      if(v && v !== 'none') return true;
+      if(v && STAFF_MODULE_VALUES[String(v).toLowerCase()]) return true;
     }
   }
   return false;
@@ -49,10 +59,15 @@ async function loadCustomers(){
   var rawRowCount = (swCusts||[]).length;
   console.log('[loadCustomers] shared_profiles returned',rawRowCount,'rows before staff filter');
   // Drop staff: either explicitly marked system, or has operation permissions.
+  // Log who got rejected so future filter false-positives are obvious.
+  var rejected = [];
   swCusts=(swCusts||[]).filter(function(p){
-    return p.user_type !== 'system' && !isOperationStaff(p.permissions);
+    var keep = (p.user_type !== 'system') && !isOperationStaff(p.permissions);
+    if(!keep) rejected.push({email:p.email, role:p.role, user_type:p.user_type, permissions:p.permissions});
+    return keep;
   });
   console.log('[loadCustomers]',swCusts.length,'rows after staff filter');
+  if(rejected.length) console.log('[loadCustomers] rejected as staff:',rejected);
 
   // Paid-order lookup — still needed for the "Has Paid Order" stat box and
   // to badge customers in the table, but no longer a source of customers.

@@ -1045,6 +1045,12 @@ async function placeOrder(){
       }
 
       if(billData&&billData.url){
+        // Stash the bill_id so payment-callback.html can pass it to
+        // verify-billplz-bill for server-side verification (the Billplz
+        // redirect URL params alone aren't trusted).
+        try{
+          if(billData.bill_id) sessionStorage.setItem('mjm_pay_bill_id',billData.bill_id);
+        }catch(e){}
         // Redirect to Billplz payment page
         window.location.href=billData.url;
         return;

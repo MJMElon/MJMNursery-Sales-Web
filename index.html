@@ -3196,6 +3196,7 @@ async function initPortal(){
 
   // Load real orders from database
   await loadCustomerOrders();
+  try{await loadPortalSettings();}catch(e){console.error('portal settings load:',e);}
 
   // Defensively clear the search input before rendering. Chrome/Safari can
   // ignore autocomplete=off for fields near a logged-in user's context and
@@ -3444,15 +3445,42 @@ function goPayOrder(orderId,total){
 function _odLabel(label,val){return'<div style="color:var(--text-light);font-size:11px;">'+label+'</div><div style="font-weight:600;font-size:12px;">'+esc(val||'—')+'</div>';}
 function _odSection(title){return'<div style="font-size:10px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin:1rem 0 .5rem;padding-bottom:.3rem;border-bottom:1px solid var(--green-pale);">'+title+'</div>';}
 
+// Cached portal-wide settings — booking URL for the collection CTA in the
+// timeline, and bank details printed on the downloadable copy of any
+// Pending-Payment order. Both come from salesweb_app_settings.
+var P_BOOKING_URL='https://collect.mjmnursery.com/';
+var P_PAY_DETAILS={bank_name:'',account_name:'',account_number:'',duitnow_qr_url:''};
+async function loadPortalSettings(){
+  if(!_sb)return;
+  try{
+    var{data:notif}=await _sb.from('salesweb_app_settings').select('value').eq('key','notification_config').maybeSingle();
+    if(notif&&notif.value){
+      var nv=typeof notif.value==='string'?JSON.parse(notif.value):notif.value;
+      if(nv&&nv.booking_url)P_BOOKING_URL=nv.booking_url;
+    }
+  }catch(e){/* keep default */}
+  try{
+    var{data:pay}=await _sb.from('salesweb_app_settings').select('value').eq('key','payment_details').maybeSingle();
+    if(pay&&pay.value){
+      var pv=typeof pay.value==='string'?JSON.parse(pay.value):pay.value;
+      if(pv)P_PAY_DETAILS={...P_PAY_DETAILS,...pv};
+    }
+  }catch(e){/* keep default */}
+}
+
 function openOrderDetail(ordNum){
   var o=P_ORDERS.find(function(x){return x.id===ordNum;});
   if(!o)return;
   var h='';
 
   // ── Order Info ──
+  var idJsDl=String(o.id||'').replace(/[\\'"<>]/g,'');
   h+='<div style="background:var(--cream);border-radius:12px;padding:1rem;margin-bottom:.8rem;">';
   h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;"><span style="font-family:\'Cormorant Garamond\',serif;font-size:1.1rem;font-weight:600;">Order #'+o.id+'</span><span class="p-badge '+pBadge(o.status)+'" style="font-size:11px;">'+o.status+'</span></div>';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;">';
   h+='<div style="font-size:12px;color:var(--text-mid);">'+o.orderDate+'</div>';
+  h+='<button onclick="downloadOrder(\''+idJsDl+'\')" style="background:#fff;border:1.5px solid var(--green-pale);color:var(--green-dark);padding:.35rem .75rem;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:.3rem;transition:all .15s;" onmouseover="this.style.background=\'var(--green-dark)\';this.style.color=\'#fff\';this.style.borderColor=\'var(--green-dark)\';" onmouseout="this.style.background=\'#fff\';this.style.color=\'var(--green-dark)\';this.style.borderColor=\'var(--green-pale)\';">📄 Download Order</button>';
+  h+='</div>';
   h+='</div>';
 
   // ── Billing Details ──
@@ -3541,54 +3569,100 @@ function openOrderDetail(ordNum){
     }
   }
 
-  // ── Order Timeline ──
-  h+=_odSection('Order Timeline');
+  // ── Order Timeline (curated flow) ──
+  // We don't render the raw `salesweb_order_timeline` rows directly — that
+  // table holds bookkeeping entries the customer doesn't need to see
+  // ("Payment Initiated", "AL Created", verifier diagnostics, etc.). Instead
+  // we project a fixed customer-facing flow:
+  //   Order Placed → Payment Confirmed → Points Issued → Book Collection
+  //   → Collected Seedling on <date> → Order Completed
+  // The raw rows are still scanned to pick up the timestamps for each step.
+  h+=_odSection('Order Status');
   h+='<div style="position:relative;padding-left:20px;">';
   h+='<div style="position:absolute;left:5px;top:4px;bottom:4px;width:2px;background:var(--green-pale);"></div>';
 
-  // Build timeline entries from timeline + DOs + BAs
-  var tlEntries=[];
-
-  // From order_timeline table
+  var stampPlaced=null,stampPaid=null,stampPoints=null,stampCollected=null,stampCompleted=null,stampCancelled=null;
+  var pointsCount=Number(o.pointsIssued||0)||0;
   if(o.timeline&&o.timeline.length){
     o.timeline.forEach(function(t){
-      tlEntries.push({date:t.created_at,label:t.status,note:t.note||'',type:'timeline'});
+      var s=String(t.status||'').toLowerCase();
+      if(!stampPlaced && (s==='order placed'||s==='placed')) stampPlaced=t.created_at;
+      if(!stampPaid && (s==='paid'||s.indexOf('payment confirmed')>-1)) stampPaid=t.created_at;
+      if(!stampPoints && s==='points issued'){
+        stampPoints=t.created_at;
+        var m=String(t.note||'').match(/(\d+)\s+loyalty/i);
+        if(m && !pointsCount) pointsCount=parseInt(m[1],10);
+      }
+      if(!stampCompleted && (s==='completed'||s==='order completed')) stampCompleted=t.created_at;
+      if(!stampCancelled && s==='cancelled') stampCancelled=t.created_at;
     });
   }
+  if(!stampPlaced) stampPlaced=o.orderDate;
 
-  // From DOs — add collection entries
+  // Collected = the nursery has actually handed the seedlings over (a DO was
+  // marked Delivered). Attach any DO documents + admin-uploaded files to
+  // this step so the customer can grab their proof of collection in one place.
+  var collectedFiles=[];
   if(o.dos&&o.dos.length){
     o.dos.forEach(function(d){
-      if(d.status!=='Cancelled'){
-        var doDate=d.delivery_date||d.created_at;
-        tlEntries.push({date:doDate,label:'Collection — DO '+(d.do_number||''),note:'Qty: '+d.total_qty,type:'do'});
-      }
-      if(d.ba_number||d.ba_raw_name){
-        tlEntries.push({date:d.created_at,label:'BA Linked — '+(d.ba_number||d.ba_raw_name),note:'',type:'ba'});
+      if(d.status==='Delivered'){
+        var dt=d.delivery_date||d.created_at;
+        if(!stampCollected || new Date(dt) < new Date(stampCollected)) stampCollected=dt;
+        if(d.image_url && String(d.image_url).indexOf('data:')!==0){
+          collectedFiles.push({url:d.image_url,name:'DO '+(d.do_number||'document')});
+        }
       }
     });
   }
 
-  // Sort by date — newest first so the latest status is always on top
-  tlEntries.sort(function(a,b){return new Date(b.date||0)-new Date(a.date||0);});
-
-  if(!tlEntries.length){
-    h+='<div style="font-size:12px;color:var(--text-light);padding:.5rem 0;">No timeline events yet.</div>';
+  var steps=[];
+  if(stampCancelled){
+    steps.push({label:'Order Placed',note:'Order placed by customer',date:stampPlaced,done:true});
+    steps.push({label:'Order Cancelled',note:'This order was cancelled',date:stampCancelled,done:true,isCancelled:true});
   } else {
-    tlEntries.forEach(function(t,i){
-      var isLatest=i===0;
-      var dt=t.date?new Date(t.date).toLocaleString('en-MY',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';
-      var dotColor=isLatest?'var(--green-mid)':t.type==='do'?'#15803d':t.type==='ba'?'var(--gold)':'var(--green-pale)';
-      var icon=t.type==='do'?'📦 ':t.type==='ba'?'📋 ':'';
-      var latestBadge=isLatest?' <span style="display:inline-block;font-size:9px;font-weight:700;color:#fff;background:var(--green-mid);padding:1px 6px;border-radius:10px;letter-spacing:.05em;text-transform:uppercase;vertical-align:middle;margin-left:.3rem;">Latest</span>':'';
-      h+='<div style="position:relative;padding-bottom:.6rem;margin-bottom:.2rem;'+(isLatest?'background:rgba(62,107,66,.05);border-radius:8px;padding:.45rem .6rem .55rem;margin-left:-.6rem;':'')+'">';
-      h+='<div style="position:absolute;left:'+(isLatest?'-14px':'-20px')+';top:'+(isLatest?'.55rem':'3px')+';width:'+(isLatest?'12px':'10px')+';height:'+(isLatest?'12px':'10px')+';border-radius:50%;background:'+dotColor+';border:2px solid #fff;box-shadow:0 0 0 '+(isLatest?'2px':'1px')+' '+dotColor+';"></div>';
-      h+='<div style="font-size:12px;font-weight:'+(isLatest?'700':'600')+';color:var(--text-dark);">'+icon+esc(t.label)+latestBadge+'</div>';
-      if(t.note)h+='<div style="font-size:11px;color:var(--text-mid);">'+esc(t.note)+'</div>';
-      h+='<div style="font-size:10px;color:var(--text-light);">'+dt+'</div>';
-      h+='</div>';
-    });
+    steps.push({label:'Order Placed',note:'Order placed by customer',date:stampPlaced,done:true});
+    if(stampPaid){
+      steps.push({label:'Payment Confirmed',note:o.paymentMethod||'Payment received',date:stampPaid,done:true});
+    }
+    if(stampPoints){
+      var pNote = pointsCount>0 ? (pointsCount+' loyalty points credited') : 'Loyalty points credited';
+      steps.push({label:'Points Issued',note:pNote,date:stampPoints,done:true});
+    }
+    if(stampCollected){
+      steps.push({label:'Collection Booked',note:'Collection slot confirmed',done:true});
+      var cDate=new Date(stampCollected).toLocaleDateString('en-MY',{day:'2-digit',month:'short',year:'numeric'});
+      steps.push({label:'Collected Seedling on '+cDate,note:'',date:stampCollected,done:true,files:collectedFiles});
+    } else if(stampPaid){
+      steps.push({label:'Book Your Collection',note:'Pick a collection time at the nursery',done:false,action:'book'});
+    }
+    if(stampCompleted || o.status==='Completed' || o.status==='Order Completed'){
+      steps.push({label:'Order Completed',note:'Thank you for your purchase! 🌱',date:stampCompleted,done:true,isFinal:true});
+    }
   }
+
+  steps.forEach(function(t,i){
+    var isCurrent = !t.done && i === steps.length-1;
+    var dt = t.date ? new Date(t.date).toLocaleString('en-MY',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
+    var dotColor = t.isCancelled ? '#dc2626' : (isCurrent ? 'var(--gold)' : (t.isFinal ? '#15803d' : (t.done ? 'var(--green-mid)' : 'var(--green-pale)')));
+    var highlight = isCurrent ? 'background:rgba(201,168,76,.10);border:1px solid #F2D58F;border-radius:8px;padding:.55rem .7rem .6rem;margin-left:-.7rem;' : '';
+    h+='<div style="position:relative;padding-bottom:.65rem;margin-bottom:.2rem;'+highlight+'">';
+    h+='<div style="position:absolute;left:'+(isCurrent?'-15px':'-20px')+';top:'+(isCurrent?'.65rem':'3px')+';width:'+(isCurrent?'12px':'10px')+';height:'+(isCurrent?'12px':'10px')+';border-radius:50%;background:'+dotColor+';border:2px solid #fff;box-shadow:0 0 0 '+(isCurrent?'2px':'1px')+' '+dotColor+';"></div>';
+    h+='<div style="font-size:12.5px;font-weight:'+(isCurrent?'700':'600')+';color:var(--text-dark);">'+esc(t.label)+'</div>';
+    if(t.note) h+='<div style="font-size:11px;color:var(--text-mid);margin-top:.1rem;">'+esc(t.note)+'</div>';
+    if(dt) h+='<div style="font-size:10px;color:var(--text-light);margin-top:.1rem;">'+dt+'</div>';
+    if(t.action==='book'){
+      var bookingUrl = P_BOOKING_URL || 'https://collect.mjmnursery.com/';
+      h+='<div style="margin-top:.55rem;"><a href="'+esc(bookingUrl)+'" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:.4rem;background:var(--green-dark);color:#fff;padding:.5rem .95rem;border-radius:8px;font-size:12px;font-weight:600;text-decoration:none;">📅 Book Collection Time</a></div>';
+    }
+    if(t.files && t.files.length){
+      h+='<div style="margin-top:.4rem;display:flex;flex-direction:column;gap:.2rem;">';
+      t.files.forEach(function(f){
+        h+='<a href="'+esc(f.url)+'" target="_blank" rel="noopener" style="font-size:11px;color:var(--green-mid);text-decoration:none;font-weight:500;">📎 '+esc(f.name)+'</a>';
+      });
+      h+='</div>';
+    }
+    h+='</div>';
+  });
   h+='</div>';
 
   // ── Cancel order action (only while the order is still unpaid) ──
@@ -3605,6 +3679,116 @@ function openOrderDetail(ordNum){
 
   document.getElementById('p-od-body').innerHTML=h;
   document.getElementById('p-order-detail-modal').classList.add('open');
+}
+
+// Opens a print-friendly window with the order receipt — order number,
+// date, billing details, items, total. When the order is still Pending
+// Payment, also shows the bank details + a "use Order # as reference"
+// hint so the customer can pay via bank transfer from the printout.
+// Print is triggered automatically; the customer's browser print dialog
+// is the "Save as PDF" entry point on every desktop platform.
+function downloadOrder(orderId){
+  var o = P_ORDERS.find(function(x){return x.id===orderId;});
+  if(!o){ showPortalToast('Order not found'); return; }
+
+  var isPending = (o.status==='Pending Payment');
+  var totalLabel = isPending ? 'Amount to be Paid' : 'Total Paid';
+  var statusColor = isPending ? '#b45309' : '#15803d';
+  var pd = P_PAY_DETAILS || {};
+
+  var itemsHtml = '';
+  var subtotal = 0;
+  if(o.items && o.items.length){
+    o.items.forEach(function(it){
+      var st = Number(it.subtotal!=null ? it.subtotal : it.unit_price*it.quantity) || 0;
+      subtotal += st;
+      itemsHtml += '<tr>'+
+        '<td style="padding:8px;border-bottom:1px solid #EEE;">'+esc(stripMonth(it.product_name))+'</td>'+
+        '<td style="padding:8px;border-bottom:1px solid #EEE;text-align:right;">RM '+(Number(it.unit_price)||0).toFixed(2)+'</td>'+
+        '<td style="padding:8px;border-bottom:1px solid #EEE;text-align:right;">'+it.quantity+'</td>'+
+        '<td style="padding:8px;border-bottom:1px solid #EEE;text-align:right;">RM '+st.toFixed(2)+'</td>'+
+      '</tr>';
+    });
+  }
+  var subRow='', discRow='';
+  if(Math.abs(subtotal - (Number(o.total)||0)) > 0.001){
+    subRow = '<tr><td colspan="3" style="padding:6px 8px;text-align:right;color:#8AAB8C;">Subtotal</td><td style="padding:6px 8px;text-align:right;">RM '+subtotal.toFixed(2)+'</td></tr>';
+    var disc = subtotal - (Number(o.total)||0);
+    if(disc > 0){
+      discRow = '<tr><td colspan="3" style="padding:6px 8px;text-align:right;color:#dc2626;">Discount / Voucher</td><td style="padding:6px 8px;text-align:right;color:#dc2626;">-RM '+disc.toFixed(2)+'</td></tr>';
+    }
+  }
+
+  var bankBlock = '';
+  if(isPending){
+    var hasBank = pd.bank_name || pd.account_name || pd.account_number || pd.duitnow_qr_url;
+    bankBlock = '<div style="margin-top:24px;padding:18px;background:#FFF8EB;border:1px solid #F2D58F;border-radius:8px;">'+
+      '<div style="font-size:11px;font-weight:700;color:#8A6314;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Payment Instructions</div>'+
+      (hasBank ?
+        '<div style="font-size:13px;color:#5C4308;line-height:1.7;">'+
+          (pd.bank_name ?      '<div><strong>Bank:</strong> '+esc(pd.bank_name)+'</div>' : '')+
+          (pd.account_name ?   '<div><strong>Account Name:</strong> '+esc(pd.account_name)+'</div>' : '')+
+          (pd.account_number ? '<div><strong>Account Number:</strong> '+esc(pd.account_number)+'</div>' : '')+
+          '<div style="margin-top:8px;padding-top:8px;border-top:1px dashed #E2C76E;font-size:12px;">Please use <strong>Order #'+esc(o.id)+'</strong> as your payment reference, then upload your payment proof from the portal.</div>'+
+        '</div>'
+        :
+        '<div style="font-size:12px;color:#5C4308;">Please contact MJM Nursery for payment details, and use <strong>Order #'+esc(o.id)+'</strong> as your reference.</div>'
+      )+
+    '</div>';
+  }
+
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Order #'+esc(o.id)+' — MJM Nursery</title>'+
+    '<style>'+
+      'body{font-family:Helvetica,Arial,sans-serif;color:#1A2E1B;max-width:680px;margin:30px auto;padding:0 24px;line-height:1.5;}'+
+      'h1{font-family:Georgia,serif;font-size:26px;margin:0 0 4px;color:#2D4A30;font-weight:600;}'+
+      '.muted{color:#8AAB8C;font-size:12px;}'+
+      '.sect{font-size:11px;font-weight:700;color:#4A6B4C;text-transform:uppercase;letter-spacing:.06em;margin:24px 0 8px;padding-bottom:6px;border-bottom:1px solid #C8DFC9;}'+
+      '.row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px;}'+
+      '.row .lbl{color:#8AAB8C;}'+
+      '.row .val{font-weight:600;text-align:right;}'+
+      'table{width:100%;border-collapse:collapse;margin-top:6px;}'+
+      'th{font-size:11px;text-align:left;color:#4A6B4C;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid #2D4A30;padding:8px;}'+
+      '.total{font-size:16px;font-weight:700;color:'+statusColor+';}'+
+      '.brand{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#8AAB8C;}'+
+      '@media print{body{margin:0;padding:0 18px;}.no-print{display:none !important;}}'+
+    '</style></head><body>'+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #2D4A30;padding-bottom:14px;">'+
+      '<div><div class="brand">MJM Nursery</div><h1>Order #'+esc(o.id)+'</h1><div class="muted">Placed on '+esc(o.orderDate)+'</div></div>'+
+      '<div style="text-align:right;"><div class="muted">Status</div><div style="font-size:14px;font-weight:700;color:'+statusColor+';">'+esc(o.status)+'</div></div>'+
+    '</div>'+
+
+    '<div class="sect">Billing Details</div>'+
+    '<div>'+
+      '<div class="row"><span class="lbl">Name</span><span class="val">'+esc(o.billingName)+'</span></div>'+
+      (o.email      ? '<div class="row"><span class="lbl">Email</span><span class="val">'+esc(o.email)+'</span></div>' : '')+
+      (o.contactPhone ? '<div class="row"><span class="lbl">Phone</span><span class="val">'+esc(o.contactPhone)+'</span></div>' : '')+
+      (o.billingTin ? '<div class="row"><span class="lbl">TIN</span><span class="val">'+esc(o.billingTin)+'</span></div>' : '')+
+      (o.billingIc  ? '<div class="row"><span class="lbl">IC</span><span class="val">'+esc(o.billingIc)+'</span></div>' : '')+
+      (o.billingAddr? '<div class="row"><span class="lbl">Address</span><span class="val">'+esc(o.billingAddr)+'</span></div>' : '')+
+      '<div class="row"><span class="lbl">Payment Method</span><span class="val">'+esc(o.paymentMethod)+'</span></div>'+
+    '</div>'+
+
+    '<div class="sect">Items</div>'+
+    '<table><thead><tr><th>Product</th><th style="text-align:right;">Price</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Subtotal</th></tr></thead>'+
+    '<tbody>'+itemsHtml+'</tbody></table>'+
+    (subRow ? '<table style="margin-top:0;"><tbody>'+subRow+discRow+'</tbody></table>' : '')+
+    '<div style="border-top:2px solid #2D4A30;margin-top:10px;padding-top:12px;display:flex;justify-content:space-between;align-items:center;">'+
+      '<div class="total">'+totalLabel+'</div>'+
+      '<div class="total">RM '+(Number(o.total)||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</div>'+
+    '</div>'+
+
+    bankBlock +
+
+    '<div style="margin-top:30px;padding-top:14px;border-top:1px solid #C8DFC9;text-align:center;font-size:11px;color:#8AAB8C;">Thank you for choosing MJM Nursery.</div>'+
+    '<div class="no-print" style="text-align:center;margin-top:24px;"><button onclick="window.print()" style="padding:10px 22px;background:#2D4A30;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">Print / Save as PDF</button></div>'+
+    '<script>setTimeout(function(){try{window.print();}catch(e){}},500);<\/script>'+
+    '</body></html>';
+
+  var w = window.open('','_blank','width=760,height=920');
+  if(!w){ showPortalToast('Please allow pop-ups to download the order'); return; }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
 }
 
 // Customer-initiated order cancel. Allowed only while status === 'Pending Payment'.

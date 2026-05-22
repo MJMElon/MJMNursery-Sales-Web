@@ -359,9 +359,9 @@
   .nav-links a { font-size: 13px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: rgba(255,255,255,.8); text-decoration: none; transition: color .2s; cursor: pointer; }
   .nav-links a:hover, .nav-links a.active { color: var(--gold-light); }
   .nav-actions { display: flex; align-items: center; gap: 1.25rem; }
-  .nav-actions a { color: rgba(255,255,255,.7); text-decoration: none; font-size: 13px; transition: color .2s; }
-  .nav-actions a:hover { color: var(--white); }
-  .btn-cart { background: var(--gold); color: var(--green-dark); border: none; padding: .5rem 1.25rem; border-radius: 6px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; transition: background .2s; display: flex; align-items: center; gap: .4rem; }
+  .nav-actions a { color: rgba(255,255,255,.8); text-decoration: none; font-size: 13px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; transition: color .2s; cursor: pointer; }
+  .nav-actions a:hover { color: var(--gold-light); }
+  .btn-cart { background: var(--gold); color: var(--green-dark); border: none; padding: .5rem 1.25rem; border-radius: 6px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; transition: background .2s; display: flex; align-items: center; gap: .4rem; }
   .btn-cart:hover { background: var(--gold-light); }
   .hamburger { display: none; background: none; border: none; cursor: pointer; padding: .25rem; }
   .hamburger span { display: block; width: 22px; height: 2px; background: var(--white); margin: 4px 0; transition: .3s; }
@@ -482,7 +482,8 @@
     padding: .4rem 1.1rem; font-size: 12px; letter-spacing: .12em;
   }
   .product-card.is-sold-out .product-name,
-  .product-card.is-sold-out .product-month { color: var(--text-light); }
+  .product-card.is-sold-out .product-month,
+  .product-card.is-sold-out .product-price { color: #b8b8b8 !important; }
   .product-card.is-sold-out .product-stock { color: #c0392b; font-weight: 600; }
   .product-info { padding: 1rem 1.1rem 1.2rem; }
   .product-name { font-size: 14px; font-weight: 500; color: var(--text-dark); margin-bottom: .15rem; line-height: 1.3; }
@@ -2718,8 +2719,7 @@ function renderProductCard(p) {
       + '<button class="card-qty-btn" type="button" onclick="event.stopPropagation();changeCardQty(' + idx + ',1)" aria-label="Increase quantity">+</button>'
       + '</div>'
     : '';
-  var priceTxt = 'RM ' + (p.priceNum || 0).toFixed(2);
-  var addLabel = p.status === 'sold-out' ? 'Sold Out' : p.status === 'coming-soon' ? 'Coming Soon' : 'Add to Cart · ' + priceTxt;
+  var addLabel = p.status === 'sold-out' ? 'Sold Out' : p.status === 'coming-soon' ? 'Coming Soon' : 'Add to Cart';
   var addBtn = '<button class="btn-add card-add-btn" type="button" ' + (canAdd ? '' : 'disabled ') + 'onclick="event.stopPropagation();addCardToCart(' + idx + ')">' + addLabel + '</button>';
   var cardClass = 'product-card' + (p.status === 'sold-out' ? ' is-sold-out' : '');
 
@@ -2728,7 +2728,8 @@ function renderProductCard(p) {
        +   '<div class="product-info">'
        +     '<div class="product-name">' + esc(p.name) + '</div>'
        +     (p.month ? '<div class="product-month">' + esc(p.month) + '</div>' : '')
-       +     '<div class="product-stock" style="margin-top:.4rem;">' + (p.stock > 0 ? p.stock.toLocaleString() + ' left' : 'Out of stock') + '</div>'
+       +     '<div class="product-price" style="margin-top:.3rem;">' + esc(p.price) + '</div>'
+       +     '<div class="product-stock">' + (p.stock > 0 ? p.stock.toLocaleString() + ' left' : 'Out of stock') + '</div>'
        +     qtyRow
        +     addBtn
        +   '</div>'

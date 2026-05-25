@@ -199,9 +199,16 @@ async function loadOrders(){
     } else if(paidRM >= totalRM && totalRM > 0){
       totalCell += '<div style="font-size:10px;color:var(--green);font-weight:600;margin-top:2px;">Paid in full</div>';
     }
+    var custIdJs=String(o.customer_id||'').replace(/[\\'"<>]/g,'');
+    // Customer name links to the profile modal when the order is tied to a
+    // registered customer; falls back to plain text for guest/manual orders.
+    var custName=esc(o.customer_name||'—');
+    var custNameCell = custIdJs
+      ? '<a onclick="event.stopPropagation();viewCustomer(\''+custIdJs+'\')" style="cursor:pointer;color:var(--green-dark);font-weight:600;text-decoration:none;" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">'+custName+'</a>'
+      : custName;
     html+='<tr onclick="viewOrder(\''+idJs+'\')" style="cursor:pointer;">'+
       '<td style="font-weight:600;">#'+esc(shortId)+'</td>'+
-      '<td>'+esc(o.customer_name||'—')+'<div style="font-size:11px;color:var(--ink4);">'+esc(o.customer_email||'')+'</div></td>'+
+      '<td>'+custNameCell+'<div style="font-size:11px;color:var(--ink4);">'+esc(o.customer_email||'')+'</div></td>'+
       '<td style="font-size:12px;">'+fmtDate(o.created_at)+'</td>'+
       '<td>'+termsBadge+'</td>'+
       '<td style="text-align:center;">—</td>'+

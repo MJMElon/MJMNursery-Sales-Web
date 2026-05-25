@@ -391,6 +391,18 @@ input,select,textarea,button{font-family:inherit;}
           </div>
         </div>
         <div class="fd-section">
+          <div class="fd-title">Status</div>
+          <label class="fd-check"><input type="checkbox" class="cf-status" value="verified"> Verified</label>
+          <label class="fd-check"><input type="checkbox" class="cf-status" value="unverified"> Unverified</label>
+          <label class="fd-check"><input type="checkbox" class="cf-status" value="blacklisted"> Blacklisted</label>
+        </div>
+        <div class="fd-section">
+          <div class="fd-title">Purchase</div>
+          <label class="fd-check"><input type="checkbox" class="cf-purchase" value="never"> Never purchased</label>
+          <label class="fd-check"><input type="checkbox" class="cf-purchase" value="first"> First purchase</label>
+          <label class="fd-check"><input type="checkbox" class="cf-purchase" value="repeat"> Repeat purchase</label>
+        </div>
+        <div class="fd-section">
           <div class="fd-title">Membership</div>
           <div id="cf-tiers"><div style="font-size:11px;color:var(--ink4);">Loading tiers…</div></div>
         </div>
@@ -399,11 +411,32 @@ input,select,textarea,button{font-family:inherit;}
           <label class="fd-check"><input type="checkbox" class="cf-term" value="cash"> Cash</label>
           <label class="fd-check"><input type="checkbox" class="cf-term" value="credit"> Credit</label>
         </div>
-        <div class="fd-section" style="border-bottom:none;">
+        <div class="fd-section">
           <div class="fd-title">Has Paid Order</div>
           <label class="fd-check"><input type="radio" name="cf-paid" class="cf-paid" value="" checked> Any</label>
           <label class="fd-check"><input type="radio" name="cf-paid" class="cf-paid" value="yes"> Yes</label>
           <label class="fd-check"><input type="radio" name="cf-paid" class="cf-paid" value="no"> No</label>
+        </div>
+        <div class="fd-section">
+          <div class="fd-title">Spending (RM)</div>
+          <div style="display:flex;gap:.4rem;">
+            <select id="cf-spend-op" class="fd-input" style="flex:1;"><option value="">—</option><option value="gt">More than</option><option value="eq">Equals to</option><option value="lt">Less than</option></select>
+            <input type="number" id="cf-spend-amt" class="fd-input" min="0" step="0.01" placeholder="Amount" style="flex:1;">
+          </div>
+        </div>
+        <div class="fd-section">
+          <div class="fd-title">Point Balance</div>
+          <div style="display:flex;gap:.4rem;">
+            <select id="cf-points-op" class="fd-input" style="flex:1;"><option value="">—</option><option value="gt">More than</option><option value="lt">Less than</option></select>
+            <input type="number" id="cf-points-amt" class="fd-input" min="0" step="1" placeholder="Points" style="flex:1;">
+          </div>
+        </div>
+        <div class="fd-section" style="border-bottom:none;">
+          <div class="fd-title">Credit Balance (RM outstanding)</div>
+          <div style="display:flex;gap:.4rem;">
+            <select id="cf-credit-op" class="fd-input" style="flex:1;"><option value="">—</option><option value="gt">More than</option><option value="lt">Less than</option></select>
+            <input type="number" id="cf-credit-amt" class="fd-input" min="0" step="0.01" placeholder="Amount" style="flex:1;">
+          </div>
         </div>
       </div>
       <div class="fd-foot">

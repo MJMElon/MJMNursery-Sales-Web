@@ -39,7 +39,7 @@ function isOperationStaff(perms){
 //  CUSTOMER FILTER DRAWER (right sidebar)
 //  Reuses the .filter-drawer / .fd-* styles defined for the orders filter.
 // ═══════════════════════════════════════
-var CUSTOMER_FILTERS = { joinedFrom:'', joinedTo:'', tiers:[], terms:[], paid:'' };
+var CUSTOMER_FILTERS = { joinedFrom:'', joinedTo:'', tiers:[], terms:[], paid:'', statuses:[], purchase:[], spendOp:'', spendAmt:'', pointsOp:'', pointsAmt:'', creditOp:'', creditAmt:'' };
 
 async function openCustomerFilterDrawer(){
   document.getElementById('cf-date-from').value = CUSTOMER_FILTERS.joinedFrom || '';
@@ -51,8 +51,16 @@ async function openCustomerFilterDrawer(){
     var checked = CUSTOMER_FILTERS.tiers.indexOf(t.name) !== -1 ? ' checked' : '';
     return '<label class="fd-check"><input type="checkbox" class="cf-tier" value="'+esc(t.name)+'"'+checked+'> '+esc(t.name)+'</label>';
   }).join('');
+  document.querySelectorAll('.cf-status').forEach(function(cb){ cb.checked = CUSTOMER_FILTERS.statuses.indexOf(cb.value) !== -1; });
+  document.querySelectorAll('.cf-purchase').forEach(function(cb){ cb.checked = CUSTOMER_FILTERS.purchase.indexOf(cb.value) !== -1; });
   document.querySelectorAll('.cf-term').forEach(function(cb){ cb.checked = CUSTOMER_FILTERS.terms.indexOf(cb.value) !== -1; });
   document.querySelectorAll('.cf-paid').forEach(function(rb){ rb.checked = (CUSTOMER_FILTERS.paid||'') === rb.value; });
+  document.getElementById('cf-spend-op').value = CUSTOMER_FILTERS.spendOp || '';
+  document.getElementById('cf-spend-amt').value = CUSTOMER_FILTERS.spendAmt || '';
+  document.getElementById('cf-points-op').value = CUSTOMER_FILTERS.pointsOp || '';
+  document.getElementById('cf-points-amt').value = CUSTOMER_FILTERS.pointsAmt || '';
+  document.getElementById('cf-credit-op').value = CUSTOMER_FILTERS.creditOp || '';
+  document.getElementById('cf-credit-amt').value = CUSTOMER_FILTERS.creditAmt || '';
   document.getElementById('custFilterOverlay').classList.add('open');
   document.getElementById('custFilterDrawer').classList.add('open');
 }
@@ -64,28 +72,42 @@ function applyCustomerFilters(){
   CUSTOMER_FILTERS.joinedFrom = document.getElementById('cf-date-from').value || '';
   CUSTOMER_FILTERS.joinedTo   = document.getElementById('cf-date-to').value || '';
   CUSTOMER_FILTERS.tiers = []; document.querySelectorAll('.cf-tier:checked').forEach(function(cb){ CUSTOMER_FILTERS.tiers.push(cb.value); });
+  CUSTOMER_FILTERS.statuses = []; document.querySelectorAll('.cf-status:checked').forEach(function(cb){ CUSTOMER_FILTERS.statuses.push(cb.value); });
+  CUSTOMER_FILTERS.purchase = []; document.querySelectorAll('.cf-purchase:checked').forEach(function(cb){ CUSTOMER_FILTERS.purchase.push(cb.value); });
   CUSTOMER_FILTERS.terms = []; document.querySelectorAll('.cf-term:checked').forEach(function(cb){ CUSTOMER_FILTERS.terms.push(cb.value); });
   var paid=''; document.querySelectorAll('.cf-paid:checked').forEach(function(rb){ paid=rb.value; });
   CUSTOMER_FILTERS.paid = paid;
+  CUSTOMER_FILTERS.spendOp = document.getElementById('cf-spend-op').value;
+  CUSTOMER_FILTERS.spendAmt = document.getElementById('cf-spend-amt').value.trim();
+  CUSTOMER_FILTERS.pointsOp = document.getElementById('cf-points-op').value;
+  CUSTOMER_FILTERS.pointsAmt = document.getElementById('cf-points-amt').value.trim();
+  CUSTOMER_FILTERS.creditOp = document.getElementById('cf-credit-op').value;
+  CUSTOMER_FILTERS.creditAmt = document.getElementById('cf-credit-amt').value.trim();
   updateCustomerFilterBadge();
   closeCustomerFilterDrawer();
   loadCustomers();
 }
 function clearCustomerFilters(){
-  CUSTOMER_FILTERS = { joinedFrom:'', joinedTo:'', tiers:[], terms:[], paid:'' };
+  CUSTOMER_FILTERS = { joinedFrom:'', joinedTo:'', tiers:[], terms:[], paid:'', statuses:[], purchase:[], spendOp:'', spendAmt:'', pointsOp:'', pointsAmt:'', creditOp:'', creditAmt:'' };
   document.getElementById('cf-date-from').value='';
   document.getElementById('cf-date-to').value='';
-  document.querySelectorAll('.cf-tier, .cf-term').forEach(function(cb){ cb.checked=false; });
+  document.querySelectorAll('.cf-tier, .cf-term, .cf-status, .cf-purchase').forEach(function(cb){ cb.checked=false; });
   document.querySelectorAll('.cf-paid').forEach(function(rb){ rb.checked = rb.value===''; });
+  ['cf-spend-op','cf-spend-amt','cf-points-op','cf-points-amt','cf-credit-op','cf-credit-amt'].forEach(function(idv){ document.getElementById(idv).value=''; });
   updateCustomerFilterBadge();
   loadCustomers();
 }
 function countActiveCustomerFilters(){
-  var c=0;
-  if(CUSTOMER_FILTERS.joinedFrom || CUSTOMER_FILTERS.joinedTo) c++;
-  if(CUSTOMER_FILTERS.tiers.length) c++;
-  if(CUSTOMER_FILTERS.terms.length) c++;
-  if(CUSTOMER_FILTERS.paid) c++;
+  var c=0, F=CUSTOMER_FILTERS;
+  if(F.joinedFrom || F.joinedTo) c++;
+  if(F.tiers.length) c++;
+  if(F.statuses.length) c++;
+  if(F.purchase.length) c++;
+  if(F.terms.length) c++;
+  if(F.paid) c++;
+  if(F.spendOp && F.spendAmt!=='') c++;
+  if(F.pointsOp && F.pointsAmt!=='') c++;
+  if(F.creditOp && F.creditAmt!=='') c++;
   return c;
 }
 function updateCustomerFilterBadge(){
@@ -131,21 +153,29 @@ async function loadCustomers(){
   console.log('[loadCustomers]',swCusts.length,'rows after staff filter');
   if(rejected.length) console.log('[loadCustomers] rejected as staff:',rejected);
 
-  // Orders → Has-Paid flag + Total Spent per customer (exclude soft-deleted).
+  // Orders → Has-Paid flag, Total Spent, paid-order COUNT, and outstanding
+  // credit per customer (all excluding soft-deleted orders).
   var{data:orderRows}=await sb.from('salesweb_customer_orders')
-    .select('customer_id,status,total,deleted_at').not('customer_id','is',null);
+    .select('customer_id,status,total,deleted_at,payment_terms,credit_billed_at').not('customer_id','is',null);
   var NOT_PAID = {'Pending Payment':1,'Cancelled':1,'Refunded':1};
-  var paidIds={}, spentByCust={};
+  var paidIds={}, spentByCust={}, paidCntByCust={}, creditOwedByCust={};
   (orderRows||[]).forEach(function(r){
     if(!r.customer_id || r.deleted_at) return;
-    if(!NOT_PAID[r.status]){ paidIds[r.customer_id]=true; spentByCust[r.customer_id]=(spentByCust[r.customer_id]||0)+(r.total||0); }
+    if(!NOT_PAID[r.status]){
+      paidIds[r.customer_id]=true;
+      spentByCust[r.customer_id]=(spentByCust[r.customer_id]||0)+(r.total||0);
+      paidCntByCust[r.customer_id]=(paidCntByCust[r.customer_id]||0)+1;
+    }
+    if(r.payment_terms==='credit' && !r.credit_billed_at && r.status!=='Cancelled'){
+      creditOwedByCust[r.customer_id]=(creditOwedByCust[r.customer_id]||0)+(r.total||0);
+    }
   });
 
-  // Points balances → membership tier per customer.
-  var ptsByCust={};
+  // Points balances → membership tier (lifetime) + current balance per customer.
+  var ptsByCust={}, ptsBalByCust={};
   try{
-    var{data:bals}=await sb.from('salesweb_customer_points_balance').select('user_id,lifetime_earned');
-    (bals||[]).forEach(function(b){ ptsByCust[b.user_id]=Number(b.lifetime_earned)||0; });
+    var{data:bals}=await sb.from('salesweb_customer_points_balance').select('user_id,lifetime_earned,balance');
+    (bals||[]).forEach(function(b){ ptsByCust[b.user_id]=Number(b.lifetime_earned)||0; ptsBalByCust[b.user_id]=Number(b.balance)||0; });
   }catch(e){ /* points view optional */ }
   var tiers=await getCustTiers();
 
@@ -162,6 +192,33 @@ async function loadCustomers(){
   if(f.paid==='yes') custs=custs.filter(function(c){ return paidIds[c.id]; });
   if(f.paid==='no')  custs=custs.filter(function(c){ return !paidIds[c.id]; });
   if(f.tiers && f.tiers.length) custs=custs.filter(function(c){ return f.tiers.indexOf(custTierName(ptsByCust[c.id]||0,tiers)) !== -1; });
+  // Status: Blacklisted (blacklisted_at set) / Verified (real email) / Unverified.
+  if(f.statuses && f.statuses.length){
+    custs=custs.filter(function(c){
+      var bl=!!c.blacklisted_at;
+      var verified = !bl && custIsVerified(c);
+      var ok=false;
+      if(f.statuses.indexOf('blacklisted')!==-1 && bl) ok=true;
+      if(f.statuses.indexOf('verified')!==-1 && verified) ok=true;
+      if(f.statuses.indexOf('unverified')!==-1 && !bl && !verified) ok=true;
+      return ok;
+    });
+  }
+  // Purchase: Never (0 paid) / First (exactly 1) / Repeat (2+).
+  if(f.purchase && f.purchase.length){
+    custs=custs.filter(function(c){
+      var cnt=paidCntByCust[c.id]||0;
+      var ok=false;
+      if(f.purchase.indexOf('never')!==-1 && cnt===0) ok=true;
+      if(f.purchase.indexOf('first')!==-1 && cnt===1) ok=true;
+      if(f.purchase.indexOf('repeat')!==-1 && cnt>=2) ok=true;
+      return ok;
+    });
+  }
+  // Spending / Point Balance / Credit Balance comparators.
+  if(f.spendOp && f.spendAmt!=='') custs=custs.filter(function(c){ return cmpAmount(spentByCust[c.id]||0, f.spendOp, Number(f.spendAmt)||0); });
+  if(f.pointsOp && f.pointsAmt!=='') custs=custs.filter(function(c){ return cmpAmount(ptsBalByCust[c.id]||0, f.pointsOp, Number(f.pointsAmt)||0); });
+  if(f.creditOp && f.creditAmt!=='') custs=custs.filter(function(c){ return cmpAmount(creditOwedByCust[c.id]||0, f.creditOp, Number(f.creditAmt)||0); });
 
   if(!custs.length){
     document.getElementById('cust-stats').innerHTML=
@@ -196,9 +253,10 @@ async function loadCustomers(){
     var tierBadge='<span class="badge" style="background:'+tierColor+'22;color:'+tierColor+';border:1px solid '+tierColor+'55;">'+esc(tierName)+'</span>';
     var spent=spentByCust[c.id]||0;
     var spentCell=spent>0?'RM '+spent.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}):'<span style="color:var(--ink4);">—</span>';
+    var blBadge=c.blacklisted_at?' <span class="badge badge-red" title="Blacklisted">Blacklisted</span>':'';
     html+='<tr>'+
       '<td>'+custAvatar(c.full_name||c.email)+'</td>'+
-      '<td style="font-weight:600;"><span style="color:var(--green-dark);cursor:pointer;" onclick="viewCustomer(\''+c.id+'\')">'+esc(c.full_name||'—')+'</span></td>'+
+      '<td style="font-weight:600;"><span style="color:var(--green-dark);cursor:pointer;" onclick="viewCustomer(\''+c.id+'\')">'+esc(c.full_name||'—')+'</span>'+blBadge+'</td>'+
       '<td>'+esc(c.email||'—')+'</td>'+
       '<td>'+esc(c.phone||'—')+'</td>'+
       '<td>'+tierBadge+'</td>'+
@@ -230,6 +288,32 @@ function custTierName(pts,tiers){
 function custTierColor(name,tiers){
   for(var i=0;i<tiers.length;i++){ if(tiers[i].name===name) return tiers[i].color||'#6b7280'; }
   return '#6b7280';
+}
+// A customer counts as "verified" when they have a real (non walk-in
+// placeholder) email on file. Walk-in/admin-created profiles use a
+// @admin.mjmnursery.local placeholder and read as unverified.
+function custIsVerified(c){
+  return !!c.email && !/@admin\.mjmnursery\.local$/i.test(c.email);
+}
+// Numeric comparator for the Spending / Points / Credit filters.
+function cmpAmount(value, op, amt){
+  if(op==='gt') return value > amt;
+  if(op==='lt') return value < amt;
+  if(op==='eq') return Math.abs(value - amt) < 0.005;
+  return true;
+}
+async function blacklistCustomer(id){
+  if(!confirm('Blacklist this customer? They will be flagged in the customer list and filterable under Status → Blacklisted.'))return;
+  var{error}=await sb.from('shared_profiles').update({blacklisted_at:new Date().toISOString()}).eq('id',id);
+  if(error){toast('Error: '+error.message,'error');return;}
+  toast('Customer blacklisted');
+  closeModal('modal-customer'); loadCustomers();
+}
+async function unblacklistCustomer(id){
+  var{error}=await sb.from('shared_profiles').update({blacklisted_at:null}).eq('id',id);
+  if(error){toast('Error: '+error.message,'error');return;}
+  toast('Customer un-blacklisted');
+  closeModal('modal-customer'); loadCustomers();
 }
 function custAvatar(nameOrEmail){
   var s=(nameOrEmail||'?').trim();
@@ -623,7 +707,10 @@ async function viewCustomer(id){
   // Header with name, joined, actions
   html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.2rem;">';
   html+='<div><div style="font-size:1.2rem;font-weight:800;">'+esc(c.full_name||'—')+'</div><div style="font-size:12px;color:var(--ink4);">Joined '+fmtDate(c.created_at)+'</div></div>';
-  html+='<div style="display:flex;gap:.4rem;"><button class="btn btn-outline btn-sm" onclick="resetCustomerPassword(\''+c.email+'\')">Reset Password</button><button class="btn btn-outline btn-sm" onclick="deleteCustomer(\''+id+'\')" style="color:var(--red);">Delete</button></div>';
+  var blackBtn=c.blacklisted_at
+    ? '<button class="btn btn-outline btn-sm" style="color:var(--green);border-color:var(--green);" onclick="unblacklistCustomer(\''+id+'\')">Un-blacklist</button>'
+    : '<button class="btn btn-outline btn-sm" style="color:#92400e;border-color:#fde68a;" onclick="blacklistCustomer(\''+id+'\')">Blacklist</button>';
+  html+='<div style="display:flex;gap:.4rem;"><button class="btn btn-outline btn-sm" onclick="resetCustomerPassword(\''+c.email+'\')">Reset Password</button>'+blackBtn+'<button class="btn btn-outline btn-sm" onclick="deleteCustomer(\''+id+'\')" style="color:var(--red);">Delete</button></div>';
   html+='</div>';
 
   // Stats row

@@ -25,6 +25,9 @@
 
 var ORDER_STATUSES = ['Pending Payment','Partially Paid','Paid','Ready for Collection','Completed','Cancelled','Refunded'];
 
+// RM formatter with en-MY thousands separators, always 2 decimals.
+function fmtMYR(n){ return (Number(n)||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
 // ═══════════════════════════════════════
 //  ADVANCED FILTER DRAWER (right sidebar)
 //  Persists the active filter state across re-renders. UI lives in
@@ -225,8 +228,8 @@ async function loadOrders(){
     '<div class="stat-box"><div class="stat-label">Pending Payment</div><div class="stat-val" style="color:var(--amber)">'+pending+'</div></div>'+
     '<div class="stat-box"><div class="stat-label">Paid</div><div class="stat-val" style="color:var(--blue)">'+paid+'</div></div>'+
     '<div class="stat-box"><div class="stat-label">Completed</div><div class="stat-val green">'+completed+'</div></div>'+
-    '<div class="stat-box"><div class="stat-label">Credit Outstanding</div><div class="stat-val" style="color:#a16207;">RM '+creditOutstanding.toLocaleString('en-MY',{minimumFractionDigits:2})+'</div></div>'+
-    '<div class="stat-box"><div class="stat-label">Revenue</div><div class="stat-val">RM '+revenue.toLocaleString('en-MY',{minimumFractionDigits:2})+'</div></div>';
+    '<div class="stat-box"><div class="stat-label">Credit Outstanding</div><div class="stat-val" style="color:#a16207;">RM '+fmtMYR(creditOutstanding)+'</div></div>'+
+    '<div class="stat-box"><div class="stat-label">Revenue</div><div class="stat-val">RM '+fmtMYR(revenue)+'</div></div>';
 
   if(!orders.length){document.getElementById('orders-table').innerHTML='<div class="loading">No orders found</div>';clearOrderSelection();return;}
   var html='<table class="data-table"><thead><tr><th style="width:34px;text-align:center;"><input type="checkbox" id="order-select-all" onclick="toggleSelectAllOrders(this)" title="Select all"></th><th>Order</th><th>Customer</th><th>Date</th><th>Terms</th><th>Items</th><th>Total</th><th>Status</th><th>Action</th></tr></thead><tbody>';
@@ -244,9 +247,9 @@ async function loadOrders(){
     var totalRM = Number(o.total||0);
     var paidRM = Number(o.amount_paid||0);
     var balRM = Math.max(0, totalRM - paidRM);
-    var totalCell = 'RM ' + totalRM.toFixed(2);
+    var totalCell = 'RM ' + fmtMYR(totalRM);
     if(paidRM > 0 && paidRM < totalRM){
-      totalCell += '<div style="font-size:10px;color:#a16207;font-weight:600;margin-top:2px;">Paid RM '+paidRM.toFixed(2)+' · Bal RM '+balRM.toFixed(2)+'</div>';
+      totalCell += '<div style="font-size:10px;color:#a16207;font-weight:600;margin-top:2px;">Paid RM '+fmtMYR(paidRM)+' · Bal RM '+fmtMYR(balRM)+'</div>';
     } else if(paidRM >= totalRM && totalRM > 0){
       totalCell += '<div style="font-size:10px;color:var(--green);font-weight:600;margin-top:2px;">Paid in full</div>';
     }
@@ -403,17 +406,17 @@ async function viewOrder(id){
   html+='<div id="mo-items-container">';
   if(items.length){
     html+='<table class="data-table"><thead><tr><th>Product</th><th style="text-align:right;">Price</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Subtotal</th></tr></thead><tbody>';
-    items.forEach(function(it){html+='<tr><td>'+esc(it.product_name||'—')+'</td><td style="text-align:right;">RM '+(it.unit_price||0).toFixed(2)+'</td><td style="text-align:right;">'+it.quantity+'</td><td style="text-align:right;font-weight:600;">RM '+(it.subtotal||0).toFixed(2)+'</td></tr>';});
+    items.forEach(function(it){html+='<tr><td>'+esc(it.product_name||'—')+'</td><td style="text-align:right;">RM '+fmtMYR(it.unit_price)+'</td><td style="text-align:right;">'+it.quantity+'</td><td style="text-align:right;font-weight:600;">RM '+fmtMYR(it.subtotal)+'</td></tr>';});
     html+='</tbody></table>';
   } else html+='<div style="font-size:12px;color:var(--ink4);padding:.5rem 0;">No items</div>';
   html+='</div>';
 
   // Totals breakdown stays in the same card
   html+='<div style="margin-top:.8rem;padding-top:.8rem;border-top:1px solid var(--border);">';
-  html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;"><span>Subtotal</span><span>RM '+subtotal.toFixed(2)+'</span></div>';
-  if(order.discount_amount>0)html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;color:var(--red);"><span>Discount</span><span>-RM '+order.discount_amount.toFixed(2)+'</span></div>';
-  if(order.coupon_code)html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;color:var(--red);"><span>Coupon ('+esc(order.coupon_code)+')</span><span>-RM '+(order.coupon_discount||0).toFixed(2)+'</span></div>';
-  html+='<div style="display:flex;justify-content:space-between;padding:.4rem 0;border-top:1.5px solid var(--border);margin-top:.3rem;font-size:15px;font-weight:700;"><span>Total</span><span>RM '+(order.total||0).toFixed(2)+'</span></div>';
+  html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;"><span>Subtotal</span><span>RM '+fmtMYR(subtotal)+'</span></div>';
+  if(order.discount_amount>0)html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;color:var(--red);"><span>Discount</span><span>-RM '+fmtMYR(order.discount_amount)+'</span></div>';
+  if(order.coupon_code)html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;color:var(--red);"><span>Coupon ('+esc(order.coupon_code)+')</span><span>-RM '+fmtMYR(order.coupon_discount)+'</span></div>';
+  html+='<div style="display:flex;justify-content:space-between;padding:.4rem 0;border-top:1.5px solid var(--border);margin-top:.3rem;font-size:15px;font-weight:700;"><span>Total</span><span>RM '+fmtMYR(order.total)+'</span></div>';
 
   // Paid / Balance line inside the totals card
   var paidNow = Number(order.amount_paid||0);
@@ -421,8 +424,8 @@ async function viewOrder(id){
   var balanceNow = Math.max(0, totalNow - paidNow);
   var payState = paidNow <= 0 ? 'unpaid' : (paidNow >= totalNow ? 'paid' : 'partial');
   var payColor = payState === 'paid' ? 'var(--green)' : payState === 'partial' ? '#a16207' : 'var(--ink3)';
-  html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;color:'+payColor+';"><span>Paid</span><span>RM '+paidNow.toFixed(2)+'</span></div>';
-  html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;font-weight:600;color:'+(balanceNow>0?'var(--red)':'var(--green)')+';"><span>Balance</span><span>RM '+balanceNow.toFixed(2)+'</span></div>';
+  html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;color:'+payColor+';"><span>Paid</span><span>RM '+fmtMYR(paidNow)+'</span></div>';
+  html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;font-weight:600;color:'+(balanceNow>0?'var(--red)':'var(--green)')+';"><span>Balance</span><span>RM '+fmtMYR(balanceNow)+'</span></div>';
   html+='</div>';
 
   // ── Payment Received (record / update amount_paid) ──
@@ -438,7 +441,7 @@ async function viewOrder(id){
   html+='<input class="form-input" id="mo-amount-paid" type="number" step="0.01" min="0" value="'+paidNow.toFixed(2)+'" style="width:120px;font-size:12px;padding:6px 10px;">';
   html+='<button class="btn btn-primary btn-sm" onclick="updateOrderAmountPaid(\''+id+'\','+totalNow+')">Update</button>';
   html+='</div>';
-  html+='<div style="margin-top:.5rem;font-size:11px;color:var(--ink3);">Total RM '+totalNow.toFixed(2)+' · Outstanding <strong style="color:'+(balanceNow>0?'var(--red)':'var(--green)')+';">RM '+balanceNow.toFixed(2)+'</strong></div>';
+  html+='<div style="margin-top:.5rem;font-size:11px;color:var(--ink3);">Total RM '+fmtMYR(totalNow)+' · Outstanding <strong style="color:'+(balanceNow>0?'var(--red)':'var(--green)')+';">RM '+fmtMYR(balanceNow)+'</strong></div>';
   html+='</div>';
 
   // Discount + Coupon controls (collapsible)
@@ -616,7 +619,7 @@ async function updateOrderAmountPaid(orderId, totalAmount){
   // Helpful nudge — but don't auto-change status, leave that to the admin.
   var tot = Number(totalAmount)||0;
   if(amt >= tot && tot > 0) toast('Payment received in full. Remember to set status to Paid if needed.');
-  else if(amt > 0 && amt < tot) toast('Partial payment saved · Balance RM '+(tot-amt).toFixed(2));
+  else if(amt > 0 && amt < tot) toast('Partial payment saved · Balance RM '+fmtMYR(tot-amt));
   else toast('Amount paid updated');
   viewOrder(orderId); // re-render the modal with the new figures
 }
@@ -779,7 +782,7 @@ async function addDiscount(orderId){
   var subtotal=(items||[]).reduce(function(s,i){return s+(i.subtotal||0);},0);
   var total=Math.max(0,subtotal-amt-(order?.coupon_discount||0));
   await sb.from('salesweb_customer_orders').update({total:total}).eq('id',orderId);
-  toast('Discount applied: RM '+amt.toFixed(2));
+  toast('Discount applied: RM '+fmtMYR(amt));
   viewOrder(orderId);
 }
 
@@ -819,7 +822,7 @@ async function applyCoupon(orderId){
   var discount=Number(res.discount||0);
   var total=Math.max(0,subtotal-(order&&order.discount_amount||0)-discount);
   await sb.from('salesweb_customer_orders').update({coupon_code:code,coupon_discount:discount,total:total,updated_at:new Date().toISOString()}).eq('id',orderId);
-  toast('Coupon applied: -RM '+discount.toFixed(2));
+  toast('Coupon applied: -RM '+fmtMYR(discount));
   viewOrder(orderId);
 }
 
@@ -1196,7 +1199,7 @@ function drawItemsEditTable(orderId){
     html+='<td><input class="form-input" type="text" value="'+esc(r.product_name)+'" oninput="updateEditItem('+idx+',\'product_name\',this.value)" style="font-size:12px;padding:4px 8px;width:100%;"></td>';
     html+='<td style="text-align:right;"><input class="form-input" type="number" step="0.01" min="0" value="'+r.unit_price+'" oninput="updateEditItemNum('+idx+',\'unit_price\',this.value,\''+orderId+'\')" style="font-size:12px;padding:4px 8px;text-align:right;width:100%;"></td>';
     html+='<td style="text-align:right;"><input class="form-input" type="number" min="0" step="1" value="'+r.quantity+'" oninput="updateEditItemNum('+idx+',\'quantity\',this.value,\''+orderId+'\')" style="font-size:12px;padding:4px 8px;text-align:right;width:100%;"></td>';
-    html+='<td style="text-align:right;font-weight:600;font-size:12px;">RM '+rowSub.toFixed(2)+'</td>';
+    html+='<td style="text-align:right;font-weight:600;font-size:12px;">RM '+fmtMYR(rowSub)+'</td>';
     html+='<td style="text-align:center;"><button class="btn btn-outline btn-sm" onclick="removeEditItem('+idx+',\''+orderId+'\')" title="Remove" style="color:var(--red);font-size:11px;padding:2px 6px;">✕</button></td>';
     html+='</tr>';
   });
@@ -1209,7 +1212,7 @@ function drawItemsEditTable(orderId){
   html+='<button class="btn btn-outline btn-sm" onclick="addEditItem(\''+orderId+'\')" style="font-size:11px;">+ Add Item</button>';
   html+='</div>';
   // Running subtotal
-  html+='<div style="display:flex;justify-content:space-between;margin-top:.6rem;font-size:12px;color:var(--ink3);"><span>New subtotal preview</span><span style="font-weight:600;color:var(--ink);">RM '+subtotalNow.toFixed(2)+'</span></div>';
+  html+='<div style="display:flex;justify-content:space-between;margin-top:.6rem;font-size:12px;color:var(--ink3);"><span>New subtotal preview</span><span style="font-weight:600;color:var(--ink);">RM '+fmtMYR(subtotalNow)+'</span></div>';
   // Save / Cancel
   html+='<div style="display:flex;gap:.4rem;margin-top:.8rem;">';
   html+='<button class="btn btn-primary btn-sm" onclick="saveOrderItems(\''+orderId+'\')">Save Changes</button>';
@@ -1237,13 +1240,13 @@ function updateEditItemNum(idx,field,value,orderId){
   var visibleIdx=visible.indexOf(window._editItems[idx]);
   if(visibleIdx>-1&&rows[visibleIdx]){
     var subCell=rows[visibleIdx].cells[3];
-    if(subCell)subCell.textContent='RM '+rowSub.toFixed(2);
+    if(subCell)subCell.textContent='RM '+fmtMYR(rowSub);
   }
   // Recompute total subtotal
   var subtotal=visible.reduce(function(s,r){return s+(Number(r.unit_price)||0)*(Number(r.quantity)||0);},0);
   var spans=document.querySelectorAll('#mo-items-container span');
   if(spans.length>=2){
-    spans[spans.length-1].textContent='RM '+subtotal.toFixed(2);
+    spans[spans.length-1].textContent='RM '+fmtMYR(subtotal);
   }
 }
 
@@ -1629,7 +1632,7 @@ function updateNewOrderItem(idx,field,value){
   it.line_total=(Number(it.quantity)||0)*(Number(it.unit_price)||0);
   // Patch only the line-total cell, keep input focus
   var cell=document.getElementById('no-line-total-'+idx);
-  if(cell) cell.textContent='RM '+it.line_total.toFixed(2);
+  if(cell) cell.textContent='RM '+fmtMYR(it.line_total);
   recalcNewOrderTotal();
 }
 
@@ -1641,7 +1644,7 @@ function renderNewOrderItems(){
     var opts='<option value="">— Select product —</option>';
     _newOrderProducts.forEach(function(p){
       var sel=(it.product_id===p.id)?' selected':'';
-      var hint=' (RM '+Number(p.price||0).toFixed(2)+(p.stock_qty!=null?' · '+p.stock_qty+' avail':'')+')';
+      var hint=' (RM '+fmtMYR(p.price)+(p.stock_qty!=null?' · '+p.stock_qty+' avail':'')+')';
       opts+='<option value="'+esc(p.id)+'"'+sel+'>'+esc(p.name)+hint+'</option>';
     });
     var isCustom=!it.product_id&&(it.product_name||'').length>0;
@@ -1655,7 +1658,7 @@ function renderNewOrderItems(){
       '<td><select class="form-input" onchange="onNewOrderProductSelect('+idx+',this.value)" style="font-size:12px;padding:4px 8px;">'+opts+'</select>'+nameInput+'</td>'+
       '<td style="text-align:right;"><input class="form-input" type="number" min="0" step="1" value="'+(it.quantity||0)+'" oninput="updateNewOrderItem('+idx+',\'quantity\',this.value)" style="text-align:right;font-size:12px;padding:4px 8px;"></td>'+
       '<td style="text-align:right;"><input class="form-input" type="number" min="0" step="0.01" value="'+(it.unit_price||0)+'" oninput="updateNewOrderItem('+idx+',\'unit_price\',this.value)" style="text-align:right;font-size:12px;padding:4px 8px;"></td>'+
-      '<td style="text-align:right;font-weight:600;" id="no-line-total-'+idx+'">RM '+(Number(it.line_total)||0).toFixed(2)+'</td>'+
+      '<td style="text-align:right;font-weight:600;" id="no-line-total-'+idx+'">RM '+fmtMYR(it.line_total)+'</td>'+
       '<td style="text-align:center;"><button class="btn btn-outline btn-sm" onclick="removeNewOrderItem('+idx+')" style="color:var(--red);font-size:11px;padding:2px 6px;">✕</button></td>'+
     '</tr>';
   });
@@ -1667,8 +1670,8 @@ function recalcNewOrderTotal(){
   var subtotal=_newOrderItems.reduce(function(s,it){return s+(Number(it.quantity)||0)*(Number(it.unit_price)||0);},0);
   var discount=parseFloat(document.getElementById('no-discount').value)||0;
   var total=Math.max(0,subtotal-discount);
-  document.getElementById('no-subtotal').textContent='RM '+subtotal.toFixed(2);
-  document.getElementById('no-total').textContent='RM '+total.toFixed(2);
+  document.getElementById('no-subtotal').textContent='RM '+fmtMYR(subtotal);
+  document.getElementById('no-total').textContent='RM '+fmtMYR(total);
 }
 
 async function submitNewOrder(){

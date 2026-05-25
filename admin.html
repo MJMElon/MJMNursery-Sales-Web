@@ -308,6 +308,11 @@ input,select,textarea,button{font-family:inherit;}
             <span class="filter-count" id="orders-filter-count" style="display:none;">0</span>
           </button>
         </div>
+        <div id="orders-bulk-bar" style="display:none;align-items:center;gap:.8rem;padding:.6rem .9rem;margin-bottom:.8rem;background:var(--green-light);border:1px solid var(--border2);border-radius:8px;">
+          <span id="orders-bulk-count" style="font-size:13px;font-weight:600;color:var(--ink2);">0 selected</span>
+          <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red);" onclick="bulkDeleteOrders()">Delete Selected</button>
+          <button class="btn btn-outline btn-sm" onclick="clearOrderSelection()">Clear</button>
+        </div>
         <div id="orders-table"><div class="loading">Loading orders...</div></div>
       </div>
     </div>

@@ -30,14 +30,13 @@ var ORDER_STATUSES = ['Pending Payment','Partially Paid','Paid','Ready for Colle
 //  Persists the active filter state across re-renders. UI lives in
 //  admin.html (#orderFilterDrawer). loadOrders() reads from this state.
 // ═══════════════════════════════════════
-// Status filtering lives in the quick dropdown (#order-filter), not here —
-// the sidebar covers the axes the dropdown can't express.
-var ORDER_FILTERS = { dateFrom:'', dateTo:'', payments:[], channels:[], product:'' };
+var ORDER_FILTERS = { dateFrom:'', dateTo:'', statuses:[], payments:[], channels:[], product:'' };
 
 function openOrderFilterDrawer(){
   // Sync UI inputs from current state before opening
   document.getElementById('fd-date-from').value = ORDER_FILTERS.dateFrom || '';
   document.getElementById('fd-date-to').value = ORDER_FILTERS.dateTo || '';
+  document.querySelectorAll('.fd-status').forEach(function(cb){ cb.checked = ORDER_FILTERS.statuses.indexOf(cb.value) !== -1; });
   document.querySelectorAll('.fd-pay').forEach(function(cb){ cb.checked = ORDER_FILTERS.payments.indexOf(cb.value) !== -1; });
   document.querySelectorAll('.fd-channel').forEach(function(cb){ cb.checked = ORDER_FILTERS.channels.indexOf(cb.value) !== -1; });
   document.getElementById('fd-product').value = ORDER_FILTERS.product || '';
@@ -58,6 +57,7 @@ function readCheckedValues(selector){
 function applyOrderFilters(){
   ORDER_FILTERS.dateFrom = document.getElementById('fd-date-from').value || '';
   ORDER_FILTERS.dateTo   = document.getElementById('fd-date-to').value || '';
+  ORDER_FILTERS.statuses = readCheckedValues('.fd-status');
   ORDER_FILTERS.payments = readCheckedValues('.fd-pay');
   ORDER_FILTERS.channels = readCheckedValues('.fd-channel');
   ORDER_FILTERS.product  = (document.getElementById('fd-product').value || '').trim();
@@ -66,10 +66,10 @@ function applyOrderFilters(){
   loadOrders();
 }
 function clearOrderFilters(){
-  ORDER_FILTERS = { dateFrom:'', dateTo:'', payments:[], channels:[], product:'' };
+  ORDER_FILTERS = { dateFrom:'', dateTo:'', statuses:[], payments:[], channels:[], product:'' };
   document.getElementById('fd-date-from').value = '';
   document.getElementById('fd-date-to').value = '';
-  document.querySelectorAll('.fd-pay, .fd-channel').forEach(function(cb){ cb.checked = false; });
+  document.querySelectorAll('.fd-status, .fd-pay, .fd-channel').forEach(function(cb){ cb.checked = false; });
   document.getElementById('fd-product').value = '';
   updateOrderFilterBadge();
   loadOrders();
@@ -77,6 +77,7 @@ function clearOrderFilters(){
 function countActiveOrderFilters(){
   var c = 0;
   if(ORDER_FILTERS.dateFrom || ORDER_FILTERS.dateTo) c++;
+  if(ORDER_FILTERS.statuses.length) c++;
   if(ORDER_FILTERS.payments.length) c++;
   if(ORDER_FILTERS.channels.length) c++;
   if(ORDER_FILTERS.product) c++;
@@ -144,11 +145,9 @@ async function loadOrders(){
   var q=document.getElementById('order-search').value.trim().toLowerCase();
   var status=document.getElementById('order-filter').value;
   var f = ORDER_FILTERS || {};
-  // "Deleted" / "Archived" in the quick dropdown are virtual buckets backed
-  // by the soft-delete timestamps, not real values of the status column.
-  var virtualStatus = (status === 'Deleted' || status === 'Archived');
+  var sideStatuses = f.statuses || [];
   var query=sb.from('salesweb_customer_orders').select('*').order('created_at',{ascending:false});
-  if(status && !virtualStatus)query=query.eq('status',status);
+  if(status)query=query.eq('status',status);
   // Date range: created_at is a timestamp; use start-of-day to next-day midnight.
   if(f.dateFrom) query = query.gte('created_at', f.dateFrom + 'T00:00:00');
   if(f.dateTo)   query = query.lte('created_at', f.dateTo   + 'T23:59:59');
@@ -157,17 +156,30 @@ async function loadOrders(){
   var orders=data||[];
   if(q)orders=orders.filter(function(o){return(o.order_number||'').toLowerCase().includes(q)||(o.id||'').toLowerCase().includes(q)||(o.customer_name||'').toLowerCase().includes(q)||(o.customer_email||'').toLowerCase().includes(q);});
 
-  // Visibility of soft-flagged rows. Status (incl. the virtual Deleted /
-  // Archived buckets) is driven entirely by the quick dropdown:
-  //   Deleted  → show ONLY soft-deleted orders
-  //   Archived → show ONLY archived (non-deleted) orders
-  //   anything else → hide both deleted and archived
-  if(status === 'Deleted'){
-    orders = orders.filter(function(o){ return !!o.deleted_at; });
-  } else if(status === 'Archived'){
-    orders = orders.filter(function(o){ return !!o.archived_at && !o.deleted_at; });
-  } else {
-    orders = orders.filter(function(o){ return !o.deleted_at && !o.archived_at; });
+  // Visibility of soft-flagged rows: hide deleted & archived orders unless the
+  // sidebar Status filter explicitly ticks "Deleted" (no Archived option now).
+  var wantDeleted  = sideStatuses.indexOf('Deleted')  !== -1;
+  var wantArchived = sideStatuses.indexOf('Archived') !== -1;
+  if(!wantDeleted)  orders = orders.filter(function(o){ return !o.deleted_at; });
+  if(!wantArchived) orders = orders.filter(function(o){ return !o.archived_at; });
+
+  // ── Sidebar Status filter (multi-select, OR within the group) ──
+  //   Open                 → an active order (not cancelled/refunded/completed,
+  //                          not archived/deleted)
+  //   Cancelled            → status = 'Cancelled'
+  //   Ready for Collection → status = 'Ready for Collection'
+  //   Completed            → status = 'Completed'
+  //   Deleted              → deleted_at IS NOT NULL
+  if(sideStatuses.length){
+    orders = orders.filter(function(o){
+      var ok = false;
+      if(sideStatuses.indexOf('Open') !== -1 && o.status!=='Cancelled' && o.status!=='Refunded' && o.status!=='Completed' && !o.archived_at && !o.deleted_at) ok = true;
+      if(sideStatuses.indexOf('Cancelled') !== -1 && o.status==='Cancelled' && !o.deleted_at && !o.archived_at) ok = true;
+      if(sideStatuses.indexOf('Ready for Collection') !== -1 && o.status==='Ready for Collection' && !o.deleted_at && !o.archived_at) ok = true;
+      if(sideStatuses.indexOf('Completed') !== -1 && o.status==='Completed' && !o.deleted_at && !o.archived_at) ok = true;
+      if(sideStatuses.indexOf('Deleted') !== -1 && !!o.deleted_at) ok = true;
+      return ok;
+    });
   }
 
   // ── Payment filter ── (uses amount_paid as the source of truth, with a

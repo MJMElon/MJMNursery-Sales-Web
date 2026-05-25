@@ -25,6 +25,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-d
 .summary-row .val{color:var(--text-dark);font-weight:600;}
 .next-step{background:#FFF8EB;border:1px solid #F2D58F;border-radius:12px;padding:.8rem 1rem;font-size:12.5px;color:#8A6314;margin:0 0 1.25rem;text-align:left;line-height:1.5;}
 .next-step b{color:#5C4308;}
+.btn-book{background:linear-gradient(135deg,#C9A84C,#D8B85F);color:#3B2F0A;width:100%;font-size:14px;padding:.9rem 1.2rem;margin:0 0 .5rem;box-shadow:0 4px 14px rgba(201,168,76,.35);}
+.btn-book:hover{background:linear-gradient(135deg,#d3b257,#e0c270);transform:translateY(-1px);}
+.next-step-note{font-size:12px;color:#8A6314;margin:0 0 1.25rem;text-align:center;line-height:1.5;}
 .btn-row{display:flex;flex-direction:column;gap:.55rem;}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;padding:.75rem 1.2rem;border-radius:10px;text-decoration:none;font-weight:600;font-size:13px;transition:background .15s,transform .1s;border:none;cursor:pointer;font-family:inherit;}
 .btn-primary{background:var(--green-dark);color:#fff;}
@@ -113,9 +116,9 @@ function renderSuccess(){
         + '<div class="summary-row"><span class="lbl">Status</span><span class="val" style="color:var(--green-mid);">Paid</span></div>'
         + '</div>'
       : '')+
-    '<div class="next-step"><b>Next step:</b> book your collection time at '
-        + '<a href="'+esc(bookingUrl)+'" target="_blank" rel="noopener" style="color:#8A6314;text-decoration:underline;font-weight:600;">'+esc(bookingUrl)+'</a>. '
-        + 'A confirmation email is on its way.</div>'+
+    '<a href="'+esc(bookingUrl)+'" target="_blank" rel="noopener" class="btn btn-book">'
+        + '<i class="fa-solid fa-calendar-check"></i> Book Your Collection Time</a>'+
+    '<div class="next-step-note"><b>Next step:</b> book your collection time above. A confirmation email is on its way.</div>'+
     '<div class="btn-row">'+
       '<a href="'+portalHref+'" class="btn btn-primary" onclick="sessionStorage.setItem(\'mjm_last_page\',\'portal\');return true;">'
         + '<i class="fa-solid fa-receipt"></i> Back to View Order</a>'+

@@ -375,6 +375,43 @@ input,select,textarea,button{font-family:inherit;}
       </div>
     </aside>
 
+    <!-- CUSTOMERS FILTER DRAWER -->
+    <div class="fd-overlay" id="custFilterOverlay" onclick="closeCustomerFilterDrawer()"></div>
+    <aside class="filter-drawer" id="custFilterDrawer" aria-hidden="true">
+      <div class="fd-head">
+        <h3>Filter Customers</h3>
+        <button class="modal-close" onclick="closeCustomerFilterDrawer()" aria-label="Close">&times;</button>
+      </div>
+      <div class="fd-body">
+        <div class="fd-section">
+          <div class="fd-title">Joined</div>
+          <div class="fd-dates">
+            <div><label class="fd-label" for="cf-date-from">From</label><input type="date" id="cf-date-from" class="fd-input"></div>
+            <div><label class="fd-label" for="cf-date-to">To</label><input type="date" id="cf-date-to" class="fd-input"></div>
+          </div>
+        </div>
+        <div class="fd-section">
+          <div class="fd-title">Membership</div>
+          <div id="cf-tiers"><div style="font-size:11px;color:var(--ink4);">Loading tiers…</div></div>
+        </div>
+        <div class="fd-section">
+          <div class="fd-title">Payment Terms</div>
+          <label class="fd-check"><input type="checkbox" class="cf-term" value="cash"> Cash</label>
+          <label class="fd-check"><input type="checkbox" class="cf-term" value="credit"> Credit</label>
+        </div>
+        <div class="fd-section" style="border-bottom:none;">
+          <div class="fd-title">Has Paid Order</div>
+          <label class="fd-check"><input type="radio" name="cf-paid" class="cf-paid" value="" checked> Any</label>
+          <label class="fd-check"><input type="radio" name="cf-paid" class="cf-paid" value="yes"> Yes</label>
+          <label class="fd-check"><input type="radio" name="cf-paid" class="cf-paid" value="no"> No</label>
+        </div>
+      </div>
+      <div class="fd-foot">
+        <button class="btn btn-outline" onclick="clearCustomerFilters()">Clear All</button>
+        <button class="btn btn-primary" onclick="applyCustomerFilters()">Apply</button>
+      </div>
+    </aside>
+
     <!-- CUSTOMERS -->
     <div class="tab-content" id="tab-customers">
       <div class="main-header"><div class="main-title">Manage Customers</div><button class="btn btn-primary" onclick="openAddCustomer()">+ Add Customer</button></div>
@@ -384,7 +421,7 @@ input,select,textarea,button{font-family:inherit;}
       </div>
       <div id="cust-panel-list">
         <div class="stats-grid" id="cust-stats"></div>
-        <div class="card"><div class="filter-bar"><input class="filter-input" id="cust-search" placeholder="Search name or email..." oninput="loadCustomers()"></div><div id="customers-table"><div class="loading">Loading customers...</div></div></div>
+        <div class="card"><div class="filter-bar"><input class="filter-input" id="cust-search" placeholder="Search name or email..." oninput="loadCustomers()"><button class="btn-filter" id="cust-filter-btn" onclick="openCustomerFilterDrawer()" title="Filter customers"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filter <span class="filter-count" id="cust-filter-count" style="display:none;">0</span></button></div><div id="customers-table"><div class="loading">Loading customers...</div></div></div>
       </div>
       <div id="cust-panel-points" style="display:none;">
         <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap;">

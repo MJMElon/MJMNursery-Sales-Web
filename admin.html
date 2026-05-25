@@ -299,8 +299,9 @@ input,select,textarea,button{font-family:inherit;}
           <input class="filter-input" id="order-search" placeholder="Search order ID or customer..." oninput="loadOrders()">
           <select class="filter-select" id="order-filter" onchange="loadOrders()">
             <option value="">All Status</option>
-            <option>Pending Payment</option><option>Paid</option>
+            <option>Pending Payment</option><option>Partially Paid</option><option>Paid</option>
             <option>Ready for Collection</option><option>Completed</option><option>Cancelled</option><option>Refunded</option>
+            <option>Archived</option><option>Deleted</option>
           </select>
           <button class="btn-filter" id="orders-filter-btn" onclick="openOrderFilterDrawer()" title="Advanced filters">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>

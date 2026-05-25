@@ -145,8 +145,11 @@ async function loadOrders(){
   var q=document.getElementById('order-search').value.trim().toLowerCase();
   var status=document.getElementById('order-filter').value;
   var f = ORDER_FILTERS || {};
+  // "Deleted" / "Archived" in the quick dropdown are virtual buckets backed
+  // by the soft-delete timestamps, not real values of the status column.
+  var virtualStatus = (status === 'Deleted' || status === 'Archived');
   var query=sb.from('salesweb_customer_orders').select('*').order('created_at',{ascending:false});
-  if(status)query=query.eq('status',status);
+  if(status && !virtualStatus)query=query.eq('status',status);
   // Date range: created_at is a timestamp; use start-of-day to next-day midnight.
   if(f.dateFrom) query = query.gte('created_at', f.dateFrom + 'T00:00:00');
   if(f.dateTo)   query = query.lte('created_at', f.dateTo   + 'T23:59:59');
@@ -155,12 +158,19 @@ async function loadOrders(){
   var orders=data||[];
   if(q)orders=orders.filter(function(o){return(o.order_number||'').toLowerCase().includes(q)||(o.id||'').toLowerCase().includes(q)||(o.customer_name||'').toLowerCase().includes(q)||(o.customer_email||'').toLowerCase().includes(q);});
 
-  // Default visibility rule: hide soft-deleted and soft-archived orders
-  // unless the user explicitly asks for them via the sidebar Status filter.
-  var wantArchived = f.statuses && f.statuses.indexOf('Archived') !== -1;
-  var wantDeleted  = f.statuses && f.statuses.indexOf('Deleted')  !== -1;
-  if(!wantDeleted)  orders = orders.filter(function(o){ return !o.deleted_at; });
-  if(!wantArchived) orders = orders.filter(function(o){ return !o.archived_at; });
+  // Visibility of soft-flagged rows. The quick dropdown's "Deleted" /
+  // "Archived" buckets show ONLY those rows; otherwise deleted & archived
+  // orders are hidden unless requested via the sidebar Status filter.
+  if(status === 'Deleted'){
+    orders = orders.filter(function(o){ return !!o.deleted_at; });
+  } else if(status === 'Archived'){
+    orders = orders.filter(function(o){ return !!o.archived_at && !o.deleted_at; });
+  } else {
+    var wantArchived = f.statuses && f.statuses.indexOf('Archived') !== -1;
+    var wantDeleted  = f.statuses && f.statuses.indexOf('Deleted')  !== -1;
+    if(!wantDeleted)  orders = orders.filter(function(o){ return !o.deleted_at; });
+    if(!wantArchived) orders = orders.filter(function(o){ return !o.archived_at; });
+  }
 
   // ── Status filter (Shopify-style buckets mapped onto MJM's status field) ──
   //   Open      → not Cancelled, not Refunded, not Completed, not archived/deleted

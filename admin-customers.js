@@ -35,6 +35,68 @@ function isOperationStaff(perms){
   return false;
 }
 
+// ═══════════════════════════════════════
+//  CUSTOMER FILTER DRAWER (right sidebar)
+//  Reuses the .filter-drawer / .fd-* styles defined for the orders filter.
+// ═══════════════════════════════════════
+var CUSTOMER_FILTERS = { joinedFrom:'', joinedTo:'', tiers:[], terms:[], paid:'' };
+
+async function openCustomerFilterDrawer(){
+  document.getElementById('cf-date-from').value = CUSTOMER_FILTERS.joinedFrom || '';
+  document.getElementById('cf-date-to').value = CUSTOMER_FILTERS.joinedTo || '';
+  // Populate membership tier checkboxes from the configured tiers.
+  var tiers = await getCustTiers();
+  var box = document.getElementById('cf-tiers');
+  box.innerHTML = tiers.map(function(t){
+    var checked = CUSTOMER_FILTERS.tiers.indexOf(t.name) !== -1 ? ' checked' : '';
+    return '<label class="fd-check"><input type="checkbox" class="cf-tier" value="'+esc(t.name)+'"'+checked+'> '+esc(t.name)+'</label>';
+  }).join('');
+  document.querySelectorAll('.cf-term').forEach(function(cb){ cb.checked = CUSTOMER_FILTERS.terms.indexOf(cb.value) !== -1; });
+  document.querySelectorAll('.cf-paid').forEach(function(rb){ rb.checked = (CUSTOMER_FILTERS.paid||'') === rb.value; });
+  document.getElementById('custFilterOverlay').classList.add('open');
+  document.getElementById('custFilterDrawer').classList.add('open');
+}
+function closeCustomerFilterDrawer(){
+  document.getElementById('custFilterOverlay').classList.remove('open');
+  document.getElementById('custFilterDrawer').classList.remove('open');
+}
+function applyCustomerFilters(){
+  CUSTOMER_FILTERS.joinedFrom = document.getElementById('cf-date-from').value || '';
+  CUSTOMER_FILTERS.joinedTo   = document.getElementById('cf-date-to').value || '';
+  CUSTOMER_FILTERS.tiers = []; document.querySelectorAll('.cf-tier:checked').forEach(function(cb){ CUSTOMER_FILTERS.tiers.push(cb.value); });
+  CUSTOMER_FILTERS.terms = []; document.querySelectorAll('.cf-term:checked').forEach(function(cb){ CUSTOMER_FILTERS.terms.push(cb.value); });
+  var paid=''; document.querySelectorAll('.cf-paid:checked').forEach(function(rb){ paid=rb.value; });
+  CUSTOMER_FILTERS.paid = paid;
+  updateCustomerFilterBadge();
+  closeCustomerFilterDrawer();
+  loadCustomers();
+}
+function clearCustomerFilters(){
+  CUSTOMER_FILTERS = { joinedFrom:'', joinedTo:'', tiers:[], terms:[], paid:'' };
+  document.getElementById('cf-date-from').value='';
+  document.getElementById('cf-date-to').value='';
+  document.querySelectorAll('.cf-tier, .cf-term').forEach(function(cb){ cb.checked=false; });
+  document.querySelectorAll('.cf-paid').forEach(function(rb){ rb.checked = rb.value===''; });
+  updateCustomerFilterBadge();
+  loadCustomers();
+}
+function countActiveCustomerFilters(){
+  var c=0;
+  if(CUSTOMER_FILTERS.joinedFrom || CUSTOMER_FILTERS.joinedTo) c++;
+  if(CUSTOMER_FILTERS.tiers.length) c++;
+  if(CUSTOMER_FILTERS.terms.length) c++;
+  if(CUSTOMER_FILTERS.paid) c++;
+  return c;
+}
+function updateCustomerFilterBadge(){
+  var n=countActiveCustomerFilters();
+  var btn=document.getElementById('cust-filter-btn');
+  var badge=document.getElementById('cust-filter-count');
+  if(!btn||!badge) return;
+  if(n>0){ btn.classList.add('has-active'); badge.style.display='inline-flex'; badge.textContent=String(n); }
+  else { btn.classList.remove('has-active'); badge.style.display='none'; }
+}
+
 async function loadCustomers(){
   var q=(document.getElementById('cust-search').value||'').trim().toLowerCase();
 
@@ -69,31 +131,44 @@ async function loadCustomers(){
   console.log('[loadCustomers]',swCusts.length,'rows after staff filter');
   if(rejected.length) console.log('[loadCustomers] rejected as staff:',rejected);
 
-  // Paid-order lookup — still needed for the "Has Paid Order" stat box and
-  // to badge customers in the table, but no longer a source of customers.
+  // Orders → Has-Paid flag + Total Spent per customer (exclude soft-deleted).
   var{data:orderRows}=await sb.from('salesweb_customer_orders')
-    .select('customer_id,status').not('customer_id','is',null);
+    .select('customer_id,status,total,deleted_at').not('customer_id','is',null);
   var NOT_PAID = {'Pending Payment':1,'Cancelled':1,'Refunded':1};
-  var paidIds={};
+  var paidIds={}, spentByCust={};
   (orderRows||[]).forEach(function(r){
-    if(r.customer_id && !NOT_PAID[r.status]) paidIds[r.customer_id]=true;
+    if(!r.customer_id || r.deleted_at) return;
+    if(!NOT_PAID[r.status]){ paidIds[r.customer_id]=true; spentByCust[r.customer_id]=(spentByCust[r.customer_id]||0)+(r.total||0); }
   });
+
+  // Points balances → membership tier per customer.
+  var ptsByCust={};
+  try{
+    var{data:bals}=await sb.from('salesweb_customer_points_balance').select('user_id,lifetime_earned');
+    (bals||[]).forEach(function(b){ ptsByCust[b.user_id]=Number(b.lifetime_earned)||0; });
+  }catch(e){ /* points view optional */ }
+  var tiers=await getCustTiers();
 
   var custs=(swCusts||[]).slice();
   custs.sort(function(a,b){return new Date(b.created_at||0)-new Date(a.created_at||0);});
 
   if(q)custs=custs.filter(function(c){return(c.full_name||'').toLowerCase().includes(q)||(c.email||'').toLowerCase().includes(q);});
 
+  // ── Sidebar filters ──
+  var f = CUSTOMER_FILTERS || {};
+  if(f.joinedFrom) custs=custs.filter(function(c){ return c.created_at && c.created_at >= f.joinedFrom+'T00:00:00'; });
+  if(f.joinedTo)   custs=custs.filter(function(c){ return c.created_at && c.created_at <= f.joinedTo+'T23:59:59'; });
+  if(f.terms && f.terms.length) custs=custs.filter(function(c){ return f.terms.indexOf(c.payment_terms==='credit'?'credit':'cash') !== -1; });
+  if(f.paid==='yes') custs=custs.filter(function(c){ return paidIds[c.id]; });
+  if(f.paid==='no')  custs=custs.filter(function(c){ return !paidIds[c.id]; });
+  if(f.tiers && f.tiers.length) custs=custs.filter(function(c){ return f.tiers.indexOf(custTierName(ptsByCust[c.id]||0,tiers)) !== -1; });
+
   if(!custs.length){
     document.getElementById('cust-stats').innerHTML=
       '<div class="stat-box"><div class="stat-label">Total Customers</div><div class="stat-val">0</div></div>';
-    // Distinguish the three zero-result cases so the next debugger isn't lost:
-    //  - rawRowCount === 0 → RLS gap (admin can't read shared_profiles)
-    //  - rawRowCount > 0 but after-filter 0 → all rows are staff (data tagging)
-    //  - search query filtered them out
     var emptyMsg;
-    if (q) {
-      emptyMsg = 'No customers match your search.';
+    if (q || countActiveCustomerFilters()) {
+      emptyMsg = 'No customers match your search / filters.';
     } else if (rawRowCount === 0) {
       emptyMsg = 'No customers loaded. The admin account may be missing read access to <code>shared_profiles</code>. Run <code>supabase/migrations/shared_profiles_admin_read.sql</code> in the Supabase SQL editor.';
     } else {
@@ -110,16 +185,59 @@ async function loadCustomers(){
     '<div class="stat-box"><div class="stat-label">Has Paid Order</div><div class="stat-val" style="color:#059669;">'+paidCount+'</div></div>'+
     '<div class="stat-box"><div class="stat-label">Credit Customers</div><div class="stat-val" style="color:#a16207;">'+creditCount+'</div></div>';
 
-  var html='<table class="data-table"><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Terms</th><th>Joined</th><th>Action</th></tr></thead><tbody>';
+  var html='<table class="data-table"><thead><tr><th></th><th>Name</th><th>Email</th><th>Phone</th><th>Membership</th><th style="text-align:right;">Total Spent</th><th>Terms</th><th>Joined</th><th>Action</th></tr></thead><tbody>';
   custs.forEach(function(c){
     var terms=c.payment_terms==='credit'?'credit':'cash';
     var termsBadge=terms==='credit'
       ? '<span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;">💳 Credit</span>'
       : '<span class="badge badge-grey">💵 Cash</span>';
-    html+='<tr><td style="font-weight:600;">'+esc(c.full_name||'—')+'</td><td>'+esc(c.email||'—')+'</td><td>'+esc(c.phone||'—')+'</td><td>'+termsBadge+'</td><td>'+fmtDate(c.created_at)+'</td><td style="white-space:nowrap;"><button class="btn btn-outline btn-sm" onclick="viewCustomer(\''+c.id+'\')">View</button> <button class="btn btn-outline btn-sm" style="color:#92400e;border-color:#fde68a;" onclick="hideAsStaff(\''+c.id+'\')" title="This is a staff/operation user, not a customer">Hide</button></td></tr>';
+    var tierName=custTierName(ptsByCust[c.id]||0,tiers);
+    var tierColor=custTierColor(tierName,tiers);
+    var tierBadge='<span class="badge" style="background:'+tierColor+'22;color:'+tierColor+';border:1px solid '+tierColor+'55;">'+esc(tierName)+'</span>';
+    var spent=spentByCust[c.id]||0;
+    var spentCell=spent>0?'RM '+spent.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}):'<span style="color:var(--ink4);">—</span>';
+    html+='<tr>'+
+      '<td>'+custAvatar(c.full_name||c.email)+'</td>'+
+      '<td style="font-weight:600;"><span style="color:var(--green-dark);cursor:pointer;" onclick="viewCustomer(\''+c.id+'\')">'+esc(c.full_name||'—')+'</span></td>'+
+      '<td>'+esc(c.email||'—')+'</td>'+
+      '<td>'+esc(c.phone||'—')+'</td>'+
+      '<td>'+tierBadge+'</td>'+
+      '<td style="text-align:right;font-weight:600;">'+spentCell+'</td>'+
+      '<td>'+termsBadge+'</td>'+
+      '<td>'+fmtDate(c.created_at)+'</td>'+
+      '<td style="white-space:nowrap;"><button class="btn btn-outline btn-sm" onclick="viewCustomer(\''+c.id+'\')">View</button> <button class="btn btn-outline btn-sm" style="color:#92400e;border-color:#fde68a;" onclick="hideAsStaff(\''+c.id+'\')" title="This is a staff/operation user, not a customer">Hide</button></td>'+
+    '</tr>';
   });
   html+='</tbody></table>';
   document.getElementById('customers-table').innerHTML=html;
+}
+
+// ── Membership tier helpers ──
+var _custTiers=null;
+function getCustTiers(){
+  if(_custTiers) return Promise.resolve(_custTiers);
+  return sb.from('salesweb_app_settings').select('value').eq('key','member_tiers').single().then(function(r){
+    var tiers=[{name:'Basic Member',min_points:0,color:'#6b7280'}];
+    if(r && r.data && r.data.value){ try{ var parsed=JSON.parse(r.data.value); if(parsed && parsed.length) tiers=parsed; }catch(e){} }
+    tiers.sort(function(a,b){ return (b.min_points||0)-(a.min_points||0); }); // highest first
+    _custTiers=tiers; return tiers;
+  }).catch(function(){ return [{name:'Basic Member',min_points:0,color:'#6b7280'}]; });
+}
+function custTierName(pts,tiers){
+  for(var i=0;i<tiers.length;i++){ if(pts>=(tiers[i].min_points||0)) return tiers[i].name; }
+  return tiers.length?tiers[tiers.length-1].name:'—';
+}
+function custTierColor(name,tiers){
+  for(var i=0;i<tiers.length;i++){ if(tiers[i].name===name) return tiers[i].color||'#6b7280'; }
+  return '#6b7280';
+}
+function custAvatar(nameOrEmail){
+  var s=(nameOrEmail||'?').trim();
+  var parts=s.split(/\s+/).filter(Boolean);
+  var initials=(parts.slice(0,2).map(function(w){return w.charAt(0).toUpperCase();}).join(''))||'?';
+  var h=0; for(var i=0;i<s.length;i++){ h=s.charCodeAt(i)+((h<<5)-h); }
+  var hue=Math.abs(h)%360;
+  return '<span style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:hsl('+hue+',42%,52%);color:#fff;font-size:11px;font-weight:700;">'+esc(initials)+'</span>';
 }
 
 // ═══════════════════════════════════════

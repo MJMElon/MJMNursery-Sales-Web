@@ -123,6 +123,72 @@ async function loadCustomers(){
 }
 
 // ═══════════════════════════════════════
+//  ADD CUSTOMER
+//  Creates an auth user (isolated client so the admin session isn't
+//  clobbered) + a shared_profiles row tagged as a customer. Same pattern
+//  as the admin "+ Add Order" walk-in customer creation.
+// ═══════════════════════════════════════
+function openAddCustomer(){
+  document.getElementById('ac-name').value='';
+  document.getElementById('ac-email').value='';
+  document.getElementById('ac-phone').value='';
+  document.getElementById('ac-terms').value='cash';
+  var st=document.getElementById('ac-status'); st.style.display='none'; st.textContent='';
+  var btn=document.getElementById('ac-submit'); btn.disabled=false; btn.textContent='Create Customer';
+  openModal('modal-add-customer');
+}
+async function submitAddCustomer(){
+  var name=document.getElementById('ac-name').value.trim();
+  var email=document.getElementById('ac-email').value.trim();
+  var phone=document.getElementById('ac-phone').value.trim();
+  var terms=document.getElementById('ac-terms').value;
+  if(!name){toast('Customer name is required','error');return;}
+
+  var btn=document.getElementById('ac-submit');
+  btn.disabled=true; btn.textContent='Creating…';
+
+  // If an email is given, reuse an existing profile rather than duplicating.
+  var existingId=null;
+  if(email){
+    var{data:byEmail}=await sb.from('shared_profiles').select('id').ilike('email',email).limit(1);
+    if(byEmail && byEmail.length) existingId=byEmail[0].id;
+  }
+  if(existingId){
+    await sb.from('shared_profiles').update({full_name:name,phone:phone||null,payment_terms:terms,user_type:'customer',role:'customer'}).eq('id',existingId);
+    toast('Existing customer updated');
+    btn.disabled=false; btn.textContent='Create Customer';
+    closeModal('modal-add-customer'); loadCustomers();
+    return;
+  }
+
+  try{
+    var signupEmail = email || ('walkin-'+Date.now()+'-'+Math.random().toString(36).slice(2,8)+'@admin.mjmnursery.local');
+    var signupPw = (crypto && crypto.randomUUID ? crypto.randomUUID() : (Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2)))+'!Aa1';
+    var tempSb = supabase.createClient(SB_URL, SB_KEY, { auth:{ persistSession:false, autoRefreshToken:false, storageKey:'admin-add-customer-'+Date.now() } });
+    var{data:signUpData,error:signUpErr} = await tempSb.auth.signUp({ email:signupEmail, password:signupPw, options:{ data:{ full_name:name, user_type:'customer' } } });
+    var custId=null;
+    if(signUpErr){
+      if(/already|exists|registered/i.test(signUpErr.message||'')){
+        var{data:dup}=await sb.from('shared_profiles').select('id').ilike('email',signupEmail).limit(1);
+        if(dup && dup.length) custId=dup[0].id;
+      }
+      if(!custId){ throw signUpErr; }
+    } else if(signUpData && signUpData.user){
+      custId=signUpData.user.id;
+    }
+    if(!custId){ throw new Error('Could not create customer profile'); }
+    await sb.from('shared_profiles').upsert({ id:custId, email:signupEmail, full_name:name, phone:phone||null, payment_terms:terms, user_type:'customer', role:'customer' },{ onConflict:'id' });
+    toast('Customer created');
+    closeModal('modal-add-customer');
+    loadCustomers();
+  }catch(e){
+    toast('Error: '+(e&&e.message?e.message:'Could not create customer'),'error');
+  }finally{
+    btn.disabled=false; btn.textContent='Create Customer';
+  }
+}
+
+// ═══════════════════════════════════════
 //  SUB-TAB SWITCHING
 // ═══════════════════════════════════════
 function showCustSubTab(tab){

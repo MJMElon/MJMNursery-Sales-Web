@@ -1476,6 +1476,7 @@ async function openNewOrder(){
   document.getElementById('no-terms').value='cash';
   document.getElementById('no-internal-note').value='';
   document.getElementById('no-discount').value='0';
+  resetNewOrderBilling();
   document.getElementById('no-cust-results').style.display='none';
   document.getElementById('no-cust-status').style.display='none';
   document.getElementById('no-submit').disabled=false;
@@ -1570,10 +1571,57 @@ function selectNewOrderCustomer(id){
   document.getElementById('no-cust-phone').value=c.phone||'';
   document.getElementById('no-cust-results').style.display='none';
   updateNewOrderCustStatus();
+  prefillNewOrderBilling(id);
+}
+
+// Pull the customer's most recent saved billing profile and populate the
+// billing fields — mirrors the customer checkout offering saved billing.
+// Only name / IC / reg / TIN / MPOB are stored on the profile; address
+// fields are per-order and left for the admin to fill.
+async function prefillNewOrderBilling(userId){
+  try{
+    var{data}=await sb.from('salesweb_billing_info').select('*').eq('user_id',userId).order('created_at',{ascending:false}).limit(1);
+    if(!data || !data.length) return;
+    var b=data[0];
+    if(b.type==='company'){
+      switchNewOrderBilling('company');
+      document.getElementById('no-bill-coname').value=b.name||'';
+      document.getElementById('no-bill-coreg').value=b.company_reg||'';
+      document.getElementById('no-bill-cotin').value=b.tin||'';
+      document.getElementById('no-bill-compob').value=b.mpob_license||'';
+    } else {
+      switchNewOrderBilling('personal');
+      document.getElementById('no-bill-name').value=b.name||'';
+      document.getElementById('no-bill-ic').value=b.ic_number||'';
+      document.getElementById('no-bill-tin').value=b.tin||'';
+      document.getElementById('no-bill-mpob').value=b.mpob_license||'';
+    }
+  }catch(e){ /* billing prefill is best-effort */ }
 }
 
 function hideNewOrderCustResults(){
   document.getElementById('no-cust-results').style.display='none';
+}
+
+// Billing tab toggle for the New Order modal (mirrors the customer checkout).
+var _newOrderBillingType = 'personal';
+function switchNewOrderBilling(type){
+  _newOrderBillingType = type;
+  var isP = type === 'personal';
+  document.getElementById('no-bill-personal').style.display = isP ? 'grid' : 'none';
+  document.getElementById('no-bill-company').style.display  = isP ? 'none' : 'grid';
+  document.getElementById('no-bill-tab-personal').className = 'btn btn-sm ' + (isP ? 'btn-primary' : 'btn-outline');
+  document.getElementById('no-bill-tab-company').className  = 'btn btn-sm ' + (isP ? 'btn-outline' : 'btn-primary');
+}
+function resetNewOrderBilling(){
+  ['no-bill-name','no-bill-ic','no-bill-tin','no-bill-addr','no-bill-city','no-bill-postcode','no-bill-mpob',
+   'no-bill-coname','no-bill-coreg','no-bill-cotin','no-bill-coaddr','no-bill-cocity','no-bill-copostcode','no-bill-compob']
+    .forEach(function(idv){ var el=document.getElementById(idv); if(el) el.value=''; });
+  document.getElementById('no-bill-country').value='Malaysia';
+  document.getElementById('no-bill-state').value='Sarawak';
+  document.getElementById('no-bill-cocountry').value='Malaysia';
+  document.getElementById('no-bill-costate').value='Sarawak';
+  switchNewOrderBilling('personal');
 }
 
 function updateNewOrderCustStatus(){
@@ -1695,8 +1743,31 @@ async function submitNewOrder(){
   var subtotal=validItems.reduce(function(s,it){return s+(Number(it.quantity)||0)*(Number(it.unit_price)||0);},0);
   var total=Math.max(0,Math.round((subtotal-discount)*100)/100);
 
+  // ── Billing / E-Invoice (same shape as the customer checkout) ──
+  // billing_name + billing_tax_id are stored as columns; the rest of the
+  // billing detail is appended to customer_remark, matching payment.html.
+  var billingType = _newOrderBillingType || 'personal';
+  var billingName='', billingTin='', billingMpob='', billingIc='', billingReg='', billingAddr='';
+  if(billingType === 'personal'){
+    billingName = document.getElementById('no-bill-name').value.trim();
+    billingIc   = document.getElementById('no-bill-ic').value.trim();
+    billingTin  = document.getElementById('no-bill-tin').value.trim();
+    billingMpob = document.getElementById('no-bill-mpob').value.trim();
+    billingAddr = [document.getElementById('no-bill-addr').value.trim(),document.getElementById('no-bill-city').value.trim(),document.getElementById('no-bill-postcode').value.trim(),document.getElementById('no-bill-state').value.trim(),document.getElementById('no-bill-country').value.trim()].filter(Boolean).join(', ');
+  } else {
+    billingName = document.getElementById('no-bill-coname').value.trim();
+    billingReg  = document.getElementById('no-bill-coreg').value.trim();
+    billingTin  = document.getElementById('no-bill-cotin').value.trim();
+    billingMpob = document.getElementById('no-bill-compob').value.trim();
+    billingAddr = [document.getElementById('no-bill-coaddr').value.trim(),document.getElementById('no-bill-cocity').value.trim(),document.getElementById('no-bill-copostcode').value.trim(),document.getElementById('no-bill-costate').value.trim(),document.getElementById('no-bill-cocountry').value.trim()].filter(Boolean).join(', ');
+  }
+
   var remarkParts=['Admin-created order'];
   if(phone) remarkParts.push('Phone: '+phone);
+  if(billingAddr) remarkParts.push('Billing Addr: '+billingAddr);
+  if(billingIc)   remarkParts.push('IC: '+billingIc);
+  if(billingReg)  remarkParts.push('Reg: '+billingReg);
+  if(billingMpob) remarkParts.push('MPOB: '+billingMpob);
 
   var btn=document.getElementById('no-submit');
   btn.disabled=true; btn.textContent='Creating…';
@@ -1782,6 +1853,8 @@ async function submitNewOrder(){
       channel:'admin_panel',
       shipping_address:addr||null,
       customer_remark:remarkParts.join(' | '),
+      billing_name:billingName||name,
+      billing_tax_id:billingTin||null,
       payment_terms:terms,
       discount_amount:discount,
       points_redeemed:0,

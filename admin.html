@@ -636,6 +636,39 @@ input,select,textarea,button{font-family:inherit;}
       </div>
     </div>
 
+    <!-- Billing / E-Invoice block (mirrors customer checkout) -->
+    <div style="margin-bottom:1rem;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--ink4);letter-spacing:.05em;margin-bottom:.5rem;">Billing / E-Invoice <span style="color:var(--ink4);font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></div>
+      <div style="display:flex;gap:.4rem;margin-bottom:.6rem;">
+        <button type="button" class="btn btn-primary btn-sm" id="no-bill-tab-personal" onclick="switchNewOrderBilling('personal')" style="font-size:11px;">Personal</button>
+        <button type="button" class="btn btn-outline btn-sm" id="no-bill-tab-company" onclick="switchNewOrderBilling('company')" style="font-size:11px;">Company</button>
+      </div>
+      <!-- Personal billing -->
+      <div id="no-bill-personal" style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;">
+        <div style="grid-column:1 / -1;"><label style="font-size:11px;color:var(--ink3);">Full Name</label><input class="form-input" id="no-bill-name" style="font-size:12px;padding:6px 10px;"></div>
+        <div><label style="font-size:11px;color:var(--ink3);">I/C Number</label><input class="form-input" id="no-bill-ic" style="font-size:12px;padding:6px 10px;"></div>
+        <div><label style="font-size:11px;color:var(--ink3);">TIN</label><input class="form-input" id="no-bill-tin" style="font-size:12px;padding:6px 10px;"></div>
+        <div style="grid-column:1 / -1;"><label style="font-size:11px;color:var(--ink3);">Billing Address</label><input class="form-input" id="no-bill-addr" style="font-size:12px;padding:6px 10px;"></div>
+        <div><label style="font-size:11px;color:var(--ink3);">Country</label><input class="form-input" id="no-bill-country" value="Malaysia" style="font-size:12px;padding:6px 10px;"></div>
+        <div><label style="font-size:11px;color:var(--ink3);">State</label><input class="form-input" id="no-bill-state" value="Sarawak" style="font-size:12px;padding:6px 10px;"></div>
+        <div><label style="font-size:11px;color:var(--ink3);">City</label><input class="form-input" id="no-bill-city" style="font-size:12px;padding:6px 10px;"></div>
+        <div><label style="font-size:11px;color:var(--ink3);">Postcode</label><input class="form-input" id="no-bill-postcode" style="font-size:12px;padding:6px 10px;"></div>
+        <div style="grid-column:1 / -1;"><label style="font-size:11px;color:var(--ink3);">MPOB License No.</label><input class="form-input" id="no-bill-mpob" style="font-size:12px;padding:6px 10px;"></div>
+      </div>
+      <!-- Company billing -->
+      <div id="no-bill-company" style="display:none;grid-template-columns:1fr 1fr;gap:.6rem;">
+        <div style="grid-column:1 / -1;"><label style="font-size:11px;color:var(--ink3);">Company Name</label><input class="form-input" id="no-bill-coname" style="font-size:12px;padding:6px 10px;"></div>
+        <div><label style="font-size:11px;color:var(--ink3);">Registration No.</label><input class="form-input" id="no-bill-coreg" style="font-size:12px;padding:6px 10px;"></div>
+        <div><label style="font-size:11px;color:var(--ink3);">TIN</label><input class="form-input" id="no-bill-cotin" style="font-size:12px;padding:6px 10px;"></div>
+        <div style="grid-column:1 / -1;"><label style="font-size:11px;color:var(--ink3);">Billing Address</label><input class="form-input" id="no-bill-coaddr" style="font-size:12px;padding:6px 10px;"></div>
+        <div><label style="font-size:11px;color:var(--ink3);">Country</label><input class="form-input" id="no-bill-cocountry" value="Malaysia" style="font-size:12px;padding:6px 10px;"></div>
+        <div><label style="font-size:11px;color:var(--ink3);">State</label><input class="form-input" id="no-bill-costate" value="Sarawak" style="font-size:12px;padding:6px 10px;"></div>
+        <div><label style="font-size:11px;color:var(--ink3);">City</label><input class="form-input" id="no-bill-cocity" style="font-size:12px;padding:6px 10px;"></div>
+        <div><label style="font-size:11px;color:var(--ink3);">Postcode</label><input class="form-input" id="no-bill-copostcode" style="font-size:12px;padding:6px 10px;"></div>
+        <div style="grid-column:1 / -1;"><label style="font-size:11px;color:var(--ink3);">MPOB License No.</label><input class="form-input" id="no-bill-compob" style="font-size:12px;padding:6px 10px;"></div>
+      </div>
+    </div>
+
     <!-- Items block -->
     <div style="margin-bottom:1rem;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">

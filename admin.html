@@ -377,7 +377,7 @@ input,select,textarea,button{font-family:inherit;}
 
     <!-- CUSTOMERS -->
     <div class="tab-content" id="tab-customers">
-      <div class="main-header"><div class="main-title">Manage Customers</div></div>
+      <div class="main-header"><div class="main-title">Manage Customers</div><button class="btn btn-primary" onclick="openAddCustomer()">+ Add Customer</button></div>
       <div style="display:flex;gap:.4rem;margin-bottom:1rem;">
         <button class="btn btn-primary btn-sm" id="cust-subtab-list" onclick="showCustSubTab('list')" style="font-size:11px;">Customer List</button>
         <button class="btn btn-outline btn-sm" id="cust-subtab-points" onclick="showCustSubTab('points')" style="font-size:11px;">Points &amp; Membership</button>
@@ -895,6 +895,36 @@ input,select,textarea,button{font-family:inherit;}
 
 <!-- CUSTOMER DETAIL MODAL -->
 <div class="modal-overlay" id="modal-customer"><div class="modal" style="max-width:900px;"><div class="modal-head"><h2 id="mcu-title">Customer Profile</h2><button class="modal-close" onclick="closeModal('modal-customer')">&#x2715;</button></div><div class="modal-body" id="mcu-body" style="max-height:80vh;overflow-y:auto;"></div></div></div>
+
+<!-- ADD CUSTOMER MODAL -->
+<div class="modal-overlay" id="modal-add-customer" style="z-index:255;"><div class="modal" style="max-width:480px;">
+  <div class="modal-head"><h2>+ Add Customer</h2><button class="modal-close" onclick="closeModal('modal-add-customer')">&#x2715;</button></div>
+  <div class="modal-body" style="padding:1.2rem;">
+    <div style="display:grid;grid-template-columns:1fr;gap:.7rem;">
+      <div>
+        <label style="font-size:11px;color:var(--ink3);">Name <span style="color:var(--red);">*</span></label>
+        <input class="form-input" id="ac-name" autocomplete="off" style="font-size:13px;padding:8px 12px;">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--ink3);">Email <span style="color:var(--ink4);font-weight:400;">(used for login &amp; receipts; leave blank for walk-in)</span></label>
+        <input class="form-input" id="ac-email" type="email" autocomplete="off" style="font-size:13px;padding:8px 12px;">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--ink3);">Phone</label>
+        <input class="form-input" id="ac-phone" style="font-size:13px;padding:8px 12px;">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--ink3);">Payment terms</label>
+        <select class="form-input" id="ac-terms" style="font-size:13px;padding:8px 12px;"><option value="cash">💵 Cash</option><option value="credit">💳 Credit</option></select>
+      </div>
+      <div id="ac-status" style="font-size:11px;display:none;"></div>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn btn-outline" onclick="closeModal('modal-add-customer')">Cancel</button>
+    <button class="btn btn-primary" id="ac-submit" onclick="submitAddCustomer()">Create Customer</button>
+  </div>
+</div></div>
 
 <!-- PUBLISH PRODUCT MODAL -->
 <div class="modal-overlay" id="modal-publish"><div class="modal" style="max-width:560px;">

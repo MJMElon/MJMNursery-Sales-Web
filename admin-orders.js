@@ -93,6 +93,52 @@ function updateOrderFilterBadge(){
 }
 
 // ═══════════════════════════════════════
+//  BULK SELECT + DELETE
+//  Row checkboxes + a select-all in the header. The bulk bar appears
+//  when ≥1 order is ticked and soft-deletes them all at once (same
+//  deleted_at mechanism as the single-order Delete button).
+// ═══════════════════════════════════════
+function getSelectedOrderIds(){
+  var ids = [];
+  document.querySelectorAll('.order-select:checked').forEach(function(cb){ ids.push(cb.value); });
+  return ids;
+}
+function onOrderSelectChange(){
+  var boxes = document.querySelectorAll('.order-select');
+  var checked = getSelectedOrderIds();
+  var bar = document.getElementById('orders-bulk-bar');
+  var count = document.getElementById('orders-bulk-count');
+  if(count) count.textContent = checked.length + ' selected';
+  if(bar) bar.style.display = checked.length ? 'flex' : 'none';
+  // Keep the header "select all" box in sync (checked / unchecked / indeterminate).
+  var master = document.getElementById('order-select-all');
+  if(master){
+    master.checked = boxes.length > 0 && checked.length === boxes.length;
+    master.indeterminate = checked.length > 0 && checked.length < boxes.length;
+  }
+}
+function toggleSelectAllOrders(master){
+  document.querySelectorAll('.order-select').forEach(function(cb){ cb.checked = master.checked; });
+  onOrderSelectChange();
+}
+function clearOrderSelection(){
+  document.querySelectorAll('.order-select').forEach(function(cb){ cb.checked = false; });
+  var master = document.getElementById('order-select-all');
+  if(master){ master.checked = false; master.indeterminate = false; }
+  onOrderSelectChange();
+}
+async function bulkDeleteOrders(){
+  var ids = getSelectedOrderIds();
+  if(!ids.length){ toast('No orders selected','error'); return; }
+  if(!confirm('Delete '+ids.length+' selected order'+(ids.length>1?'s':'')+'? They will be hidden from the default list but kept for audit. You can restore them via the "Deleted" filter.')) return;
+  var{error}=await sb.from('salesweb_customer_orders').update({deleted_at:new Date().toISOString()}).in('id',ids);
+  if(error){toast('Error: '+error.message,'error');return;}
+  toast(ids.length+' order'+(ids.length>1?'s':'')+' deleted');
+  clearOrderSelection();
+  loadOrders();
+}
+
+// ═══════════════════════════════════════
 //  LOAD ORDERS — DASHBOARD
 // ═══════════════════════════════════════
 async function loadOrders(){
@@ -177,8 +223,8 @@ async function loadOrders(){
     '<div class="stat-box"><div class="stat-label">Credit Outstanding</div><div class="stat-val" style="color:#a16207;">RM '+creditOutstanding.toLocaleString('en-MY',{minimumFractionDigits:2})+'</div></div>'+
     '<div class="stat-box"><div class="stat-label">Revenue</div><div class="stat-val">RM '+revenue.toLocaleString('en-MY',{minimumFractionDigits:2})+'</div></div>';
 
-  if(!orders.length){document.getElementById('orders-table').innerHTML='<div class="loading">No orders found</div>';return;}
-  var html='<table class="data-table"><thead><tr><th>Order</th><th>Customer</th><th>Date</th><th>Terms</th><th>Items</th><th>Total</th><th>Status</th><th>Action</th></tr></thead><tbody>';
+  if(!orders.length){document.getElementById('orders-table').innerHTML='<div class="loading">No orders found</div>';clearOrderSelection();return;}
+  var html='<table class="data-table"><thead><tr><th style="width:34px;text-align:center;"><input type="checkbox" id="order-select-all" onclick="toggleSelectAllOrders(this)" title="Select all"></th><th>Order</th><th>Customer</th><th>Date</th><th>Terms</th><th>Items</th><th>Total</th><th>Status</th><th>Action</th></tr></thead><tbody>';
   orders.forEach(function(o){
     var statusCls=orderBadgeCls(o.status);
     var shortId=o.order_number||o.id.substring(0,8).toUpperCase();
@@ -207,6 +253,7 @@ async function loadOrders(){
       ? '<a onclick="event.stopPropagation();viewCustomer(\''+custIdJs+'\')" style="cursor:pointer;color:var(--green-dark);font-weight:600;text-decoration:none;" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">'+custName+'</a>'
       : custName;
     html+='<tr onclick="viewOrder(\''+idJs+'\')" style="cursor:pointer;">'+
+      '<td style="text-align:center;" onclick="event.stopPropagation();"><input type="checkbox" class="order-select" value="'+idJs+'" onclick="event.stopPropagation();onOrderSelectChange();"></td>'+
       '<td style="font-weight:600;">#'+esc(shortId)+'</td>'+
       '<td>'+custNameCell+'<div style="font-size:11px;color:var(--ink4);">'+esc(o.customer_email||'')+'</div></td>'+
       '<td style="font-size:12px;">'+fmtDate(o.created_at)+'</td>'+

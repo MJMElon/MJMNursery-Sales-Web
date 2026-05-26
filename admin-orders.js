@@ -29,6 +29,14 @@ var ORDER_STATUSES = ['Pending Payment','Partially Paid','Paid','Ready for Colle
 function fmtMYR(n){ return (Number(n)||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 // Date + time formatter for timestamps (e.g. payment received).
 function fmtDateTime(d){ if(!d) return '—'; try{ return new Date(d).toLocaleString('en-MY',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}); }catch(e){ return '—'; } }
+// Statuses that mean the order is fully settled — no outstanding balance is
+// shown regardless of the recorded amount_paid (marking an order Paid means
+// the amount has been settled).
+var SETTLED_STATUSES = { 'Paid':1, 'Ready for Collection':1, 'Completed':1 };
+function orderFullyPaid(o){
+  var tot=Number(o.total)||0, paid=Number(o.amount_paid)||0;
+  return !!SETTLED_STATUSES[o.status] || (tot>0 && paid>=tot);
+}
 
 // ═══════════════════════════════════════
 //  ADVANCED FILTER DRAWER (right sidebar)
@@ -256,10 +264,10 @@ async function loadOrders(){
     var paidRM = Number(o.amount_paid||0);
     var balRM = Math.max(0, totalRM - paidRM);
     var totalCell = 'RM ' + fmtMYR(totalRM);
-    if(paidRM > 0 && paidRM < totalRM){
+    if(orderFullyPaid(o)){
+      if(totalRM > 0) totalCell += '<div style="font-size:10px;color:var(--green);font-weight:600;margin-top:2px;">Paid in full</div>';
+    } else if(paidRM > 0 && paidRM < totalRM){
       totalCell += '<div style="font-size:10px;color:#a16207;font-weight:600;margin-top:2px;">Paid RM '+fmtMYR(paidRM)+' · Bal RM '+fmtMYR(balRM)+'</div>';
-    } else if(paidRM >= totalRM && totalRM > 0){
-      totalCell += '<div style="font-size:10px;color:var(--green);font-weight:600;margin-top:2px;">Paid in full</div>';
     }
     var custIdJs=String(o.customer_id||'').replace(/[\\'"<>]/g,'');
     // Customer name links to the profile modal when the order is tied to a
@@ -429,10 +437,15 @@ async function viewOrder(id){
   // Paid / Balance line inside the totals card
   var paidNow = Number(order.amount_paid||0);
   var totalNow = Number(order.total||0);
-  var balanceNow = Math.max(0, totalNow - paidNow);
-  var payState = paidNow <= 0 ? 'unpaid' : (paidNow >= totalNow ? 'paid' : 'partial');
+  // A settled status (Paid / Ready for Collection / Completed) means the
+  // amount is fully settled — show no outstanding balance even if the
+  // recorded amount_paid is lower (e.g. a legacy partial-paid then marked Paid).
+  var settled = orderFullyPaid(order);
+  var paidDisplay = settled ? totalNow : paidNow;
+  var balanceNow = settled ? 0 : Math.max(0, totalNow - paidNow);
+  var payState = settled ? 'paid' : (paidNow <= 0 ? 'unpaid' : 'partial');
   var payColor = payState === 'paid' ? 'var(--green)' : payState === 'partial' ? '#a16207' : 'var(--ink3)';
-  html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;color:'+payColor+';"><span>Paid</span><span>RM '+fmtMYR(paidNow)+'</span></div>';
+  html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;color:'+payColor+';"><span>Paid</span><span>RM '+fmtMYR(paidDisplay)+'</span></div>';
   html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;font-weight:600;color:'+(balanceNow>0?'var(--red)':'var(--green)')+';"><span>Balance</span><span>RM '+fmtMYR(balanceNow)+'</span></div>';
   html+='</div>';
 
@@ -446,11 +459,11 @@ async function viewOrder(id){
   html+=payBadge+'</div>';
   html+='<div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;">';
   html+='<label style="font-size:11px;color:var(--ink3);">Amount paid (RM)</label>';
-  html+='<input class="form-input" id="mo-amount-paid" type="number" step="0.01" min="0" value="'+paidNow.toFixed(2)+'" style="width:120px;font-size:12px;padding:6px 10px;">';
+  html+='<input class="form-input" id="mo-amount-paid" type="number" step="0.01" min="0" value="'+paidDisplay.toFixed(2)+'" style="width:120px;font-size:12px;padding:6px 10px;">';
   html+='<button class="btn btn-primary btn-sm" onclick="updateOrderAmountPaid(\''+id+'\','+totalNow+')">Update</button>';
   html+='</div>';
   html+='<div style="margin-top:.5rem;font-size:11px;color:var(--ink3);">Total RM '+fmtMYR(totalNow)+' · Outstanding <strong style="color:'+(balanceNow>0?'var(--red)':'var(--green)')+';">RM '+fmtMYR(balanceNow)+'</strong></div>';
-  if(paidNow>0 && order.amount_paid_at){
+  if(paidDisplay>0 && order.amount_paid_at){
     html+='<div style="margin-top:.2rem;font-size:11px;color:var(--ink4);">Payment received: '+fmtDateTime(order.amount_paid_at)+'</div>';
   }
   html+='</div>';
@@ -659,7 +672,7 @@ async function updateOrderAmountPaid(orderId, totalAmount){
 // ═══════════════════════════════════════
 async function updateOrderStatus(orderId){
   var newStatus=document.getElementById('mo-status-select').value;
-  var{data:order}=await sb.from('salesweb_customer_orders').select('status,total,customer_name,billing_name,order_number,customer_email').eq('id',orderId).single();
+  var{data:order}=await sb.from('salesweb_customer_orders').select('status,total,amount_paid,customer_name,billing_name,order_number,customer_email').eq('id',orderId).single();
   if(!order)return;
   var oldStatus=order.status;
   if(newStatus===oldStatus){toast('Status unchanged');return;}
@@ -674,8 +687,15 @@ async function updateOrderStatus(orderId){
 }
 
 async function executeCancelOrStatusUpdate(orderId,oldStatus,newStatus,order){
-  // Update order
-  await sb.from('salesweb_customer_orders').update({status:newStatus,updated_at:new Date().toISOString()}).eq('id',orderId);
+  // Update order. Moving to a settled status (Paid / Ready for Collection /
+  // Completed) means the amount is settled — sync amount_paid to total and
+  // stamp the date so no phantom balance remains.
+  var patch={status:newStatus,updated_at:new Date().toISOString()};
+  if(SETTLED_STATUSES[newStatus] && (Number(order.amount_paid)||0) < (Number(order.total)||0)){
+    patch.amount_paid=Number(order.total)||0;
+    patch.amount_paid_at=new Date().toISOString();
+  }
+  await sb.from('salesweb_customer_orders').update(patch).eq('id',orderId);
 
   // Log to timeline
   var session=await sb.auth.getSession();

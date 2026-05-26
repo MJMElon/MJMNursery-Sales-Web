@@ -605,10 +605,22 @@ input,select,textarea,button{font-family:inherit;}
     <!-- SETTINGS -->
     <div class="tab-content" id="tab-settings">
       <div class="main-header"><div class="main-title">Settings</div></div>
+      <div style="display:flex;gap:.4rem;margin-bottom:1rem;flex-wrap:wrap;">
+        <button class="btn btn-primary btn-sm" id="set-subtab-catalog" onclick="showSettingsSubTab('catalog')">Catalog</button>
+        <button class="btn btn-outline btn-sm" id="set-subtab-payments" onclick="showSettingsSubTab('payments')">Payments</button>
+        <button class="btn btn-outline btn-sm" id="set-subtab-orders" onclick="showSettingsSubTab('orders')">Orders</button>
+        <button class="btn btn-outline btn-sm" id="set-subtab-notifications" onclick="showSettingsSubTab('notifications')">Notifications</button>
+      </div>
+
+      <!-- CATALOG: product types / collections / tags -->
+      <div id="set-panel-catalog">
       <div class="card"><h3>Product Types</h3><div id="settings-product-types"></div><div style="display:flex;gap:.5rem;margin-top:.8rem;"><input class="form-input" id="new-ptype" style="max-width:250px;" placeholder="New product type name"><button class="btn btn-primary btn-sm" onclick="addProductType()">Add</button></div></div>
       <div class="card"><h3>Collections</h3><div id="settings-collections"></div><div style="display:flex;gap:.5rem;margin-top:.8rem;"><input class="form-input" id="new-collection" style="max-width:250px;" placeholder="New collection name"><button class="btn btn-primary btn-sm" onclick="addCollection()">Add</button></div></div>
       <div class="card"><h3>Product Tags</h3><div id="settings-tags"></div><div style="display:flex;gap:.5rem;margin-top:.8rem;"><input class="form-input" id="new-tag" style="max-width:250px;" placeholder="New tag name"><button class="btn btn-primary btn-sm" onclick="addTag()">Add</button></div></div>
+      </div><!-- /catalog -->
 
+      <!-- PAYMENTS -->
+      <div id="set-panel-payments" style="display:none;">
       <!-- ─── Payment Details (offline bank transfer + DuitNow QR) ─── -->
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
@@ -642,6 +654,10 @@ input,select,textarea,button{font-family:inherit;}
         </div>
       </div>
 
+      </div><!-- /payments -->
+
+      <!-- NOTIFICATIONS -->
+      <div id="set-panel-notifications" style="display:none;">
       <!-- ─── Notification Config (admin emails + booking URL for post-payment) ─── -->
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
@@ -675,6 +691,10 @@ input,select,textarea,button{font-family:inherit;}
         </div>
       </div>
 
+      </div><!-- /notifications -->
+
+      <!-- ORDERS -->
+      <div id="set-panel-orders" style="display:none;">
       <!-- ─── Stock Auto-Release (unpaid cash orders) ─── -->
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
@@ -695,6 +715,7 @@ input,select,textarea,button{font-family:inherit;}
         </div>
         <div style="font-size:10.5px;color:var(--ink4);margin-top:.6rem;">e.g. 48 = release after 2 days, 24 = after 1 day, 72 = after 3 days. Cleanup runs whenever this Orders page is opened, and on the optional pg_cron schedule.</div>
       </div>
+      </div><!-- /orders -->
 
       <!-- Visible build stamp so an admin can verify they're on the new
            version (and not a cached older HTML). Bump when the page changes. -->
@@ -1166,7 +1187,17 @@ function statusBadge(s){return{'Pending':'badge-amber','Confirmed':'badge-blue',
 
 var adminSettings={productTypes:['Seedling','Merchandise'],collections:['Normal Sales','Promotion'],tags:['Best Seller','New Arrival','Limited']};
 
+function showSettingsSubTab(tab){
+  ['catalog','payments','orders','notifications'].forEach(function(t){
+    var panel=document.getElementById('set-panel-'+t);
+    var btn=document.getElementById('set-subtab-'+t);
+    if(panel) panel.style.display = (t===tab)?'':'none';
+    if(btn) btn.className='btn btn-'+(t===tab?'primary':'outline')+' btn-sm';
+  });
+}
+
 async function loadSettings(){
+  showSettingsSubTab('catalog');
   try{var s=localStorage.getItem('mjm_admin_settings');if(s)adminSettings=JSON.parse(s);}catch(e){}
   renderSettingsList('settings-product-types',adminSettings.productTypes,'ptype');
   renderSettingsList('settings-collections',adminSettings.collections,'coll');

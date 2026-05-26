@@ -2510,31 +2510,36 @@ function renderQuotation(){
     sessionStorage.setItem('mjm_quote_num_'+stamp, quoteNum);
   }
 
+  var fmtMoney = function(n){ return (n||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}); };
+  var bcell = 'border:1px solid var(--green-pale);padding:.65rem .8rem;';
   var subtotal = 0;
-  var rows = cartItems.map(function(c){
+  var rows = cartItems.map(function(c, i){
     var line = (c.price || 0) * (c.qty || 0);
     subtotal += line;
     // c.name is canonical ("Name — Month Year"); legacy cart items may still need the suffix.
     var hasMonth = c.month && c.name && c.name.indexOf(c.month) !== -1;
     var label = (c.name || '—') + (c.month && !hasMonth ? ' — ' + c.month : '');
-    return '<tr>'+
-      '<td>'+escapeQuote(label)+'</td>'+
-      '<td class="num">'+(c.qty||0).toLocaleString()+'</td>'+
-      '<td class="num">RM '+(c.price||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>'+
-      '<td class="num">RM '+line.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>'+
+    var shade = (i % 2 === 1) ? 'background:#faf9f4;' : '';
+    return '<tr style="'+shade+'">'+
+      '<td style="'+bcell+'text-align:center;color:var(--text-mid);">'+(i+1)+'</td>'+
+      '<td style="'+bcell+'font-weight:700;color:var(--text-dark);">'+escapeQuote(label)+'</td>'+
+      '<td style="'+bcell+'text-align:right;font-variant-numeric:tabular-nums;">'+(c.qty||0).toLocaleString()+'</td>'+
+      '<td style="'+bcell+'text-align:right;font-variant-numeric:tabular-nums;">'+fmtMoney(c.price||0)+'</td>'+
+      '<td style="'+bcell+'text-align:right;font-weight:700;font-variant-numeric:tabular-nums;">'+fmtMoney(line)+'</td>'+
     '</tr>';
   }).join('');
 
+  var th = 'border:1px solid var(--green-pale);padding:.6rem .8rem;background:var(--cream);font-size:11px;font-weight:700;color:var(--text-mid);';
   out.innerHTML =
     '<div class="quote-doc" id="quote-doc">'+
       '<div class="quote-doc-head">'+
         '<div>'+
           '<div class="qd-brand">MJM <em>Nursery</em></div>'+
-          '<div style="font-size:11px;color:var(--text-light);margin-top:.4rem;line-height:1.6;">Mega Jutamas Sdn. Bhd.<br>2nd Floor (B), Lot 1180, Bangunan BEI, Lorong Dua,<br>Krokop, 98007 Miri, Sarawak<br>085-419907 · info@mjmnursery.com</div>'+
+          '<div style="font-size:11px;color:var(--text-light);margin-top:.4rem;line-height:1.6;">MEGA JUTAMAS SDN BHD (663951-U)<br>2ND Floor (B), Lot 1180, Bangunan BEI, Lorong Dua, Krokop,<br>P.O. Box 163, 98007 Miri, Sarawak.<br>Tel: 085-419907 · Fax: 085-413264</div>'+
         '</div>'+
         '<div class="qd-meta">'+
           '<div><strong>Quotation</strong></div>'+
-          '<div>No: '+quoteNum+'</div>'+
+          '<div>No: '+escapeQuote(quoteNum)+'</div>'+
           '<div>Date: '+fmtDate(today)+'</div>'+
           '<div>Valid Until: '+fmtDate(expiry)+'</div>'+
         '</div>'+
@@ -2544,20 +2549,40 @@ function renderQuotation(){
           '<div class="qp-label">Quotation For</div>'+
           '<div class="qp-value">'+
             '<strong>'+escapeQuote(company)+'</strong>'+
-            (attn  ? '<br>Contact: '+escapeQuote(attn)  : '')+
+            (attn  ? '<br>Attn: '+escapeQuote(attn)  : '')+
             (addr  ? '<br>'+escapeQuote(addr)        : '')+
             (phone ? '<br>Tel: '+escapeQuote(phone)  : '')+
             (email ? '<br>Email: '+escapeQuote(email): '')+
           '</div>'+
         '</div>'+
       '</div>'+
-      '<table class="quote-table">'+
-        '<thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Unit Price</th><th class="num">Amount</th></tr></thead>'+
+      '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:1.25rem;">'+
+        '<thead><tr>'+
+          '<th style="'+th+'text-align:center;">No</th>'+
+          '<th style="'+th+'text-align:left;">Description</th>'+
+          '<th style="'+th+'text-align:right;">Qty<br><span style="font-weight:400;">(Palm)</span></th>'+
+          '<th style="'+th+'text-align:right;">Unit Price<br><span style="font-weight:400;">(RM)</span></th>'+
+          '<th style="'+th+'text-align:right;">Amount<br><span style="font-weight:400;">(RM)</span></th>'+
+        '</tr></thead>'+
         '<tbody>'+rows+'</tbody>'+
       '</table>'+
       '<div class="quote-totals">'+
-        '<div class="qt-row"><span>Subtotal</span><span>RM '+subtotal.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</span></div>'+
-        '<div class="qt-row grand"><span>Total</span><span>RM '+subtotal.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</span></div>'+
+        '<div class="qt-row"><span>Subtotal (RM)</span><span>'+fmtMoney(subtotal)+'</span></div>'+
+        '<div class="qt-row grand"><span>TOTAL QUOTE (RM)</span><span>'+fmtMoney(subtotal)+'</span></div>'+
+      '</div>'+
+      '<div class="quote-footer-note">'+
+        '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text-light);margin-bottom:.5rem;">Terms &amp; Conditions</div>'+
+        '<ol style="margin:0;padding-left:1.2rem;font-size:11.5px;color:var(--text-mid);line-height:1.85;">'+
+          '<li>Payment Term: Cash Only.</li>'+
+          '<li>All payment should be crossed and made payable to:<br><strong style="color:var(--text-dark);">MEGA JUTAMAS SDN BHD</strong><br>A/C No : HLBB 027-00-11609-6 · Hong Leong Bank Berhad</li>'+
+          '<li>All payment made towards the purchase of oil palm seedlings are non-refundable.</li>'+
+          '<li>Collection must be made according to the scheduled collection date.</li>'+
+        '</ol>'+
+        '<div style="margin-top:1.5rem;padding-top:.8rem;border-top:1px solid #eee;display:flex;justify-content:space-between;gap:1rem;font-size:10px;color:var(--text-light);">'+
+          '<span style="font-weight:700;">MJM NURSERY</span>'+
+          '<span style="font-style:italic;">"This is a computer-generated quotation and no signature is required."</span>'+
+          '<span>'+escapeQuote(quoteNum)+' · Page 1 of 1</span>'+
+        '</div>'+
       '</div>'+
     '</div>'+
     '<div class="quote-actions">'+

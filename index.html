@@ -3716,28 +3716,38 @@ function openOrderDetail(ordNum){
     });
   }
 
+  // The post-payment flow (Payment Confirmed, Points, Collection booking) is
+  // gated on the order's CURRENT status — not on historical timeline stamps.
+  // An order that is still Pending Payment (or only Partially Paid) must show
+  // no payment/points/collection steps, even if it was briefly marked Paid
+  // before and those bookkeeping rows linger in the timeline table.
+  var isPaidOrBeyond = ['Paid','Ready for Collection','Collecting','Completed','Order Completed'].indexOf(o.status) !== -1;
+
   var steps=[];
   if(stampCancelled){
     steps.push({label:'Order Placed',note:'Order placed by customer',date:stampPlaced,done:true});
     steps.push({label:'Order Cancelled',note:'This order was cancelled',date:stampCancelled,done:true,isCancelled:true});
   } else {
     steps.push({label:'Order Placed',note:'Order placed by customer',date:stampPlaced,done:true});
-    if(stampPaid){
+    if(!isPaidOrBeyond){
+      // Not yet paid — the only next action is to complete payment.
+      steps.push({label:'Awaiting Payment',note:'Complete your payment to confirm this order.',done:false});
+    } else {
       steps.push({label:'Payment Confirmed',note:o.paymentMethod||'Payment received',date:stampPaid,done:true});
-    }
-    if(stampPoints){
-      var pNote = pointsCount>0 ? (pointsCount+' loyalty points credited') : 'Loyalty points credited';
-      steps.push({label:'Points Issued',note:pNote,date:stampPoints,done:true});
-    }
-    if(stampCollected){
-      steps.push({label:'Collection Booked',note:'Collection slot confirmed',done:true});
-      var cDate=new Date(stampCollected).toLocaleDateString('en-MY',{day:'2-digit',month:'short',year:'numeric'});
-      steps.push({label:'Collected Seedling on '+cDate,note:'',date:stampCollected,done:true,files:collectedFiles});
-    } else if(stampPaid){
-      steps.push({label:'Book Your Collection',note:'Pick a collection time at the nursery',done:false,action:'book'});
-    }
-    if(stampCompleted || o.status==='Completed' || o.status==='Order Completed'){
-      steps.push({label:'Order Completed',note:'Thank you for your purchase! 🌱',date:stampCompleted,done:true,isFinal:true});
+      if(stampPoints || pointsCount>0){
+        var pNote = pointsCount>0 ? (pointsCount+' loyalty points credited') : 'Loyalty points credited';
+        steps.push({label:'Points Issued',note:pNote,date:stampPoints,done:true});
+      }
+      if(stampCollected){
+        steps.push({label:'Collection Booked',note:'Collection slot confirmed',done:true});
+        var cDate=new Date(stampCollected).toLocaleDateString('en-MY',{day:'2-digit',month:'short',year:'numeric'});
+        steps.push({label:'Collected Seedling on '+cDate,note:'',date:stampCollected,done:true,files:collectedFiles});
+      } else {
+        steps.push({label:'Book Your Collection',note:'Pick a collection time at the nursery',done:false,action:'book'});
+      }
+      if(stampCompleted || o.status==='Completed' || o.status==='Order Completed'){
+        steps.push({label:'Order Completed',note:'Thank you for your purchase! 🌱',date:stampCompleted,done:true,isFinal:true});
+      }
     }
   }
 

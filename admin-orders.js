@@ -643,7 +643,11 @@ async function updateOrderAmountPaid(orderId, totalAmount){
   var prev = Number(cur && cur.amount_paid) || 0;
   var nowIso = new Date().toISOString();
   var{error}=await sb.from('salesweb_customer_orders').update({amount_paid:amt, amount_paid_at:nowIso}).eq('id',orderId);
-  if(error){toast('Error: '+error.message,'error');return;}
+  if(error){
+    // amount_paid_at column may not exist yet — retry recording just the amount.
+    var r2=await sb.from('salesweb_customer_orders').update({amount_paid:amt}).eq('id',orderId);
+    if(r2.error){toast('Error: '+r2.error.message,'error');return;}
+  }
   var tot = Number(totalAmount)||0;
   var bal = Math.max(0, tot-amt);
   // Record a dated entry on the order timeline so there's a payment-received date.
@@ -687,15 +691,21 @@ async function updateOrderStatus(orderId){
 }
 
 async function executeCancelOrStatusUpdate(orderId,oldStatus,newStatus,order){
-  // Update order. Moving to a settled status (Paid / Ready for Collection /
-  // Completed) means the amount is settled — sync amount_paid to total and
-  // stamp the date so no phantom balance remains.
-  var patch={status:newStatus,updated_at:new Date().toISOString()};
+  // Primary: change the status. This must succeed before any side effects,
+  // and its error is surfaced (a silent failure here previously made
+  // "Update" appear to do nothing).
+  var stRes=await sb.from('salesweb_customer_orders').update({status:newStatus,updated_at:new Date().toISOString()}).eq('id',orderId);
+  if(stRes.error){ toast('Could not update status: '+stRes.error.message,'error'); return; }
+
+  // Best-effort: when moving to a settled status (Paid / Ready for Collection /
+  // Completed), sync amount_paid to total + stamp the date so no phantom
+  // balance remains. Done as a SEPARATE update with a fallback so a missing
+  // amount_paid_at column can never block the status change above.
   if(SETTLED_STATUSES[newStatus] && (Number(order.amount_paid)||0) < (Number(order.total)||0)){
-    patch.amount_paid=Number(order.total)||0;
-    patch.amount_paid_at=new Date().toISOString();
+    var _tot=Number(order.total)||0, _now=new Date().toISOString();
+    var setRes=await sb.from('salesweb_customer_orders').update({amount_paid:_tot, amount_paid_at:_now}).eq('id',orderId);
+    if(setRes.error){ await sb.from('salesweb_customer_orders').update({amount_paid:_tot}).eq('id',orderId); }
   }
-  await sb.from('salesweb_customer_orders').update(patch).eq('id',orderId);
 
   // Log to timeline
   var session=await sb.auth.getSession();

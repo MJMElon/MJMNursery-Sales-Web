@@ -675,6 +675,27 @@ input,select,textarea,button{font-family:inherit;}
         </div>
       </div>
 
+      <!-- ─── Stock Auto-Release (unpaid cash orders) ─── -->
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+          <h3 style="margin:0;">Stock Auto-Release (Unpaid Cash Orders)</h3>
+          <button class="btn btn-primary btn-sm" id="autorel-save-btn" onclick="saveAutoReleaseConfig()">Save</button>
+        </div>
+        <p style="font-size:11px;color:var(--ink4);margin-bottom:.8rem;">A <b>cash-term</b> order left unpaid (Pending Payment) for longer than the window below is automatically cancelled and its held stock returned. <b>Credit-term orders are never auto-released</b> — their stock is always kept.</p>
+        <p id="autorel-debug" style="font-size:11px;font-weight:600;margin-bottom:.8rem;">Loading saved values…</p>
+        <div style="display:flex;align-items:center;gap:1.2rem;flex-wrap:wrap;">
+          <label style="display:flex;align-items:center;gap:.5rem;font-size:13px;font-weight:600;color:var(--ink2);cursor:pointer;">
+            <input type="checkbox" id="autorel-enabled" style="width:16px;height:16px;accent-color:var(--green);"> Enable auto-release
+          </label>
+          <div style="display:flex;align-items:center;gap:.5rem;">
+            <label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;">Release after</label>
+            <input class="form-input" id="autorel-hours" type="number" min="1" step="1" value="48" style="width:90px;font-size:13px;text-align:right;">
+            <span style="font-size:12px;color:var(--ink3);">hours unpaid</span>
+          </div>
+        </div>
+        <div style="font-size:10.5px;color:var(--ink4);margin-top:.6rem;">e.g. 48 = release after 2 days, 24 = after 1 day, 72 = after 3 days. Cleanup runs whenever this Orders page is opened, and on the optional pg_cron schedule.</div>
+      </div>
+
       <!-- Visible build stamp so an admin can verify they're on the new
            version (and not a cached older HTML). Bump when the page changes. -->
       <div style="text-align:center;font-size:10px;color:var(--ink4);padding:.5rem 0;">Admin build 2026-05-21a · post-payment notifications</div>
@@ -1152,6 +1173,36 @@ async function loadSettings(){
   renderSettingsList('settings-tags',adminSettings.tags,'tag');
   loadPaymentDetails();
   loadNotificationConfig();
+  loadAutoReleaseConfig();
+}
+
+// ═══════════════════════════════════════
+//  STOCK AUTO-RELEASE CONFIG
+//  Stored in salesweb_app_settings.key='order_auto_release' as JSON:
+//    { enabled: true, hours: 48 }
+//  Read by the release_abandoned_cash_orders() SQL function.
+// ═══════════════════════════════════════
+async function loadAutoReleaseConfig(){
+  var dbg=document.getElementById('autorel-debug');
+  try{
+    var{data}=await sb.from('salesweb_app_settings').select('value').eq('key','order_auto_release').maybeSingle();
+    var cfg={enabled:true,hours:48};
+    if(data&&data.value){ try{ cfg={...cfg,...(typeof data.value==='string'?JSON.parse(data.value):data.value)}; }catch(e){} }
+    document.getElementById('autorel-enabled').checked = cfg.enabled!==false;
+    document.getElementById('autorel-hours').value = cfg.hours||48;
+    if(dbg){ dbg.textContent = cfg.enabled!==false ? ('Active — releasing after '+(cfg.hours||48)+'h.') : 'Disabled — stock is never auto-released.'; dbg.style.color='var(--ink4)'; }
+  }catch(e){ if(dbg){ dbg.textContent='Could not load setting — defaults shown.'; dbg.style.color='var(--red)'; } }
+}
+async function saveAutoReleaseConfig(){
+  var enabled=document.getElementById('autorel-enabled').checked;
+  var hours=parseInt(document.getElementById('autorel-hours').value,10);
+  if(isNaN(hours)||hours<1){ toast('Enter a valid number of hours (≥ 1)','error'); return; }
+  var btn=document.getElementById('autorel-save-btn'); btn.disabled=true; btn.textContent='Saving…';
+  var{error}=await sb.from('salesweb_app_settings').upsert({key:'order_auto_release',value:JSON.stringify({enabled:enabled,hours:hours})},{onConflict:'key'});
+  btn.disabled=false; btn.textContent='Save';
+  if(error){ toast('Error: '+error.message,'error'); return; }
+  toast('Auto-release setting saved');
+  loadAutoReleaseConfig();
 }
 
 // ═══════════════════════════════════════

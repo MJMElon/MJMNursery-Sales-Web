@@ -199,8 +199,8 @@ BEGIN
   -- Per-customer limit (counts past redemptions)
   IF COALESCE(v_coupon.per_customer_limit, 0) > 0 AND p_customer_id IS NOT NULL THEN
     SELECT COUNT(*) INTO v_per_customer
-      FROM salesweb_coupon_redemptions
-     WHERE coupon_id = v_coupon.id AND customer_id = p_customer_id;
+      FROM salesweb_coupon_redemptions r
+     WHERE r.coupon_id = v_coupon.id AND r.customer_id = p_customer_id;
     IF v_per_customer >= v_coupon.per_customer_limit THEN
       RETURN QUERY SELECT FALSE, 'You have already used this voucher', 0::NUMERIC, 0::NUMERIC, v_coupon.id, v_coupon.name;
       RETURN;

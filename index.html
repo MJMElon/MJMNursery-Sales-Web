@@ -3873,6 +3873,23 @@ function downloadOrder(orderId){
   w.document.close();
 }
 
+// Flow held stock back to products when an order is cancelled. Stock is
+// held at order creation; cancelling returns each item's quantity. Mirrors
+// the direct stock_qty adjustment used as the checkout hold fallback.
+async function pRestoreOrderStock(ord){
+  var items=(ord && ord.items)||[];
+  await Promise.all(items.map(async function(it){
+    var pid=it.product_id, qty=Number(it.quantity)||0;
+    if(!pid || qty<=0) return;
+    try{
+      var{data:prod}=await _sb.from('salesweb_products').select('stock_qty').eq('id',pid).maybeSingle();
+      if(prod){
+        await _sb.from('salesweb_products').update({stock_qty:(prod.stock_qty||0)+qty,updated_at:new Date().toISOString()}).eq('id',pid);
+      }
+    }catch(e){ console.error('stock restore failed for',pid,e); }
+  }));
+}
+
 // Customer-initiated order cancel. Allowed only while status === 'Pending Payment'.
 // We re-check the current status against the DB (not the in-memory P_ORDERS cache)
 // because the cache can be stale — a webhook or admin update could have moved the
@@ -3880,7 +3897,7 @@ function downloadOrder(orderId){
 async function pCancelOrder(orderId){
   var ord = P_ORDERS.find(function(x){return x.id === orderId;});
   if (!ord) { showPortalToast('Order not found'); return; }
-  if (!confirm('Cancel order #' + ord.id + '?\n\nThis will set the order to Cancelled and cannot be undone. The items will be released back to stock by the team.')) return;
+  if (!confirm('Cancel order #' + ord.id + '?\n\nThis will set the order to Cancelled and cannot be undone. The items will be returned to stock automatically.')) return;
 
   try {
     await loadSupabaseSdk();
@@ -3900,13 +3917,15 @@ async function pCancelOrder(orderId){
         .update({ status: 'Cancelled', updated_at: new Date().toISOString() })
         .eq('id', fullId);
     if (error) { showPortalToast('Cancel failed: ' + error.message); return; }
+    // Return the held stock now that the order is cancelled.
+    await pRestoreOrderStock(ord);
     await _sb.from('salesweb_order_timeline').insert([{
       order_id: fullId,
       status: 'Cancelled',
-      note: 'Order cancelled by customer via portal',
+      note: 'Order cancelled by customer via portal — stock returned',
       changed_by: email
     }]);
-    showPortalToast('Order cancelled');
+    showPortalToast('Order cancelled — items returned to stock');
     document.getElementById('p-order-detail-modal').classList.remove('open');
     // Refresh portal data so the order moves into the Cancelled state instantly.
     try { await loadCustomerOrders(); pRenderOrders(); pRenderHistory(); } catch(e){ console.error('portal refresh:', e); }

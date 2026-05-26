@@ -3221,12 +3221,13 @@ function pBadge(s){return{
   'Cancelled':'p-badge-red','Refunded':'p-badge-red'
 }[s]||'p-badge-grey';}
 
-// Only a Completed order leaves Active Orders and moves to History.
-// Every other status (Pending Payment, Paid, Ready for Collection,
-// Cancelled, Refunded, …) stays in Active Orders until it is Completed.
-// DB stores 'Completed'; older demo data used 'Order Completed'.
+// Terminal statuses live in Order History: Completed, Cancelled, Refunded.
+// Everything else (Pending Payment, Paid, Ready for Collection, …) stays
+// in Active Orders. DB stores 'Completed'; older demo data used
+// 'Order Completed', kept for backwards compatibility.
 function pIsOrderDone(o){
-  return o.status==='Completed' || o.status==='Order Completed';
+  return o.status==='Completed' || o.status==='Order Completed'
+      || o.status==='Cancelled' || o.status==='Refunded';
 }
 
 async function saveProfileDetails(){

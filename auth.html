@@ -432,11 +432,15 @@ async function handlePostLogin(session){
   // Routing: read per-module access from shared_profiles.permissions JSONB
   // (set via the User Access page). Fall back to legacy role='admin' column
   // for users provisioned before the permissions migration.
-  var{data:profile}=await _supabase.from('shared_profiles').select('role, permissions').eq('id',session.user.id).single();
+  var{data:profile}=await _supabase.from('shared_profiles').select('role, user_type, permissions').eq('id',session.user.id).single();
   var swLevel=(profile&&profile.permissions&&profile.permissions.modules&&profile.permissions.modules.salesweb)||'none';
   var legacyAdmin=profile&&profile.role==='admin';
+  // Customers always land on the storefront/portal — never the admin portal,
+  // even if a stray salesweb permission lingers on their profile.
+  var isCustomer=profile&&(profile.user_type==='customer'||profile.role==='customer');
+  var hasSalesweb=(swLevel==='admin'||swLevel==='normal');
 
-  if(swLevel==='admin'||swLevel==='normal'||legacyAdmin){
+  if(legacyAdmin||(hasSalesweb&&!isCustomer)){
     window.location.href='admin.html';
   } else {
     sessionStorage.setItem('mjm_last_page','portal');

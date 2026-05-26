@@ -1089,10 +1089,16 @@ var sb=supabase.createClient(SB_URL,SB_KEY);
 async function checkAdmin(){
   var{data:{session}}=await sb.auth.getSession();
   if(!session){window.location.href='auth.html';return;}
-  var{data:profile}=await sb.from('shared_profiles').select('role, permissions').eq('id',session.user.id).single();
+  var{data:profile}=await sb.from('shared_profiles').select('role, user_type, permissions').eq('id',session.user.id).single();
   var swLevel=(profile&&profile.permissions&&profile.permissions.modules&&profile.permissions.modules.salesweb)||'none';
   var legacyAdmin=profile&&profile.role==='admin';
-  if(!profile||(swLevel!=='admin'&&swLevel!=='normal'&&!legacyAdmin)){window.location.href='index.html';return;}
+  // A customer-tagged profile is NEVER admitted to the admin portal, even if a
+  // stray salesweb permission lingers on it. Only a legacy admin, or a
+  // non-customer profile with salesweb access, gets in.
+  var isCustomer=profile&&(profile.user_type==='customer'||profile.role==='customer');
+  var hasSalesweb=(swLevel==='admin'||swLevel==='normal');
+  var allowed=legacyAdmin||(hasSalesweb&&!isCustomer);
+  if(!profile||!allowed){window.location.href='index.html';return;}
   document.getElementById('auth-loading').style.display='none';
   document.getElementById('app').classList.add('show');
   document.getElementById('admin-name').textContent=session.user.user_metadata?.full_name||session.user.email;

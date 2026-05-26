@@ -27,6 +27,8 @@ var ORDER_STATUSES = ['Pending Payment','Partially Paid','Paid','Ready for Colle
 
 // RM formatter with en-MY thousands separators, always 2 decimals.
 function fmtMYR(n){ return (Number(n)||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+// Date + time formatter for timestamps (e.g. payment received).
+function fmtDateTime(d){ if(!d) return '—'; try{ return new Date(d).toLocaleString('en-MY',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}); }catch(e){ return '—'; } }
 
 // ═══════════════════════════════════════
 //  ADVANCED FILTER DRAWER (right sidebar)
@@ -448,6 +450,9 @@ async function viewOrder(id){
   html+='<button class="btn btn-primary btn-sm" onclick="updateOrderAmountPaid(\''+id+'\','+totalNow+')">Update</button>';
   html+='</div>';
   html+='<div style="margin-top:.5rem;font-size:11px;color:var(--ink3);">Total RM '+fmtMYR(totalNow)+' · Outstanding <strong style="color:'+(balanceNow>0?'var(--red)':'var(--green)')+';">RM '+fmtMYR(balanceNow)+'</strong></div>';
+  if(paidNow>0 && order.amount_paid_at){
+    html+='<div style="margin-top:.2rem;font-size:11px;color:var(--ink4);">Payment received: '+fmtDateTime(order.amount_paid_at)+'</div>';
+  }
   html+='</div>';
 
   // Discount + Coupon controls (collapsible)
@@ -620,12 +625,31 @@ async function updateOrderAmountPaid(orderId, totalAmount){
   if(isNaN(amt) || amt < 0){ toast('Enter a valid amount (≥ 0)','error'); return; }
   // Round to 2dp to avoid floating-point dust in DB.
   amt = Math.round(amt * 100) / 100;
-  var{error}=await sb.from('salesweb_customer_orders').update({amount_paid:amt}).eq('id',orderId);
+  // Previous value so we only log a timeline entry when it actually changes.
+  var{data:cur}=await sb.from('salesweb_customer_orders').select('amount_paid').eq('id',orderId).maybeSingle();
+  var prev = Number(cur && cur.amount_paid) || 0;
+  var nowIso = new Date().toISOString();
+  var{error}=await sb.from('salesweb_customer_orders').update({amount_paid:amt, amount_paid_at:nowIso}).eq('id',orderId);
   if(error){toast('Error: '+error.message,'error');return;}
-  // Helpful nudge — but don't auto-change status, leave that to the admin.
   var tot = Number(totalAmount)||0;
+  var bal = Math.max(0, tot-amt);
+  // Record a dated entry on the order timeline so there's a payment-received date.
+  if(amt !== prev){
+    var sess=await sb.auth.getSession();
+    var who=(sess&&sess.data&&sess.data.session&&sess.data.session.user&&sess.data.session.user.email)||'admin';
+    var label=(amt>=tot && tot>0) ? 'Payment Received (Full)' : 'Partial Payment Received';
+    try{
+      await sb.from('salesweb_order_timeline').insert([{
+        order_id:orderId,
+        status:label,
+        note:'Amount paid recorded: RM '+fmtMYR(amt)+' · Balance RM '+fmtMYR(bal),
+        changed_by:who
+      }]);
+    }catch(e){ /* timeline is best-effort */ }
+  }
+  // Helpful nudge — but don't auto-change status, leave that to the admin.
   if(amt >= tot && tot > 0) toast('Payment received in full. Remember to set status to Paid if needed.');
-  else if(amt > 0 && amt < tot) toast('Partial payment saved · Balance RM '+fmtMYR(tot-amt));
+  else if(amt > 0 && amt < tot) toast('Partial payment saved · Balance RM '+fmtMYR(bal));
   else toast('Amount paid updated');
   viewOrder(orderId); // re-render the modal with the new figures
 }

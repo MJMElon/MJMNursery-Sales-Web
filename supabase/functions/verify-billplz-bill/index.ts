@@ -78,7 +78,7 @@ serve(async (req) => {
 
     const { data: existing } = await sb
       .from('salesweb_customer_orders')
-      .select('id, order_number, customer_id, customer_name, customer_email, status, total, points_issued, points_redeemed, points_discount_rm')
+      .select('id, order_number, customer_id, customer_name, billing_name, customer_email, status, total, points_issued, points_redeemed, points_discount_rm')
       .eq('id', order_id)
       .maybeSingle()
     if (!existing) {
@@ -183,7 +183,7 @@ serve(async (req) => {
           al_number: alNumber,
           order_number: alNumber,
           order_date: new Date().toISOString(),
-          customer_name: existing.customer_name || '',
+          customer_name: existing.billing_name || existing.customer_name || '',
           product_name: productNames || 'Oil Palm Seedling',
           quantity_ordered: totalQty,
           balance_quantity: totalQty,

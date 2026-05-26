@@ -635,7 +635,7 @@ async function updateOrderAmountPaid(orderId, totalAmount){
 // ═══════════════════════════════════════
 async function updateOrderStatus(orderId){
   var newStatus=document.getElementById('mo-status-select').value;
-  var{data:order}=await sb.from('salesweb_customer_orders').select('status,total,customer_name,order_number,customer_email').eq('id',orderId).single();
+  var{data:order}=await sb.from('salesweb_customer_orders').select('status,total,customer_name,billing_name,order_number,customer_email').eq('id',orderId).single();
   if(!order)return;
   var oldStatus=order.status;
   if(newStatus===oldStatus){toast('Status unchanged');return;}
@@ -1091,7 +1091,7 @@ async function createALFromOrder(orderId,order){
     al_number:alNumber,
     order_number:alNumber,
     order_date:new Date().toISOString(),
-    customer_name:order.customer_name||'',
+    customer_name:order.billing_name||order.customer_name||'',
     product_name:productNames||'Oil Palm Seedling',
     quantity_ordered:totalQty,
     balance_quantity:totalQty,

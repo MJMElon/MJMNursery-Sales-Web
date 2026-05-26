@@ -921,7 +921,10 @@ async function placeOrder(){
   // Try up to 5 times in case of duplicate
   var order=null,error=null,orderNum='';
   for(var attempt=0;attempt<5;attempt++){
-    orderNum=genOrderNumber();
+    // Sequential year-prefixed number from the DB (atomic). Falls back to a
+    // random code only if the next_order_number() function isn't installed.
+    try{ var _nr=await _sb.rpc('next_order_number'); orderNum=(_nr&&_nr.data)?_nr.data:genOrderNumber(); }
+    catch(e){ orderNum=genOrderNumber(); }
     var result=await _sb.from('salesweb_customer_orders').insert([{
       order_number:orderNum,
       customer_id:userId,

@@ -1889,10 +1889,12 @@ async function submitNewOrder(){
     }
   }
 
-  // Generate order number — retry on duplicate
+  // Generate order number — sequential year-prefixed (atomic DB function),
+  // random fallback if the function isn't installed. Retry guards duplicates.
   var order=null,orderErr=null,orderNum='';
   for(var attempt=0;attempt<5;attempt++){
-    orderNum=genOrderNumberAdmin();
+    try{ var _nr=await sb.rpc('next_order_number'); orderNum=(_nr&&_nr.data)?_nr.data:genOrderNumberAdmin(); }
+    catch(e){ orderNum=genOrderNumberAdmin(); }
     var payload={
       order_number:orderNum,
       customer_id:custId||null,

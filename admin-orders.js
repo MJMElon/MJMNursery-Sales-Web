@@ -145,6 +145,12 @@ async function bulkDeleteOrders(){
 //  LOAD ORDERS — DASHBOARD
 // ═══════════════════════════════════════
 async function loadOrders(){
+  // Opportunistic cleanup: release stock + cancel cash-term orders that have
+  // been unpaid for 48h (credit orders are never touched). Best-effort — if
+  // the DB function isn't installed yet this just no-ops. A pg_cron schedule
+  // (see supabase/migrations/auto_release_abandoned_cash_orders.sql) covers
+  // the case where no admin opens this page.
+  try{ await sb.rpc('release_abandoned_cash_orders'); }catch(e){ /* function not installed / no-op */ }
   var q=document.getElementById('order-search').value.trim().toLowerCase();
   var status=document.getElementById('order-filter').value;
   var f = ORDER_FILTERS || {};

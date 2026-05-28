@@ -285,10 +285,16 @@ async function loadOrders(){
     var custNameCell = custIdJs
       ? '<a onclick="event.stopPropagation();viewCustomer(\''+custIdJs+'\')" style="cursor:pointer;color:var(--green-dark);font-weight:600;text-decoration:none;" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">'+custName+'</a>'
       : custName;
+    // Secondary line under the customer name shows the billing name (only when
+    // it differs from the customer name — otherwise the row reads redundantly).
+    var billingLine = '';
+    if(o.billing_name && o.billing_name !== o.customer_name){
+      billingLine = '<div style="font-size:11px;color:var(--ink4);">'+esc(o.billing_name)+'</div>';
+    }
     html+='<tr onclick="viewOrder(\''+idJs+'\')" style="cursor:pointer;">'+
       '<td style="text-align:center;" onclick="event.stopPropagation();"><input type="checkbox" class="order-select" value="'+idJs+'" onclick="event.stopPropagation();onOrderSelectChange();"></td>'+
       '<td style="font-weight:600;">#'+esc(shortId)+'</td>'+
-      '<td>'+custNameCell+'<div style="font-size:11px;color:var(--ink4);">'+esc(o.customer_email||'')+'</div></td>'+
+      '<td>'+custNameCell+billingLine+'</td>'+
       '<td style="font-size:12px;">'+fmtDate(o.created_at)+'</td>'+
       '<td>'+termsBadge+'</td>'+
       '<td style="text-align:center;">—</td>'+

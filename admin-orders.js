@@ -1515,11 +1515,12 @@ var _newOrderCustSearchTimer=null;
 var _newOrderCustResultsCache={};
 
 function genOrderNumberAdmin(){
-  var chars='ABCDEFGHJKLMNPQRSTUVWXYZ';
-  var nums='0123456789';
-  return chars[Math.floor(Math.random()*chars.length)]+nums[Math.floor(Math.random()*nums.length)]+
-         chars[Math.floor(Math.random()*chars.length)]+nums[Math.floor(Math.random()*nums.length)]+
-         chars[Math.floor(Math.random()*chars.length)]+nums[Math.floor(Math.random()*nums.length)];
+  // 5 random alphanumeric chars (no I,O) + 1 random 0–9 digit. Used only
+  // as a fallback if next_order_number() RPC fails.
+  var chars='ABCDEFGHJKLMNPQRSTUVWXYZ0123456789';
+  var out='';
+  for(var i=0;i<5;i++){ out += chars.charAt(Math.floor(Math.random()*chars.length)); }
+  return out + Math.floor(Math.random()*10).toString();
 }
 
 async function openNewOrder(){

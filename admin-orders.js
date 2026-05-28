@@ -314,6 +314,27 @@ async function viewOrder(id){
   var{data:items}=await sb.from('salesweb_order_items').select('*').eq('order_id',id);
   items=items||[];
 
+  // Parse the structured pieces out of customer_remark so they can be shown
+  // in the right place — billing fields in the Billing/E-Invoice card, the
+  // user's actual free-text remark in the Customer Remark section, and the
+  // bookkeeping prefixes (Phone, Payment, Voucher, Points) hidden.
+  var _parsed={ billAddr:'', billIc:'', billReg:'', billMpob:'', userRemark:'' };
+  if(order.customer_remark){
+    String(order.customer_remark).split(' | ').forEach(function(p){
+      p = p.trim();
+      if(!p) return;
+      if      (p.indexOf('Billing Addr: ')===0) _parsed.billAddr = p.substring(14);
+      else if (p.indexOf('IC: ')===0)            _parsed.billIc   = p.substring(4);
+      else if (p.indexOf('Reg: ')===0)           _parsed.billReg  = p.substring(5);
+      else if (p.indexOf('MPOB: ')===0)          _parsed.billMpob = p.substring(6);
+      else if (p.indexOf('Phone: ')===0)         { /* hidden — shown in Customer card */ }
+      else if (p.indexOf('Payment: ')===0)       { /* hidden — internal bookkeeping */ }
+      else if (p.indexOf('Voucher: ')===0)       { /* hidden — recorded in totals */ }
+      else if (p.indexOf('Points: ')===0)        { /* hidden — recorded as redemption */ }
+      else if (p !== 'Admin-created order')      { _parsed.userRemark = (_parsed.userRemark ? _parsed.userRemark+' | ' : '') + p; }
+    });
+  }
+
   // For credit orders, fetch per-collection events + all of this customer's
   // monthly invoices so the per-month breakdown table can render.
   var creditCollections=[];
@@ -409,9 +430,13 @@ async function viewOrder(id){
   html+='<button class="btn btn-outline btn-sm" onclick="toggleEditBilling()" style="font-size:11px;padding:2px 8px;">✏️ Edit</button>';
   html+='</div>';
   html+='<div id="mo-billing-view">';
-  html+='<div style="font-size:12px;color:var(--ink3);">'+esc(order.billing_name||order.customer_name||'—')+'</div>';
-  html+='<div style="font-size:12px;color:var(--ink3);">Tax ID: '+esc(order.billing_tax_id||'—')+'</div>';
-  html+='<div style="font-size:12px;color:var(--ink3);">Points issued: '+(order.points_issued||0)+'</div>';
+  html+='<div style="font-size:12px;color:var(--ink3);font-weight:600;">'+esc(order.billing_name||order.customer_name||'—')+'</div>';
+  if(_parsed.billReg)  html+='<div style="font-size:12px;color:var(--ink3);">Reg No: '+esc(_parsed.billReg)+'</div>';
+  if(_parsed.billIc)   html+='<div style="font-size:12px;color:var(--ink3);">I/C: '+esc(_parsed.billIc)+'</div>';
+  html+='<div style="font-size:12px;color:var(--ink3);">Tax ID (TIN): '+esc(order.billing_tax_id||'—')+'</div>';
+  if(_parsed.billMpob) html+='<div style="font-size:12px;color:var(--ink3);">MPOB License: '+esc(_parsed.billMpob)+'</div>';
+  if(_parsed.billAddr) html+='<div style="font-size:12px;color:var(--ink3);margin-top:.3rem;white-space:pre-wrap;">'+esc(_parsed.billAddr)+'</div>';
+  html+='<div style="font-size:12px;color:var(--ink3);margin-top:.3rem;">Points issued: '+(order.points_issued||0)+'</div>';
   html+='</div>';
   html+='<div id="mo-billing-edit" style="display:none;">';
   html+='<input class="form-input" id="mo-bill-name" placeholder="Billing name" value="'+esc(order.billing_name||'')+'" style="font-size:12px;padding:6px 10px;margin-bottom:.3rem;">';
@@ -491,10 +516,13 @@ async function viewOrder(id){
   html+='</div>';
 
   // ── 4. Customer Remark ──
-  if(order.customer_remark){
+  // Only the user's actual free-text remark is shown here; billing fields and
+  // bookkeeping prefixes (Phone / Payment / Voucher / Points) are surfaced in
+  // their proper cards instead.
+  if(_parsed.userRemark){
     html+='<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:.8rem 1rem;margin-bottom:1rem;">';
     html+='<div style="font-size:11px;font-weight:600;color:#92400e;margin-bottom:.3rem;">Customer Remark</div>';
-    html+='<div style="font-size:13px;color:var(--ink2);">'+esc(order.customer_remark)+'</div></div>';
+    html+='<div style="font-size:13px;color:var(--ink2);">'+esc(_parsed.userRemark)+'</div></div>';
   }
 
   // ── 4b. Credit Monthly Breakdown (only for credit-term orders) ──

@@ -1426,7 +1426,12 @@ try{var s=localStorage.getItem('mjm_admin_settings');if(s)adminSettings=JSON.par
 
 document.addEventListener('DOMContentLoaded',function(){
   checkAdmin();
-  document.querySelectorAll('.modal-overlay').forEach(function(m){m.addEventListener('click',function(e){if(e.target===m)m.classList.remove('open');});});
+  document.querySelectorAll('.modal-overlay').forEach(function(m){
+    // The New Order form holds in-progress data — don't close it on a stray
+    // backdrop click. Only the X / Cancel / Create Order buttons close it.
+    if(m.id==='modal-new-order') return;
+    m.addEventListener('click',function(e){if(e.target===m)m.classList.remove('open');});
+  });
 });
 </script>
 

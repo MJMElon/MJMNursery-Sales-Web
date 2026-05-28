@@ -976,7 +976,24 @@ async function updateOrderPaymentTerms(orderId){
   var note='Payment terms changed from '+oldTerms.toUpperCase()+' to '+newTerms.toUpperCase();
   if(newTerms==='credit'&&period)note+=' (period: '+period+')';
   await sb.from('salesweb_order_timeline').insert([{order_id:orderId,status:order.status,note:note,changed_by:user}]);
-  toast('Payment terms updated');
+
+  // Newly-credit orders proceed straight to collection (billed monthly),
+  // so fire the same paid-side-effects: issue points + create AL + send
+  // confirmation email. All three are idempotent.
+  var creditSideEffects = '';
+  if(newTerms==='credit' && oldTerms!=='credit'){
+    try{
+      var{data:fullOrder}=await sb.from('salesweb_customer_orders').select('order_number,total,customer_name,billing_name,customer_email').eq('id',orderId).single();
+      if(fullOrder){
+        await issuePoints(orderId, fullOrder.total||0);
+        await createALFromOrder(orderId, fullOrder);
+        sb.functions.invoke('send-order-email', { body: { order_id: orderId } })
+          .catch(function(err){ console.error('[email] invoke threw:', err); });
+        creditSideEffects = ' · AL issued for credit collection';
+      }
+    }catch(e){ console.warn('[Terms change] credit side effects failed:', e); }
+  }
+  toast('Payment terms updated'+creditSideEffects);
   viewOrder(orderId);
 }
 
@@ -2031,7 +2048,21 @@ async function submitNewOrder(){
     changed_by:by
   }]).then(function(){});
 
+  // Credit-term orders proceed straight to collection — they're billed
+  // monthly. Fire the same side effects as a Paid order (points issued,
+  // AL created, confirmation email) so the customer can act on it.
+  // issuePoints and createALFromOrder are idempotent; send-order-email
+  // is idempotent via email_sent_at.
+  if(terms === 'credit'){
+    try{
+      await issuePoints(order.id, total);
+      await createALFromOrder(order.id, order);
+      sb.functions.invoke('send-order-email', { body: { order_id: order.id } })
+        .catch(function(err){ console.error('[email] invoke threw:', err); });
+    }catch(e){ console.warn('[Add Order] credit side effects failed:', e); }
+  }
+
   closeModal('modal-new-order');
-  toast('Order #'+orderNum+' created');
+  toast('Order #'+orderNum+' created'+(terms==='credit'?' · AL issued for credit collection':''));
   loadOrders();
 }

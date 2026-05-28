@@ -257,7 +257,7 @@ async function loadOrders(){
     '<div class="stat-box"><div class="stat-label">Revenue</div><div class="stat-val">RM '+fmtMYR(revenue)+'</div></div>';
 
   if(!orders.length){document.getElementById('orders-table').innerHTML='<div class="loading">No orders found</div>';clearOrderSelection();return;}
-  var html='<table class="data-table"><thead><tr><th style="width:34px;text-align:center;"><input type="checkbox" id="order-select-all" onclick="toggleSelectAllOrders(this)" title="Select all"></th><th>Order</th><th>Customer</th><th>Date</th><th>Terms</th><th>Items</th><th>Total</th><th>Status</th><th>Action</th></tr></thead><tbody>';
+  var html='<table class="data-table"><thead><tr><th style="width:34px;text-align:center;"><input type="checkbox" id="order-select-all" onclick="toggleSelectAllOrders(this)" title="Select all"></th><th>Order</th><th>Date</th><th>Customer</th><th>Terms</th><th>Status</th><th>Total</th><th>Action</th></tr></thead><tbody>';
   orders.forEach(function(o){
     var statusCls=orderBadgeCls(o.status);
     var shortId=o.order_number||o.id.substring(0,8).toUpperCase();
@@ -294,12 +294,11 @@ async function loadOrders(){
     html+='<tr onclick="viewOrder(\''+idJs+'\')" style="cursor:pointer;">'+
       '<td style="text-align:center;" onclick="event.stopPropagation();"><input type="checkbox" class="order-select" value="'+idJs+'" onclick="event.stopPropagation();onOrderSelectChange();"></td>'+
       '<td style="font-weight:600;">#'+esc(shortId)+'</td>'+
-      '<td>'+custNameCell+billingLine+'</td>'+
       '<td style="font-size:12px;">'+fmtDate(o.created_at)+'</td>'+
+      '<td>'+custNameCell+billingLine+'</td>'+
       '<td>'+termsBadge+'</td>'+
-      '<td style="text-align:center;">—</td>'+
-      '<td style="font-weight:600;">'+totalCell+'</td>'+
       '<td><span class="badge '+statusCls+'">'+esc(o.status)+'</span></td>'+
+      '<td style="font-weight:600;">'+totalCell+'</td>'+
       '<td><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();viewOrder(\''+idJs+'\')">View</button></td>'+
     '</tr>';
   });

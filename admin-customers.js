@@ -257,13 +257,13 @@ async function loadCustomers(){
     html+='<tr>'+
       '<td>'+custAvatar(c.full_name||c.email)+'</td>'+
       '<td style="font-weight:600;"><span style="color:var(--green-dark);cursor:pointer;" onclick="viewCustomer(\''+c.id+'\')">'+esc(c.full_name||'—')+'</span>'+blBadge+'</td>'+
-      '<td>'+esc(c.email||'—')+'</td>'+
+      '<td>'+esc(custDisplayEmail(c))+'</td>'+
       '<td>'+esc(c.phone||'—')+'</td>'+
       '<td>'+tierBadge+'</td>'+
       '<td style="text-align:right;font-weight:600;">'+spentCell+'</td>'+
       '<td>'+termsBadge+'</td>'+
       '<td>'+fmtDate(c.created_at)+'</td>'+
-      '<td style="white-space:nowrap;"><button class="btn btn-outline btn-sm" onclick="viewCustomer(\''+c.id+'\')">View</button> <button class="btn btn-outline btn-sm" style="color:#92400e;border-color:#fde68a;" onclick="hideAsStaff(\''+c.id+'\')" title="This is a staff/operation user, not a customer">Hide</button></td>'+
+      '<td style="white-space:nowrap;"><button class="btn btn-outline btn-sm" onclick="openEditCustomer(\''+c.id+'\')">Edit</button> <button class="btn btn-outline btn-sm" onclick="viewCustomer(\''+c.id+'\')">View</button> <button class="btn btn-outline btn-sm" style="color:#92400e;border-color:#fde68a;" onclick="hideAsStaff(\''+c.id+'\')" title="This is a staff/operation user, not a customer">Hide</button></td>'+
     '</tr>';
   });
   html+='</tbody></table>';
@@ -294,6 +294,13 @@ function custTierColor(name,tiers){
 // @admin.mjmnursery.local placeholder and read as unverified.
 function custIsVerified(c){
   return !!c.email && !/@admin\.mjmnursery\.local$/i.test(c.email);
+}
+// Display the customer's email, or '—' if they have none (or a walk-in
+// placeholder email left over from earlier admin-created profiles).
+function custDisplayEmail(c){
+  if(!c || !c.email) return '—';
+  if(/@admin\.mjmnursery\.local$/i.test(c.email)) return '—';
+  return c.email;
 }
 // Numeric comparator for the Spending / Points / Credit filters.
 function cmpAmount(value, op, amt){
@@ -379,7 +386,10 @@ async function submitAddCustomer(){
       custId=signUpData.user.id;
     }
     if(!custId){ throw new Error('Could not create customer profile'); }
-    await sb.from('shared_profiles').upsert({ id:custId, email:signupEmail, full_name:name, phone:phone||null, payment_terms:terms, user_type:'customer', role:'customer' },{ onConflict:'id' });
+    // Store the REAL email on the profile; if none was given, leave it NULL
+    // (the auth user keeps the placeholder so signup works, but the
+    // customer list shows blank instead of "walkin-…@admin.mjmnursery.local").
+    await sb.from('shared_profiles').upsert({ id:custId, email:(email||null), full_name:name, phone:phone||null, payment_terms:terms, user_type:'customer', role:'customer' },{ onConflict:'id' });
     toast('Customer created');
     closeModal('modal-add-customer');
     loadCustomers();
@@ -388,6 +398,46 @@ async function submitAddCustomer(){
   }finally{
     btn.disabled=false; btn.textContent='Create Customer';
   }
+}
+
+// ═══════════════════════════════════════
+//  EDIT CUSTOMER
+//  Lightweight edit (name / email / phone / payment terms) opened from
+//  the customer list. Email may be blank — walk-in customers are stored
+//  with shared_profiles.email = NULL (the auth user keeps its placeholder).
+// ═══════════════════════════════════════
+var _editCustomerId = null;
+async function openEditCustomer(id){
+  _editCustomerId = id;
+  var{data:c, error}=await sb.from('shared_profiles').select('*').eq('id',id).maybeSingle();
+  if(error || !c){ toast('Customer not found','error'); return; }
+  document.getElementById('ec-name').value = c.full_name || '';
+  // Hide the walk-in placeholder so the admin sees a true blank.
+  document.getElementById('ec-email').value = custDisplayEmail(c) === '—' ? '' : (c.email||'');
+  document.getElementById('ec-phone').value = c.phone || '';
+  document.getElementById('ec-terms').value = c.payment_terms==='credit' ? 'credit' : 'cash';
+  var btn=document.getElementById('ec-submit'); btn.disabled=false; btn.textContent='Save Changes';
+  openModal('modal-edit-customer');
+}
+async function submitEditCustomer(){
+  if(!_editCustomerId){ toast('No customer selected','error'); return; }
+  var name=document.getElementById('ec-name').value.trim();
+  var email=document.getElementById('ec-email').value.trim();
+  var phone=document.getElementById('ec-phone').value.trim();
+  var terms=document.getElementById('ec-terms').value;
+  if(!name){ toast('Name is required','error'); return; }
+  var btn=document.getElementById('ec-submit'); btn.disabled=true; btn.textContent='Saving…';
+  var{error}=await sb.from('shared_profiles').update({
+    full_name: name,
+    email: email || null,
+    phone: phone || null,
+    payment_terms: terms
+  }).eq('id', _editCustomerId);
+  btn.disabled=false; btn.textContent='Save Changes';
+  if(error){ toast('Error: '+error.message,'error'); return; }
+  toast('Customer updated');
+  closeModal('modal-edit-customer');
+  loadCustomers();
 }
 
 // ═══════════════════════════════════════
@@ -724,7 +774,7 @@ async function viewCustomer(id){
   html+='<div style="font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.6rem;">Contact Information</div>';
   html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem .8rem;font-size:13px;">';
   html+='<div style="color:var(--ink4);">Full Name</div><div style="font-weight:600;">'+esc(c.full_name||'—')+'</div>';
-  html+='<div style="color:var(--ink4);">Email</div><div style="font-weight:600;">'+esc(c.email||'—')+'</div>';
+  html+='<div style="color:var(--ink4);">Email</div><div style="font-weight:600;">'+esc(custDisplayEmail(c))+'</div>';
   html+='<div style="color:var(--ink4);">Phone</div><div style="font-weight:600;">'+esc(c.phone||'—')+'</div>';
   html+='<div style="color:var(--ink4);">Role</div><div><span class="badge '+(c.role==='admin'?'badge-green':'badge-grey')+'">'+esc(c.role||'customer')+'</span></div>';
   html+='</div></div>';

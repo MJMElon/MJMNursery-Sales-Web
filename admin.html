@@ -1038,6 +1038,35 @@ input,select,textarea,button{font-family:inherit;}
   </div>
 </div></div>
 
+<!-- EDIT CUSTOMER MODAL -->
+<div class="modal-overlay" id="modal-edit-customer" style="z-index:255;"><div class="modal" style="max-width:480px;">
+  <div class="modal-head"><h2>Edit Customer</h2><button class="modal-close" onclick="closeModal('modal-edit-customer')">&#x2715;</button></div>
+  <div class="modal-body" style="padding:1.2rem;">
+    <div style="display:grid;grid-template-columns:1fr;gap:.7rem;">
+      <div>
+        <label style="font-size:11px;color:var(--ink3);">Name <span style="color:var(--red);">*</span></label>
+        <input class="form-input" id="ec-name" autocomplete="off" style="font-size:13px;padding:8px 12px;">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--ink3);">Email <span style="color:var(--ink4);font-weight:400;">(leave blank for walk-in)</span></label>
+        <input class="form-input" id="ec-email" type="email" autocomplete="off" style="font-size:13px;padding:8px 12px;">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--ink3);">Phone</label>
+        <input class="form-input" id="ec-phone" style="font-size:13px;padding:8px 12px;">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--ink3);">Payment terms</label>
+        <select class="form-input" id="ec-terms" style="font-size:13px;padding:8px 12px;"><option value="cash">💵 Cash</option><option value="credit">💳 Credit</option></select>
+      </div>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn btn-outline" onclick="closeModal('modal-edit-customer')">Cancel</button>
+    <button class="btn btn-primary" id="ec-submit" onclick="submitEditCustomer()">Save Changes</button>
+  </div>
+</div></div>
+
 <!-- PUBLISH PRODUCT MODAL -->
 <div class="modal-overlay" id="modal-publish"><div class="modal" style="max-width:560px;">
   <div class="modal-head" style="background:var(--bg);"><h2 id="mpb-title" style="font-size:1.05rem;">Publish to Sales Web</h2><button class="modal-close" onclick="closeModal('modal-publish')">&#x2715;</button></div>
@@ -1436,7 +1465,7 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 
 <script src="admin-orders.js?v=2026-05-27-newordr-drag"></script>
-<script src="admin-customers.js?v=2026-05-26-cust-filters"></script>
+<script src="admin-customers.js?v=2026-05-27-cust-edit"></script>
 <script src="admin-products.js?v=2026-05-18-points-ledger"></script>
 <script src="admin-payments.js?v=2026-05-20-payment-verification"></script>
 <script src="admin-users.js?v=2026-05-21-tab-access-table"></script>

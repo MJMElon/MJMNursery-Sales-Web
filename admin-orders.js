@@ -1941,10 +1941,12 @@ async function submitNewOrder(){
         } else if(signUpData && signUpData.user){
           custId = signUpData.user.id;
           // Upsert the profile row with the customer-facing fields the
-          // dashboard expects (name, phone, type, role).
+          // dashboard expects (name, phone, type, role). Store the REAL
+          // email — leave it NULL for walk-ins so the customer list shows
+          // blank rather than the auth placeholder.
           await sb.from('shared_profiles').upsert({
             id: custId,
-            email: signupEmail,
+            email: email || null,
             full_name: name,
             phone: phone || null,
             user_type: 'customer',

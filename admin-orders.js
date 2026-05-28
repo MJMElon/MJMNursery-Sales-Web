@@ -143,10 +143,18 @@ function clearOrderSelection(){
 async function bulkDeleteOrders(){
   var ids = getSelectedOrderIds();
   if(!ids.length){ toast('No orders selected','error'); return; }
-  if(!confirm('Delete '+ids.length+' selected order'+(ids.length>1?'s':'')+'? They will be hidden from the default list but kept for audit. You can restore them via the "Deleted" filter.')) return;
-  var{error}=await sb.from('salesweb_customer_orders').update({deleted_at:new Date().toISOString()}).in('id',ids);
+  if(!confirm('Delete '+ids.length+' selected order'+(ids.length>1?'s':'')+'?\n\nEach order\'s status will be set to Cancelled and the order will be hidden from the default list (still restorable via the "Deleted" filter).')) return;
+  // Cancel + soft-delete in one query so a restored order also reads as Cancelled.
+  var{error}=await sb.from('salesweb_customer_orders').update({status:'Cancelled', deleted_at:new Date().toISOString()}).in('id',ids);
   if(error){toast('Error: '+error.message,'error');return;}
-  toast(ids.length+' order'+(ids.length>1?'s':'')+' deleted');
+  // Audit trail per order — best-effort, doesn't block the toast.
+  try{
+    var sess=await sb.auth.getSession();
+    var who=(sess&&sess.data&&sess.data.session&&sess.data.session.user&&sess.data.session.user.email)||'admin';
+    var rows=ids.map(function(id){ return {order_id:id, status:'Cancelled', note:'Bulk delete — status set to Cancelled', changed_by:who}; });
+    await sb.from('salesweb_order_timeline').insert(rows);
+  }catch(e){ /* timeline insert is best-effort */ }
+  toast(ids.length+' order'+(ids.length>1?'s':'')+' cancelled + deleted');
   clearOrderSelection();
   loadOrders();
 }

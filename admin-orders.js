@@ -1784,7 +1784,7 @@ function updateNewOrderItem(idx,field,value){
 
 function renderNewOrderItems(){
   var container=document.getElementById('no-items-container');
-  var html='<table class="data-table" style="font-size:12px;"><thead><tr><th style="width:38%;">Product</th><th style="width:90px;text-align:right;">Qty</th><th style="width:100px;text-align:right;">Unit Price (RM)</th><th style="width:100px;text-align:right;">Amount (RM)</th><th style="width:40px;"></th></tr></thead><tbody>';
+  var html='<table class="data-table" style="font-size:12px;"><thead><tr><th style="width:24px;"></th><th style="width:38%;">Product</th><th style="width:90px;text-align:right;">Qty</th><th style="width:100px;text-align:right;">Unit Price (RM)</th><th style="width:100px;text-align:right;">Amount (RM)</th><th style="width:40px;"></th></tr></thead><tbody>';
   _newOrderItems.forEach(function(it,idx){
     // Product cell — dropdown + name field
     var opts='<option value="">— Select product —</option>';
@@ -1800,7 +1800,8 @@ function renderNewOrderItems(){
       ? '<input class="form-input" type="text" value="'+esc(it.product_name||'')+'" readonly style="background:#f8fafc;color:#475569;font-size:12px;padding:4px 8px;margin-top:.3rem;">'
       : '<input class="form-input" type="text" value="'+esc(it.product_name||'')+'" placeholder="Item name" oninput="updateNewOrderItem('+idx+',\'product_name\',this.value)" style="font-size:12px;padding:4px 8px;margin-top:.3rem;">';
 
-    html+='<tr>'+
+    html+='<tr draggable="true" ondragstart="noDragStart(event,'+idx+')" ondragover="noDragOver(event)" ondrop="noDrop(event,'+idx+')" ondragend="noDragEnd(event)" data-no-idx="'+idx+'" style="cursor:grab;">'+
+      '<td style="text-align:center;color:#94a3b8;user-select:none;" title="Drag to reorder">⋮⋮</td>'+
       '<td><select class="form-input" onchange="onNewOrderProductSelect('+idx+',this.value)" style="font-size:12px;padding:4px 8px;">'+opts+'</select>'+nameInput+'</td>'+
       '<td style="text-align:right;"><input class="form-input" type="number" min="0" step="1" value="'+(it.quantity||0)+'" oninput="updateNewOrderItem('+idx+',\'quantity\',this.value)" style="text-align:right;font-size:12px;padding:4px 8px;"></td>'+
       '<td style="text-align:right;"><input class="form-input" type="number" min="0" step="0.01" value="'+(it.unit_price||0)+'" oninput="updateNewOrderItem('+idx+',\'unit_price\',this.value)" style="text-align:right;font-size:12px;padding:4px 8px;"></td>'+
@@ -1810,6 +1811,34 @@ function renderNewOrderItems(){
   });
   html+='</tbody></table>';
   container.innerHTML=html;
+}
+
+// ── New Order item rows: drag-to-reorder ──
+var _newOrderDragIdx=null;
+function noDragStart(e,idx){
+  _newOrderDragIdx=idx;
+  try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',String(idx)); }catch(err){}
+  var tr=e.currentTarget; if(tr) tr.style.opacity='0.5';
+}
+function noDragOver(e){
+  e.preventDefault();
+  try{ e.dataTransfer.dropEffect='move'; }catch(err){}
+}
+function noDragEnd(e){
+  var tr=e.currentTarget; if(tr) tr.style.opacity='';
+  _newOrderDragIdx=null;
+}
+function noDrop(e,toIdx){
+  e.preventDefault();
+  var from=_newOrderDragIdx;
+  if(from==null){ try{ from=parseInt(e.dataTransfer.getData('text/plain'),10); }catch(err){} }
+  _newOrderDragIdx=null;
+  if(typeof from!=='number'||isNaN(from)||from===toIdx) return;
+  if(from<0||from>=_newOrderItems.length||toIdx<0||toIdx>=_newOrderItems.length) return;
+  var moved=_newOrderItems.splice(from,1)[0];
+  _newOrderItems.splice(toIdx,0,moved);
+  renderNewOrderItems();
+  recalcNewOrderTotal();
 }
 
 function recalcNewOrderTotal(){

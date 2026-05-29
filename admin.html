@@ -1209,7 +1209,7 @@ function toggleSbSub(name){
 
 function openModal(id){document.getElementById(id).classList.add('open');}
 function closeModal(id){document.getElementById(id).classList.remove('open');}
-function toast(msg,type){var t=document.getElementById('toast');t.textContent=msg;t.className='toast show'+(type==='error'?' error':'');setTimeout(function(){t.className='toast';},3000);}
+function toast(msg,type,duration){var t=document.getElementById('toast');t.textContent=msg;t.className='toast show'+(type==='error'?' error':'');setTimeout(function(){t.className='toast';},duration||3000);}
 function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 function fmtDate(d){if(!d)return'—';return new Date(d).toLocaleDateString('en-MY',{day:'2-digit',month:'short',year:'numeric'});}
 function statusBadge(s){return{'Pending':'badge-amber','Confirmed':'badge-blue','Processing':'badge-blue','Shipped':'badge-blue','Completed':'badge-green','Cancelled':'badge-red'}[s]||'badge-grey';}

@@ -1183,9 +1183,15 @@ async function createALFromOrder(orderId,order){
   var alNumber=order.order_number;
   if(!alNumber)return;
 
-  // Check if AL already exists for this order
-  var{data:existingAL}=await sb.from('shared_al_orders').select('id').eq('al_number',alNumber).single();
-  if(existingAL)return; // AL already created
+  // Check if AL already exists for this order. maybeSingle so the missing-row
+  // case is data:null,error:null rather than data:null,error:PGRST116.
+  var existingRes=await sb.from('shared_al_orders').select('id').eq('al_number',alNumber).maybeSingle();
+  if(existingRes.error){
+    console.error('AL existence check failed:',existingRes.error);
+    toast('AL check failed — '+existingRes.error.message+' (open DevTools console for details)','error',15000);
+    return;
+  }
+  if(existingRes.data)return; // AL already created
 
   // Get order items to build AL
   var{data:items}=await sb.from('salesweb_order_items').select('*').eq('order_id',orderId);
@@ -1214,8 +1220,20 @@ async function createALFromOrder(orderId,order){
   }]);
 
   if(alErr){
+    // RLS / schema / connectivity failure here means the order is paid but
+    // the nursery system never sees an AL — silent here would be invisible
+    // for days, so surface the error loudly (console + 15s persistent toast)
+    // and log it to the order timeline so the regression is auditable.
     console.error('AL creation error:',alErr);
-    toast('Warning: Could not create AL — '+alErr.message,'error');
+    toast('⚠️ AL NOT CREATED for order '+alNumber+' — '+alErr.message+' (this is critical; check RLS / table policies)','error',15000);
+    try{
+      await sb.from('salesweb_order_timeline').insert([{
+        order_id:orderId,
+        status:'AL Creation Failed',
+        note:'Auto-AL insert into shared_al_orders failed: '+alErr.message,
+        changed_by:user
+      }]);
+    }catch(e){ console.error('Could not log AL failure to timeline:',e); }
     return;
   }
 

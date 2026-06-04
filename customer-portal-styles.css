@@ -182,6 +182,19 @@ input,select,textarea,button{font-family:'DM Sans','Inter',system-ui,sans-serif;
 .booking-locked-text{font-size:.82rem;color:var(--ink2);}
 .booking-locked-text strong{display:block;color:var(--ink);font-size:.85rem;}
 
+/* BOOKED COLLECTION SLOT — read-only summary surfaced when an active
+   shared_collection_bookings row exists for the order. */
+.booked-slot-card{background:var(--surface);border:1.5px solid #bae6fd;border-radius:var(--radius);padding:1.2rem 1.4rem;margin-top:1rem;box-shadow:0 1px 3px rgba(15,23,42,.04);}
+.bsc-head{display:flex;align-items:center;gap:.55rem;margin-bottom:.9rem;}
+.bsc-head .bsc-icon{font-size:1.1rem;}
+.bsc-head h4{font-size:.82rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#0369a1;margin:0;}
+.bsc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.7rem 1.2rem;margin-bottom:1rem;}
+.bsc-row{display:flex;flex-direction:column;gap:.15rem;}
+.bsc-row .bsc-label{font-size:.65rem;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.08em;}
+.bsc-row .bsc-val{font-size:.92rem;font-weight:700;color:var(--ink);}
+.bsc-actions{display:flex;justify-content:flex-end;}
+.bsc-edit-btn{display:inline-flex;align-items:center;gap:.4rem;text-decoration:none;font-size:.78rem;}
+
 /* CONSENT */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;align-items:center;justify-content:center;padding:1.5rem;}
 .modal-overlay.open{display:flex;}

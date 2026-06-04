@@ -66,6 +66,7 @@ async function loadOrdersFromDB(){
     return {
       id:          o.order_number ? '#'+o.order_number : (o.id||'').substring(0,8).toUpperCase(),
       _dbId:       o.id,
+      _orderNo:    o.order_number || null,
       variety:     variety,
       qty:         qty,
       price:       price,
@@ -74,14 +75,54 @@ async function loadOrdersFromDB(){
       status:      status,
       notes:       o.customer_remark || '',
       billing:     o.billing_name || '',
-      // The DB doesn't yet store a collection date or per-stage attachments;
-      // these stay undefined / empty and the renderer degrades gracefully.
+      // collDate is populated from shared_collection_bookings below if
+      // the customer has booked a slot for this order. Stays undefined
+      // otherwise and the renderer degrades to '—'.
       collDate:    undefined,
+      booking:     null,
       completedDate: status === 'Order Completed' ? fmtIsoDate(o.updated_at) : undefined,
       cancelledDate: status === 'Cancelled'       ? fmtIsoDate(o.updated_at) : undefined,
       attachments: { order_placed:[], confirmed:[], preparing:[], ready_to_collect:[], collecting:[], order_completed:[] }
     };
   });
+
+  // Pull active collection bookings keyed by the same order_number text
+  // the booking page records. One round-trip for all of this customer's
+  // orders. Cancelled bookings are excluded so a re-booked slot wins.
+  var orderNumbers = ORDERS.map(function(o){ return o._orderNo; }).filter(Boolean);
+  if (orderNumbers.length) {
+    var {data: bookings} = await _sb.from('shared_collection_bookings')
+      .select('id, order_number, booking_date, start_time, end_time, collection_qty, status, notes')
+      .in('order_number', orderNumbers)
+      .neq('status', 'cancelled')
+      .order('booking_date', { ascending: true })
+      .order('start_time',   { ascending: true });
+
+    // Earliest upcoming booking wins (already sorted ASC, so take the
+    // first match per order_number). Customers sometimes have multiple
+    // bookings against one order — we surface the next one.
+    var bookingByOrder = {};
+    (bookings || []).forEach(function(b){
+      if (!bookingByOrder[b.order_number]) bookingByOrder[b.order_number] = b;
+    });
+
+    ORDERS.forEach(function(o){
+      var b = o._orderNo && bookingByOrder[o._orderNo];
+      if (!b) return;
+      o.booking = {
+        id:        b.id,
+        date:      b.booking_date,
+        startTime: b.start_time,
+        endTime:   b.end_time,
+        qty:       b.collection_qty || 0,
+        status:    b.status,
+        notes:     b.notes || ''
+      };
+      // The list-view "Collection Date" line reads o.collDate; populate
+      // it so booked orders display the date without further changes.
+      o.collDate = b.booking_date;
+    });
+  }
 }
 
 const POINTS_DATA = { balance:3450, tier:'Gold', totalEarned:5200, redeemed:1200, expiringSoon:200, nextTier:{name:'Platinum',threshold:5000},
@@ -268,8 +309,14 @@ function viewDetail(id) {
     return '<div class="h-step '+cls+'"><div class="h-step-dot"></div><div class="h-step-label">'+STEP_LABELS[key]+'</div>'+attHtml+'</div>';
   }).join('');
 
+  // If the customer has already booked a collection slot, show it as a
+  // read-only panel directly under the timeline. Sits ABOVE the new
+  // booking form so even Ready-to-Collect orders that already have a
+  // booking surface the existing slot prominently.
+  var bookedSlotHtml = o.booking ? buildBookedSlotPanel(id, o) : '';
+
   var bookingHtml = '';
-  if (o.status==='Ready-to-Collect') {
+  if (o.status==='Ready-to-Collect' && !o.booking) {
     bookingHtml = consentSigned[id]?buildBookingForm(id,o):'<div class="booking-section"><h4>📅 Book Collection</h4><p>Before booking, please sign our collection consent form.</p><div class="booking-locked"><div class="booking-locked-icon">🔒</div><div class="booking-locked-text"><strong>Consent Required</strong>You must agree to our collection terms before proceeding.</div><button class="btn-primary" style="margin-left:auto;flex-shrink:0" onclick="openConsentModal(\''+id+'\')">Sign Consent →</button></div></div>';
   } else if (o.status==='Pending Payment') {
     bookingHtml = buildPaymentUploadSection(id,o);
@@ -279,7 +326,44 @@ function viewDetail(id) {
     '<button class="detail-back" onclick="renderOrders()">← Back to Orders</button>'+
     '<div class="detail-header"><div class="dh-top"><div class="dh-id">'+o.id+'</div><span class="badge '+badgeClass(o.status)+'">'+o.status+'</span></div><div class="dh-meta"><div class="dh-meta-item"><span>Batch</span><strong>'+o.variety+'</strong></div><div class="dh-meta-item"><span>Quantity</span><strong>'+o.qty.toLocaleString()+' seedlings</strong></div><div class="dh-meta-item"><span>Total</span><strong>RM '+o.total.toLocaleString('en-MY',{minimumFractionDigits:2})+'</strong></div></div></div>'+
     alertHtml+
-    '<div class="card"><h3>📍 Order Progress</h3><div class="h-timeline-wrap"><div class="h-timeline"><div class="h-timeline-progress" style="width:'+pct+'%"></div>'+tlSteps+'</div></div>'+bookingHtml+'</div>';
+    '<div class="card"><h3>📍 Order Progress</h3><div class="h-timeline-wrap"><div class="h-timeline"><div class="h-timeline-progress" style="width:'+pct+'%"></div>'+tlSteps+'</div></div>'+bookedSlotHtml+bookingHtml+'</div>';
+}
+
+// ══════════════════════════════════════════════
+// BOOKED COLLECTION SLOT PANEL
+// ══════════════════════════════════════════════
+// Shown when shared_collection_bookings has an active row tied to this
+// order's number. Read-only summary + a "Change Booking" button that
+// deep-links to the dedicated booking page (collect.mjmnursery.com)
+// with the order pre-filled, where the existing change-booking modal
+// handles the actual reschedule. Keeps slot-picker logic in one place.
+function buildBookedSlotPanel(id, o) {
+  var b = o.booking; if (!b) return '';
+  var dateLabel;
+  try {
+    dateLabel = new Date(b.date+'T00:00:00').toLocaleDateString('en-MY',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
+  } catch(e) { dateLabel = b.date || '—'; }
+  var timeLabel = (b.startTime || '').slice(0,5) + (b.endTime ? ' – ' + (b.endTime || '').slice(0,5) : '');
+  var qtyLabel  = b.qty ? b.qty.toLocaleString() + ' seedlings' : '—';
+
+  // Deep link: ?search=<orderNo>&edit=<bookingId> tells the booking
+  // page to auto-search and pop the change modal for this booking.
+  var orderNoParam = encodeURIComponent(o._orderNo || '');
+  var bookingIdParam = encodeURIComponent(b.id || '');
+  var changeUrl = 'https://collect.mjmnursery.com/?search=' + orderNoParam + '&edit=' + bookingIdParam;
+
+  return '<div class="booked-slot-card">'+
+    '<div class="bsc-head"><span class="bsc-icon">📅</span><h4>Booked Collection Slot</h4></div>'+
+    '<div class="bsc-grid">'+
+      '<div class="bsc-row"><span class="bsc-label">Date</span><span class="bsc-val">'+dateLabel+'</span></div>'+
+      '<div class="bsc-row"><span class="bsc-label">Time</span><span class="bsc-val">'+(timeLabel || '—')+'</span></div>'+
+      '<div class="bsc-row"><span class="bsc-label">Quantity</span><span class="bsc-val">'+qtyLabel+'</span></div>'+
+      (b.notes ? '<div class="bsc-row"><span class="bsc-label">Notes</span><span class="bsc-val">'+b.notes+'</span></div>' : '')+
+    '</div>'+
+    '<div class="bsc-actions">'+
+      '<a class="btn-primary bsc-edit-btn" href="'+changeUrl+'" target="_blank" rel="noopener">✏️ Change Booking</a>'+
+    '</div>'+
+  '</div>';
 }
 
 // ══════════════════════════════════════════════

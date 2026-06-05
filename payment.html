@@ -788,11 +788,21 @@ function editBilling(id){
     setVal('ck-coreg',b.company_reg);
     setVal('ck-cotin',b.tin);
     setVal('ck-co-mpob',b.mpob_license);
+    setVal('ck-co-addr',b.billing_address);
+    setVal('ck-co-country',b.country||'Malaysia');
+    setVal('ck-co-state',b.state||'Sarawak');
+    setVal('ck-co-city',b.city);
+    setVal('ck-co-postcode',b.postcode);
   } else {
     setVal('ck-name',b.name);
     setVal('ck-ic',b.ic_number);
     setVal('ck-tin',b.tin);
     setVal('ck-mpob',b.mpob_license);
+    setVal('ck-addr',b.billing_address);
+    setVal('ck-country',b.country||'Malaysia');
+    setVal('ck-state',b.state||'Sarawak');
+    setVal('ck-city',b.city);
+    setVal('ck-postcode',b.postcode);
   }
   var banner=document.getElementById('billing-edit-banner');
   document.getElementById('billing-edit-banner-text').textContent='Editing: '+(b.name||'saved billing info');
@@ -818,7 +828,15 @@ function cancelEditBilling(){
 
 function setVal(id,v){var el=document.getElementById(id);if(el)el.value=v==null?'':v;}
 function clearBillingFormFields(){
-  ['ck-name','ck-ic','ck-tin','ck-mpob','ck-coname','ck-coreg','ck-cotin','ck-co-mpob'].forEach(function(id){setVal(id,'');});
+  ['ck-name','ck-ic','ck-tin','ck-mpob','ck-addr','ck-city','ck-postcode',
+   'ck-coname','ck-coreg','ck-cotin','ck-co-mpob','ck-co-addr','ck-co-city','ck-co-postcode']
+    .forEach(function(id){setVal(id,'');});
+  // Country / State default back to Malaysia / Sarawak — same defaults
+  // the form ships with when the page loads.
+  setVal('ck-country','Malaysia');
+  setVal('ck-state','Sarawak');
+  setVal('ck-co-country','Malaysia');
+  setVal('ck-co-state','Sarawak');
 }
 
 // ── Save / update billing info ──
@@ -828,10 +846,10 @@ function clearBillingFormFields(){
 //                                customer fix a typo without leaving
 //                                a stale duplicate behind.
 async function saveNewBilling(){
-  // Skip the address-only fields when validating for the billing entry
-  // save — those fields belong to the order, not the saved billing row,
-  // so requiring them here would block "Edit" updates with no real win.
-  var valid=validateBillingFields({savedOnly:true});
+  // Saved entries now persist full address (post billing_info_address
+  // migration), so the save-time validation is the same as the
+  // order-placement validation: every field is required.
+  var valid=validateBillingFields();
   if(!valid)return;
 
   var session=await _sb.auth.getSession();
@@ -849,6 +867,11 @@ async function saveNewBilling(){
     row.ic_number=document.getElementById('ck-ic').value.trim();
     row.tin=document.getElementById('ck-tin').value.trim();
     row.mpob_license=document.getElementById('ck-mpob').value.trim()||null;
+    row.billing_address=document.getElementById('ck-addr').value.trim();
+    row.country=document.getElementById('ck-country').value.trim();
+    row.state=document.getElementById('ck-state').value.trim();
+    row.city=document.getElementById('ck-city').value.trim();
+    row.postcode=document.getElementById('ck-postcode').value.trim();
     // Personal entries leave company_reg empty so a personal→personal
     // edit doesn't carry over stale company-reg data, and a
     // company→personal edit clears it.
@@ -859,6 +882,11 @@ async function saveNewBilling(){
     row.company_reg=document.getElementById('ck-coreg').value.trim();
     row.tin=document.getElementById('ck-cotin').value.trim();
     row.mpob_license=document.getElementById('ck-co-mpob').value.trim()||null;
+    row.billing_address=document.getElementById('ck-co-addr').value.trim();
+    row.country=document.getElementById('ck-co-country').value.trim();
+    row.state=document.getElementById('ck-co-state').value.trim();
+    row.city=document.getElementById('ck-co-city').value.trim();
+    row.postcode=document.getElementById('ck-co-postcode').value.trim();
     row.ic_number=null;
   }
 
@@ -893,12 +921,11 @@ async function saveNewBilling(){
 loadSavedBilling();
 
 // ── Validate billing fields ──
-// opts.savedOnly: if true, skip the address-related fields (those belong
-// to the order, not the saved billing entry, so requiring them when
-// saving / updating the billing entry would block Edit-in-place flows).
-function validateBillingFields(opts){
-  opts=opts||{};
-  var addressIds=['ck-addr','ck-country','ck-state','ck-city','ck-postcode','ck-co-addr','ck-co-country','ck-co-state','ck-co-city','ck-co-postcode'];
+// All fields are required because the saved billing entry now persists
+// the full address too (post billing_info_address migration), so a
+// successful save means the entry is complete and Edit-then-Update
+// round-trips every field.
+function validateBillingFields(){
   if(billingType==='personal'){
     var fields=[
       {id:'ck-name',label:'Full Name'},
@@ -923,9 +950,6 @@ function validateBillingFields(opts){
       {id:'ck-cotin',label:'TIN'},
       {id:'ck-co-mpob',label:'MPOB License No.'}
     ];
-  }
-  if(opts.savedOnly){
-    fields=fields.filter(function(f){return addressIds.indexOf(f.id)===-1;});
   }
   for(var i=0;i<fields.length;i++){
     var v=document.getElementById(fields[i].id).value.trim();

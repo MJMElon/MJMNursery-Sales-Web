@@ -95,17 +95,12 @@ serve(async (req) => {
 
     console.log('Billplz bill created:', billData.id, billData.url)
 
-    // Store the Billplz bill ID in order timeline for tracking
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
-    if (supabaseUrl && supabaseKey) {
-      const sb = createClient(supabaseUrl, supabaseKey)
-      await sb.from('salesweb_order_timeline').insert([{
-        order_id: order_id,
-        status: 'Payment Initiated',
-        note: `Billplz bill created: ${billData.id}`,
-        changed_by: 'system'
-      }])
-    }
+    // No timeline row is written here on purpose: a bill being CREATED
+    // is not a payment event — the customer may close the Billplz page
+    // without paying, in which case a "Payment Initiated" row would
+    // mislead admins reviewing the order. The billplz-webhook handler
+    // is the only writer for the actual outcome ("Paid" or "Payment
+    // Failed"), which is what admins want to see.
 
     // Return the payment URL
     return new Response(

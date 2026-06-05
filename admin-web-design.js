@@ -6,7 +6,7 @@
  * reads from the same `salesweb_site_content` table this editor writes to.
  *
  * Ported in 2026-05 from the now-retired ai.mjmnursery.com salesweb admin
- * so buy.mjmnursery.com is the single source of truth for admin tooling.
+ * so www.mjmnursery.com is the single source of truth for admin tooling.
  */
 
 async function loadWebDesign() {

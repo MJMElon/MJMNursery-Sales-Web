@@ -224,17 +224,68 @@ input,select,textarea,button{font-family:inherit;}
 #modal-product .modal-head h2{font-weight:600;}
 #modal-product .btn{font-weight:600;border-radius:10px;}
 
+/* ── Order modal: Documents (attachments) — visual parity with the
+   customer portal's .att-file card, plus a clear View affordance. ── */
+.mo-att-row{display:flex;align-items:center;gap:.7rem;padding:.55rem .75rem;border:1px solid var(--border);border-radius:10px;background:var(--surface);margin-bottom:.4rem;}
+.mo-att-row:hover{border-color:var(--green);background:var(--green-light);}
+.mo-att-icon{font-size:1.3rem;width:32px;text-align:center;flex-shrink:0;}
+.mo-att-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:.1rem;}
+.mo-att-info strong{font-size:12.5px;color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.mo-att-info span{font-size:10px;color:var(--ink4);text-transform:uppercase;letter-spacing:.04em;}
+.mo-att-view{text-decoration:none;font-size:11px;padding:4px 10px;flex-shrink:0;}
+.mo-att-del{color:var(--red);font-size:10px;padding:4px 8px;flex-shrink:0;}
+
+/* ════════════════════ MOBILE (≤768px) ════════════════════
+   The previous breakpoint shrank the sidebar to a 60px icon rail,
+   which still cut off labels and ate horizontal space on phones. We
+   now slide the full sidebar off-canvas and reveal it via a hamburger
+   button placed at the top of the main content area. Tables that
+   would otherwise overflow get a horizontal scroll wrapper. Modals
+   fill the screen so long forms stop getting clipped. */
+.sb-toggle{display:none;}
+.sb-backdrop{display:none;}
 @media(max-width:768px){
-  .sidebar{width:60px;}.sb-logo span,.sb-item span:not(.sb-icon),.sb-user{display:none;}
-  .sb-item{justify-content:center;padding:.7rem;}
-  .main{margin-left:60px;padding:1rem;}
+  .sidebar{width:260px;transform:translateX(-100%);transition:transform .22s ease;box-shadow:none;}
+  .sidebar.open{transform:translateX(0);box-shadow:0 8px 32px rgba(0,0,0,.18);}
+  .sb-logo span,.sb-item span:not(.sb-icon),.sb-user{display:inline;}
+  .sb-item{justify-content:flex-start;padding:.65rem 1.2rem;}
+  .main{margin-left:0;padding:3.5rem .9rem 1rem;}
   .form-row{grid-template-columns:1fr;}
+  /* Floating hamburger anchored top-left of the viewport. */
+  .sb-toggle{display:inline-flex;align-items:center;justify-content:center;position:fixed;top:.6rem;left:.7rem;z-index:60;width:42px;height:42px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--ink);font-size:1.3rem;line-height:1;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.08);}
+  .sb-toggle:hover{background:var(--green-light);color:var(--green-dark);}
+  .sb-backdrop.open{display:block;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:45;}
+  /* Content density tweaks for narrow screens. */
+  .main-title{font-size:1.15rem;}
+  .stats-grid{grid-template-columns:repeat(2,1fr);gap:.5rem;}
+  .stat-box{padding:.7rem .8rem;}
+  .stat-val{font-size:1.15rem;}
+  .stat-label{font-size:9.5px;}
+  .filter-bar{flex-direction:column;align-items:stretch;}
+  .filter-input,.filter-select{width:100%;min-width:0;}
+  .card{padding:.9rem;}
+  /* Wide tables: wrap into a scrollable container so columns aren't clipped. */
+  .data-table{font-size:11.5px;min-width:560px;}
+  #orders-table,#customers-table,#products-table,#promos-table,#coupons-table,#payments-table,#users-table{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  /* Modals: full screen for usable form editing on phones. */
+  .modal{max-width:96vw !important;width:96vw !important;max-height:88vh !important;border-radius:12px;}
+  .modal-head h2{font-size:1rem;}
+  /* Attachment rows wrap cleanly when the file name is long. */
+  .mo-att-row{flex-wrap:wrap;}
+  .mo-att-info{flex-basis:calc(100% - 50px);min-width:0;}
+  .mo-att-view,.mo-att-del{margin-top:.25rem;}
 }
 </style>
 </head>
 <body>
 
 <div id="auth-loading" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);"><div style="text-align:center;"><div style="font-size:3rem;font-weight:900;color:rgba(124,92,191,.15);letter-spacing:.05em;margin-bottom:.5rem;">MJM</div><div style="font-size:13px;font-weight:600;color:var(--ink3);">Loading admin portal...</div></div></div>
+
+<!-- Mobile-only hamburger + backdrop. Sidebar slides in over the
+     content on phones; backdrop dismisses it on tap. Hidden on desktop
+     via CSS so the layout is unchanged for big screens. -->
+<button class="sb-toggle" id="sb-toggle" aria-label="Open menu" onclick="toggleSidebar()">☰</button>
+<div class="sb-backdrop" id="sb-backdrop" onclick="toggleSidebar(false)"></div>
 
 <div id="app" class="app">
   <aside class="sidebar">
@@ -1182,8 +1233,22 @@ function applyTabVisibility(){
 }
 async function doLogout(){await sb.auth.signOut();sessionStorage.clear();window.location.href='auth.html';}
 
+// Toggles the mobile off-canvas sidebar. Called by the hamburger
+// button, the backdrop tap, and every switchTab() so picking a tab
+// from the drawer auto-closes it (matches normal mobile-app UX).
+function toggleSidebar(force){
+  var sb=document.querySelector('.sidebar');
+  var bd=document.getElementById('sb-backdrop');
+  if(!sb||!bd)return;
+  var open=(force===true)?true:(force===false?false:!sb.classList.contains('open'));
+  sb.classList.toggle('open',open);
+  bd.classList.toggle('open',open);
+}
+
 function switchTab(tab,el){
   if(typeof canSeeTab==='function'&&!canSeeTab(tab)){toast('You do not have access to this page','error');return;}
+  // Auto-close the drawer on phones so the freshly opened tab is visible.
+  if(window.innerWidth<=768)toggleSidebar(false);
   document.querySelectorAll('.tab-content').forEach(function(t){t.classList.remove('active');});
   document.querySelectorAll('.sb-item').forEach(function(s){s.classList.remove('active');});
   document.querySelectorAll('.sb-sub-item').forEach(function(s){s.classList.remove('active');});

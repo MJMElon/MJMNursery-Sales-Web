@@ -610,8 +610,11 @@ async function viewOrder(id){
   html+='<textarea class="form-input" id="mo-notes" rows="2" style="font-size:13px;">'+(order.internal_notes||'')+'</textarea>';
   html+='<button class="btn btn-outline btn-sm" onclick="saveInternalNote(\''+id+'\')" style="margin-top:.4rem;">Save</button></div>';
 
-  // ── Attachments ──
-  html+='<div style="margin-bottom:1rem;"><div style="font-size:13px;font-weight:600;margin-bottom:.4rem;">Attachments</div>';
+  // ── Documents ──
+  // Section heading matches the customer portal modal title style
+  // ("Documents") so an admin reviewing an order sees the same label
+  // the customer sees when they tap an attachment chip in their portal.
+  html+='<div style="margin-bottom:1rem;"><div style="font-size:13px;font-weight:600;margin-bottom:.4rem;">📎 Documents</div>';
   html+='<div id="mo-attachments"><div style="font-size:12px;color:var(--ink4);">Loading...</div></div>';
   html+='<div style="margin-top:.5rem;display:flex;gap:.5rem;align-items:center;">';
   html+='<input type="file" id="mo-att-file" style="font-size:12px;">';
@@ -1019,16 +1022,44 @@ async function setOrderCreditBilled(orderId,billed){
 // ═══════════════════════════════════════
 //  ATTACHMENTS
 // ═══════════════════════════════════════
+// Pick an emoji that loosely matches the file's MIME type so admin
+// attachment rows mirror the icon style used in the customer portal's
+// attachment modal (att-file-icon).
+function attIcon(fileType, fileName){
+  var t=(fileType||'').toLowerCase();
+  var ext=((fileName||'').split('.').pop()||'').toLowerCase();
+  if(t.indexOf('image/')===0||['jpg','jpeg','png','gif','webp','heic'].indexOf(ext)>=0) return '🖼️';
+  if(t.indexOf('pdf')>=0||ext==='pdf') return '📄';
+  if(t.indexOf('word')>=0||['doc','docx'].indexOf(ext)>=0) return '📝';
+  if(t.indexOf('sheet')>=0||t.indexOf('excel')>=0||['xls','xlsx','csv'].indexOf(ext)>=0) return '📊';
+  return '📎';
+}
+
+function fmtFileSize(bytes){
+  if(!bytes||isNaN(bytes)) return '';
+  var kb=bytes/1024;
+  if(kb<1) return bytes+' B';
+  if(kb<1024) return kb.toFixed(1)+' KB';
+  return (kb/1024).toFixed(1)+' MB';
+}
+
 async function loadAttachments(orderId){
   var{data}=await sb.from('salesweb_order_attachments').select('*').eq('order_id',orderId).order('created_at',{ascending:false});
   var el=document.getElementById('mo-attachments');
-  if(!data||!data.length){el.innerHTML='<div style="font-size:12px;color:var(--ink4);padding:.3rem 0;">No attachments</div>';return;}
+  if(!data||!data.length){el.innerHTML='<div style="font-size:12px;color:var(--ink4);padding:.3rem 0;">No documents uploaded yet.</div>';return;}
+  // Card-style row matches customer-portal .att-file: icon, filename +
+  // meta line, then a clear "View" button (opens the file in a new
+  // tab) followed by the destructive delete affordance.
   el.innerHTML=data.map(function(a){
     var dt=fmtDate(a.created_at);
-    return '<div style="display:flex;align-items:center;gap:.6rem;padding:.4rem 0;border-bottom:1px solid var(--border);font-size:12px;">'+
-      '<span>📎</span><a href="'+esc(a.file_url)+'" target="_blank" style="flex:1;color:var(--ink);font-weight:500;text-decoration:none;">'+esc(a.file_name)+'</a>'+
-      '<span style="color:var(--ink4);font-size:10px;">'+dt+'</span>'+
-      '<button class="btn btn-outline btn-sm" onclick="deleteAttachment(\''+a.id+'\',\''+orderId+'\')" style="color:var(--red);font-size:10px;padding:2px 6px;">✕</button></div>';
+    var meta=[a.file_type||'File',fmtFileSize(a.file_size),dt,a.uploaded_by].filter(Boolean).join(' · ');
+    var idJs=String(a.id||'').replace(/[\\'"<>]/g,'');
+    return '<div class="mo-att-row">'+
+      '<div class="mo-att-icon">'+attIcon(a.file_type,a.file_name)+'</div>'+
+      '<div class="mo-att-info"><strong>'+esc(a.file_name||'Untitled document')+'</strong><span>'+esc(meta)+'</span></div>'+
+      '<a href="'+esc(a.file_url)+'" target="_blank" rel="noopener" class="btn btn-outline btn-sm mo-att-view">👁 View</a>'+
+      '<button class="btn btn-outline btn-sm mo-att-del" onclick="deleteAttachment(\''+idJs+'\',\''+orderId+'\')">✕</button>'+
+    '</div>';
   }).join('');
 }
 
@@ -1065,12 +1096,16 @@ async function loadTimeline(orderId){
   var{data}=await sb.from('salesweb_order_timeline').select('*').eq('order_id',orderId).order('created_at',{ascending:true});
   var el=document.getElementById('mo-timeline');
 
-  // Build entries in chronological order, with the synthetic "Order Placed"
-  // anchored at the start, then reverse for display (newest on top).
-  var entries=[{status:'Order Placed',note:'Order created',created_at:null,changed_by:'System'}];
-  if(data&&data.length){
+  // The checkout page (payment.html) writes a real "Order Placed" row at
+  // order creation. We used to ALWAYS prepend a synthetic "Order Placed"
+  // anchor on top of the DB rows, which produced two of them. Only
+  // synthesize the anchor when no DB row carries that status — keeps
+  // older orders (which predate the real row) rendering correctly.
+  var hasOrderPlaced=(data||[]).some(function(t){return(t.status||'').toLowerCase()==='order placed';});
+  var entries=hasOrderPlaced?[]:[{status:'Order Placed',note:'Order created',created_at:null,changed_by:'System'}];
+  (data||[]).forEach(function(t){entries.push(t);});
+  if(entries.length&&entries[0].created_at===null&&(data||[]).length){
     entries[0].created_at=data[0].created_at;
-    data.forEach(function(t){entries.push(t);});
   }
   entries.reverse();
 

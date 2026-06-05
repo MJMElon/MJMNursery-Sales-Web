@@ -65,9 +65,13 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-d
 
 .btn-new-billing{display:inline-flex;align-items:center;gap:.3rem;padding:8px 14px;border:1.5px dashed var(--green-pale);border-radius:10px;background:none;font-size:12px;font-weight:600;color:var(--green-mid);cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;}
 .btn-new-billing:hover{border-color:var(--green-mid);background:rgba(62,107,66,.04);}
+.btn-edit-billing{flex-shrink:0;background:#fff;border:1px solid var(--green-pale);color:var(--green-mid);font-size:11px;font-weight:600;padding:5px 10px;border-radius:8px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;display:inline-flex;align-items:center;gap:.2rem;}
+.btn-edit-billing:hover{background:var(--green-dark);color:#fff;border-color:var(--green-dark);}
 .btn-save-billing{width:100%;display:flex;align-items:center;justify-content:center;gap:.4rem;padding:10px 20px;background:var(--green-dark);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;font-family:'DM Sans',sans-serif;margin-top:.5rem;}
 .btn-save-billing:hover{background:var(--green-mid);}
 .btn-save-billing:disabled{opacity:.5;cursor:not-allowed;}
+.billing-edit-banner{font-size:11px;font-weight:600;color:#92400e;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;margin-bottom:.8rem;display:flex;justify-content:space-between;align-items:center;gap:.5rem;}
+.billing-edit-banner button{background:none;border:none;color:#92400e;font-size:11px;font-weight:700;cursor:pointer;text-decoration:underline;font-family:inherit;}
 
 /* Billing type toggle */
 .billing-toggle{display:flex;gap:.3rem;margin-bottom:1rem;background:var(--cream);border-radius:10px;padding:3px;}
@@ -219,8 +223,12 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-d
       </div>
       <button class="btn-new-billing" id="btn-new-billing" onclick="toggleNewBilling()">+ Create New Billing Info</button>
 
-      <!-- New billing form (hidden when using saved) -->
+      <!-- New / Edit billing form (hidden when using saved) -->
       <div id="billing-new-form" style="display:none;margin-top:1rem;">
+        <div id="billing-edit-banner" class="billing-edit-banner" style="display:none;">
+          <span><span id="billing-edit-banner-text">Editing saved billing info</span></span>
+          <button type="button" onclick="cancelEditBilling()">Cancel</button>
+        </div>
         <div class="billing-toggle">
           <button class="active" id="bt-personal" onclick="switchBilling('personal')">Personal</button>
           <button id="bt-company" onclick="switchBilling('company')">Company</button>
@@ -672,6 +680,10 @@ function switchBilling(type){
 var savedBilling=[];
 var selectedBillingId=null;
 var showingNewForm=false;
+// When non-null, the new/edit form is in "edit" mode and the saved
+// billing row with this id is what gets UPDATEd on save. When null,
+// the form is for a brand-new entry and INSERTs on save.
+var editingBillingId=null;
 
 async function loadSavedBilling(){
   var session=await _sb.auth.getSession();
@@ -705,13 +717,17 @@ function renderSavedBilling(){
       detail=[b.company_reg?'Reg: '+b.company_reg:null,b.tin?'TIN: '+b.tin:null,b.mpob_license?'MPOB: '+b.mpob_license:null].filter(Boolean).join(' · ');
     }
     var sel=selectedBillingId===b.id?'selected':'';
-    html+='<div class="billing-saved-card '+sel+'" onclick="selectBilling(\''+b.id+'\')">'+
+    var idJs=String(b.id).replace(/[\\'"<>]/g,'');
+    html+='<div class="billing-saved-card '+sel+'" onclick="selectBilling(\''+idJs+'\')">'+
       '<div class="billing-saved-radio"></div>'+
       '<div class="billing-saved-info">'+
         '<div class="billing-saved-type">'+icon+' '+typeLabel+'</div>'+
         '<div class="billing-saved-name">'+b.name+'</div>'+
         (detail?'<div class="billing-saved-detail">'+detail+'</div>':'')+
       '</div>'+
+      // stopPropagation so the card-level click that just selects doesn't
+      // also fire when the customer specifically wants to edit.
+      '<button type="button" class="btn-edit-billing" onclick="event.stopPropagation();editBilling(\''+idJs+'\')">✏️ Edit</button>'+
     '</div>';
   });
   document.getElementById('billing-saved-list').innerHTML=html;
@@ -724,30 +740,98 @@ function renderSavedBilling(){
 function selectBilling(id){
   selectedBillingId=id;
   showingNewForm=false;
+  editingBillingId=null;
   document.getElementById('billing-new-form').style.display='none';
+  document.getElementById('billing-edit-banner').style.display='none';
   document.getElementById('btn-new-billing').textContent='+ Create New Billing Info';
+  document.getElementById('btn-save-billing').textContent='Save Billing Info';
   renderSavedBilling();
 }
 
 function toggleNewBilling(){
   showingNewForm=!showingNewForm;
   if(showingNewForm){
+    // Opening the form for a NEW entry — make sure any prior edit
+    // state from an Edit click is cleared so the save handler inserts.
+    editingBillingId=null;
     selectedBillingId=null;
+    document.getElementById('billing-edit-banner').style.display='none';
+    document.getElementById('btn-save-billing').textContent='Save Billing Info';
+    clearBillingFormFields();
     document.getElementById('billing-new-form').style.display='block';
     document.getElementById('btn-new-billing').innerHTML='&larr; Back to Choose Saved Billing Info';
     // Deselect saved cards
     document.querySelectorAll('.billing-saved-card').forEach(function(c){c.classList.remove('selected');});
     document.querySelectorAll('.billing-saved-radio').forEach(function(r){r.innerHTML='';});
   } else {
+    editingBillingId=null;
     document.getElementById('billing-new-form').style.display='none';
+    document.getElementById('billing-edit-banner').style.display='none';
     document.getElementById('btn-new-billing').textContent='+ Create New Billing Info';
+    document.getElementById('btn-save-billing').textContent='Save Billing Info';
     if(savedBilling.length)selectBilling(savedBilling[0].id);
   }
 }
 
-// ── Save new billing info to DB ──
+// Open the new-billing form pre-filled with a saved entry's values so
+// the customer can fix a typo without re-keying everything. Save will
+// UPDATE the existing row (not INSERT a new one).
+function editBilling(id){
+  var b=savedBilling.find(function(x){return x.id===id;});
+  if(!b){showToast('Could not find that billing entry');return;}
+  editingBillingId=id;
+  selectedBillingId=null;
+  showingNewForm=true;
+  switchBilling(b.type==='company'?'company':'personal');
+  if(b.type==='company'){
+    setVal('ck-coname',b.name);
+    setVal('ck-coreg',b.company_reg);
+    setVal('ck-cotin',b.tin);
+    setVal('ck-co-mpob',b.mpob_license);
+  } else {
+    setVal('ck-name',b.name);
+    setVal('ck-ic',b.ic_number);
+    setVal('ck-tin',b.tin);
+    setVal('ck-mpob',b.mpob_license);
+  }
+  var banner=document.getElementById('billing-edit-banner');
+  document.getElementById('billing-edit-banner-text').textContent='Editing: '+(b.name||'saved billing info');
+  banner.style.display='flex';
+  document.getElementById('billing-new-form').style.display='block';
+  document.getElementById('btn-new-billing').innerHTML='&larr; Back to Choose Saved Billing Info';
+  document.getElementById('btn-save-billing').textContent='Update Billing Info';
+  document.querySelectorAll('.billing-saved-card').forEach(function(c){c.classList.remove('selected');});
+  // Scroll the form into view so it's obvious the click did something.
+  document.getElementById('billing-new-form').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function cancelEditBilling(){
+  editingBillingId=null;
+  showingNewForm=false;
+  clearBillingFormFields();
+  document.getElementById('billing-new-form').style.display='none';
+  document.getElementById('billing-edit-banner').style.display='none';
+  document.getElementById('btn-new-billing').textContent='+ Create New Billing Info';
+  document.getElementById('btn-save-billing').textContent='Save Billing Info';
+  if(savedBilling.length)selectBilling(savedBilling[0].id);
+}
+
+function setVal(id,v){var el=document.getElementById(id);if(el)el.value=v==null?'':v;}
+function clearBillingFormFields(){
+  ['ck-name','ck-ic','ck-tin','ck-mpob','ck-coname','ck-coreg','ck-cotin','ck-co-mpob'].forEach(function(id){setVal(id,'');});
+}
+
+// ── Save / update billing info ──
+// One handler, two modes:
+//   editingBillingId is null  → INSERT a fresh row (legacy behaviour)
+//   editingBillingId is set   → UPDATE that row in place. Lets the
+//                                customer fix a typo without leaving
+//                                a stale duplicate behind.
 async function saveNewBilling(){
-  var valid=validateBillingFields();
+  // Skip the address-only fields when validating for the billing entry
+  // save — those fields belong to the order, not the saved billing row,
+  // so requiring them here would block "Edit" updates with no real win.
+  var valid=validateBillingFields({savedOnly:true});
   if(!valid)return;
 
   var session=await _sb.auth.getSession();
@@ -755,37 +839,66 @@ async function saveNewBilling(){
   if(!userId){showToast('Please log in to save billing info');return;}
 
   var btn=document.getElementById('btn-save-billing');
-  btn.disabled=true;btn.textContent='Saving...';
+  var origLabel=btn.textContent;
+  btn.disabled=true;btn.textContent=editingBillingId?'Updating...':'Saving...';
 
-  var row={user_id:userId};
+  var row={};
   if(billingType==='personal'){
     row.type='personal';
     row.name=document.getElementById('ck-name').value.trim();
     row.ic_number=document.getElementById('ck-ic').value.trim();
     row.tin=document.getElementById('ck-tin').value.trim();
     row.mpob_license=document.getElementById('ck-mpob').value.trim()||null;
+    // Personal entries leave company_reg empty so a personal→personal
+    // edit doesn't carry over stale company-reg data, and a
+    // company→personal edit clears it.
+    row.company_reg=null;
   } else {
     row.type='company';
     row.name=document.getElementById('ck-coname').value.trim();
     row.company_reg=document.getElementById('ck-coreg').value.trim();
     row.tin=document.getElementById('ck-cotin').value.trim();
     row.mpob_license=document.getElementById('ck-co-mpob').value.trim()||null;
+    row.ic_number=null;
   }
 
-  var{data,error}=await _sb.from('salesweb_billing_info').insert([row]).select();
-  btn.disabled=false;btn.textContent='Save Billing Info';
+  var result;
+  if(editingBillingId){
+    // UPDATE — RLS gates the row to user_id=auth.uid() so we don't
+    // need to add a user_id filter; the eq on id is enough.
+    result=await _sb.from('salesweb_billing_info').update(row).eq('id',editingBillingId).select();
+  } else {
+    row.user_id=userId;
+    result=await _sb.from('salesweb_billing_info').insert([row]).select();
+  }
+  var data=result.data, error=result.error;
+  btn.disabled=false;btn.textContent=origLabel;
   if(error){showToast('Error saving: '+error.message);return;}
   if(data&&data[0]){
-    savedBilling.push(data[0]);
+    if(editingBillingId){
+      // Replace the cached row in place so renderSavedBilling shows
+      // the new values without a round-trip.
+      var idx=savedBilling.findIndex(function(b){return b.id===editingBillingId;});
+      if(idx>-1) savedBilling[idx]=data[0]; else savedBilling.push(data[0]);
+      showToast('Billing info updated!');
+    } else {
+      savedBilling.push(data[0]);
+      showToast('Billing info saved!');
+    }
+    editingBillingId=null;
     selectBilling(data[0].id);
-    showToast('Billing info saved!');
   }
 }
 
 loadSavedBilling();
 
 // ── Validate billing fields ──
-function validateBillingFields(){
+// opts.savedOnly: if true, skip the address-related fields (those belong
+// to the order, not the saved billing entry, so requiring them when
+// saving / updating the billing entry would block Edit-in-place flows).
+function validateBillingFields(opts){
+  opts=opts||{};
+  var addressIds=['ck-addr','ck-country','ck-state','ck-city','ck-postcode','ck-co-addr','ck-co-country','ck-co-state','ck-co-city','ck-co-postcode'];
   if(billingType==='personal'){
     var fields=[
       {id:'ck-name',label:'Full Name'},
@@ -810,6 +923,9 @@ function validateBillingFields(){
       {id:'ck-cotin',label:'TIN'},
       {id:'ck-co-mpob',label:'MPOB License No.'}
     ];
+  }
+  if(opts.savedOnly){
+    fields=fields.filter(function(f){return addressIds.indexOf(f.id)===-1;});
   }
   for(var i=0;i<fields.length;i++){
     var v=document.getElementById(fields[i].id).value.trim();

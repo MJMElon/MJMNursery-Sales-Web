@@ -2036,17 +2036,8 @@
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem;">
         <div>
           <label style="display:block;font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.3rem;">Start Time</label>
-          <select id="p-be-time" style="width:100%;background:var(--cream);border:1.5px solid var(--green-pale);border-radius:10px;padding:8px 12px;font-size:13px;font-family:inherit;">
-            <option value="08:00">8:00 AM</option>
-            <option value="09:00">9:00 AM</option>
-            <option value="10:00">10:00 AM</option>
-            <option value="11:00">11:00 AM</option>
-            <option value="12:00">12:00 PM</option>
-            <option value="13:00">1:00 PM</option>
-            <option value="14:00">2:00 PM</option>
-            <option value="15:00">3:00 PM</option>
-            <option value="16:00">4:00 PM</option>
-          </select>
+          <select id="p-be-time" style="width:100%;background:var(--cream);border:1.5px solid var(--green-pale);border-radius:10px;padding:8px 12px;font-size:13px;font-family:inherit;"></select>
+          <div id="p-be-avail" style="font-size:10px;color:var(--text-light);margin-top:.2rem;min-height:1em;"></div>
         </div>
         <div>
           <label style="display:block;font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.3rem;">Quantity</label>
@@ -3694,15 +3685,194 @@ async function loadPortalSettings(){
 }
 
 // ── Collection-booking edit / share ────────────────────────────────
+// Capacity model — kept in sync with collect.mjmnursery.com so the
+// inline edit on My Account validates the same way the full booking
+// calendar does. If you change RATE / MAX_LOAD here, also update them
+// in CollectionTimeBooking/index.html (~line 295). HRS_WD / HRS_SAT
+// must match getHoursFor() there.
+var _BE_RATE = 350;
+var _BE_MAX_LOAD = 600;
+var _BE_HRS_WD  = [8,9,10,11,12,13,14,15,16];
+var _BE_HRS_SAT = [8,9,10,11];
+var _BE_HOLIDAYS = {'2026-01-01':'New Year','2026-01-14':'Nuzul Al-Quran','2026-01-29':'Thaipusam','2026-02-01':'FT Day','2026-02-17':'CNY','2026-02-18':'CNY','2026-03-28':'Hari Raya Aidilfitri','2026-03-29':'Hari Raya Aidilfitri','2026-05-01':'Labour Day','2026-05-11':'Vesak Day','2026-06-01':'Agong Birthday','2026-06-04':'Hari Raya Haji','2026-06-05':'Hari Raya Haji','2026-06-25':'Awal Muharram','2026-08-31':'Merdeka Day','2026-09-03':'Maulidur Rasul','2026-09-16':'Malaysia Day','2026-10-20':'Deepavali','2026-12-25':'Christmas'};
+
+// Lazy-loaded caches scoped to the edit modal:
+//   _BE_OVERRIDES        — full shared_date_overrides table keyed by
+//                          date_str. Loaded once per session.
+//   _BE_BOOKINGS_BY_DATE — { 'YYYY-MM-DD': [rows] } loaded per date
+//                          when the customer opens the picker /
+//                          changes the date.
+var _BE_OVERRIDES = null;
+var _BE_BOOKINGS_BY_DATE = {};
+
+function _beHrsNeeded(q){ return Math.max(1, Math.ceil((Number(q)||0)/_BE_RATE)); }
+function _beHrLoad(q){ var qn=Number(q)||0; return qn/_beHrsNeeded(qn); }
+function _beFmtHour(h){
+  if(h===0) return '12 AM';
+  if(h<12) return h+' AM';
+  if(h===12) return '12 PM';
+  return (h-12)+' PM';
+}
+function _beIsDateClosed(ds){
+  var ovr=_BE_OVERRIDES&&_BE_OVERRIDES[ds];
+  if(ovr) return !ovr.is_open;
+  var d=new Date(ds+'T00:00:00');
+  return d.getDay()===0 || !!_BE_HOLIDAYS[ds];
+}
+function _beIsAdminFullyBooked(ds){
+  var ovr=_BE_OVERRIDES&&_BE_OVERRIDES[ds];
+  return !!(ovr && ovr.is_open && ovr.is_fully_booked);
+}
+function _beHoursFor(ds){
+  var ovr=_BE_OVERRIDES&&_BE_OVERRIDES[ds];
+  if(ovr){
+    if(!ovr.is_open) return [];
+    var arr=[]; for(var h=ovr.open_hour;h<ovr.close_hour;h++) arr.push(h);
+    return arr;
+  }
+  var d=new Date(ds+'T00:00:00'),dow=d.getDay();
+  if(dow===0||_BE_HOLIDAYS[ds]) return [];
+  return dow===6?_BE_HRS_SAT:_BE_HRS_WD;
+}
+function _beClosing(ds){
+  var ovr=_BE_OVERRIDES&&_BE_OVERRIDES[ds];
+  if(ovr && ovr.is_open && ovr.close_hour) return ovr.close_hour;
+  return new Date(ds+'T00:00:00').getDay()===6?12:17;
+}
+function _beHourLoad(ds, h, excludeId){
+  var bks=_BE_BOOKINGS_BY_DATE[ds]||[];
+  var total=0;
+  bks.forEach(function(b){
+    if(excludeId && b.id===excludeId) return;
+    if(String(b.status||'').toLowerCase()==='cancelled') return;
+    var s=parseInt(String(b.start_time||'00').split(':')[0],10);
+    var e=parseInt(String(b.end_time||'00').split(':')[0],10);
+    if(e<=s) e=s+1;
+    if(h>=s && h<e) total += _beHrLoad(b.collection_qty||0);
+  });
+  return total;
+}
+function _beCanFit(ds, startH, qty, excludeId){
+  var cl=_beClosing(ds);
+  var hrs=_beHrsNeeded(qty), endH=startH+hrs;
+  if(endH>cl) return false;
+  var ld=_beHrLoad(qty);
+  for(var h=startH; h<endH; h++){
+    if(_beHourLoad(ds, h, excludeId) + ld > _BE_MAX_LOAD) return false;
+  }
+  return true;
+}
+async function _beFetchOverrides(){
+  if(_BE_OVERRIDES) return _BE_OVERRIDES;
+  _BE_OVERRIDES={};
+  try{
+    var{data}=await _sb.from('shared_date_overrides').select('*');
+    (data||[]).forEach(function(o){ _BE_OVERRIDES[o.date_str]=o; });
+  }catch(e){ console.warn('overrides fetch failed:',e); }
+  return _BE_OVERRIDES;
+}
+async function _beFetchBookingsForDate(ds){
+  // Always refetch on date change — bookings on a busy day can move
+  // fast, and the customer would otherwise edit against a stale
+  // capacity snapshot from a few minutes ago.
+  try{
+    var{data}=await _sb.from('shared_collection_bookings')
+      .select('id,booking_date,start_time,end_time,collection_qty,status')
+      .eq('booking_date', ds)
+      .neq('status','cancelled');
+    _BE_BOOKINGS_BY_DATE[ds]=data||[];
+  }catch(e){
+    console.warn('bookings fetch failed:',e);
+    _BE_BOOKINGS_BY_DATE[ds]=[];
+  }
+  return _BE_BOOKINGS_BY_DATE[ds];
+}
+
+// Refresh the time-slot dropdown using the live capacity model.
+// Disabled options are kept (greyed out + "— Full") instead of being
+// removed so the customer can see WHY a slot they expected isn't
+// available. Save button enables only when there's at least one
+// pickable slot at the requested qty.
+async function pBeRefreshSlots(){
+  if(!P_EDIT_BOOKING) return;
+  var ds=document.getElementById('p-be-date').value;
+  if(!ds) return;
+  var sel=document.getElementById('p-be-time');
+  var avail=document.getElementById('p-be-avail');
+  var saveBtn=document.getElementById('p-be-save');
+  avail.textContent='Checking availability…';
+  avail.style.color='var(--text-light)';
+  await _beFetchOverrides();
+  await _beFetchBookingsForDate(ds);
+  var prev=sel.value;
+  if(_beIsDateClosed(ds)){
+    sel.innerHTML='<option value="">Closed</option>';
+    sel.disabled=true;
+    avail.textContent='Closed on this date — pick another day.';
+    avail.style.color='#dc2626';
+    saveBtn.disabled=true;
+    return;
+  }
+  if(_beIsAdminFullyBooked(ds)){
+    sel.innerHTML='<option value="">Fully booked</option>';
+    sel.disabled=true;
+    avail.textContent='This day is fully booked.';
+    avail.style.color='#dc2626';
+    saveBtn.disabled=true;
+    return;
+  }
+  var hours=_beHoursFor(ds);
+  if(!hours.length){
+    sel.innerHTML='<option value="">No slots</option>';
+    sel.disabled=true;
+    avail.textContent='No bookable hours on this date.';
+    avail.style.color='#dc2626';
+    saveBtn.disabled=true;
+    return;
+  }
+  var qty=parseInt(document.getElementById('p-be-qty').value,10)||1;
+  var excludeId=P_EDIT_BOOKING.booking.id;
+  sel.innerHTML='';
+  var anyOpen=false;
+  hours.forEach(function(h){
+    var hh=String(h).padStart(2,'0')+':00';
+    var fits=_beCanFit(ds, h, qty, excludeId);
+    var opt=document.createElement('option');
+    opt.value=hh;
+    opt.textContent=_beFmtHour(h)+(fits?'':' — Full');
+    if(!fits) opt.disabled=true; else anyOpen=true;
+    sel.appendChild(opt);
+  });
+  sel.disabled=false;
+  // Restore the customer's previous choice if it's still bookable;
+  // otherwise auto-pick the first available slot.
+  var restored=false;
+  for(var i=0;i<sel.options.length;i++){
+    if(sel.options[i].value===prev && !sel.options[i].disabled){ sel.value=prev; restored=true; break; }
+  }
+  if(!restored){
+    for(var j=0;j<sel.options.length;j++){
+      if(!sel.options[j].disabled){ sel.value=sel.options[j].value; break; }
+    }
+  }
+  if(!anyOpen){
+    avail.textContent='No slots fit '+qty.toLocaleString()+' seedlings on this date. Reduce qty or pick another day.';
+    avail.style.color='#dc2626';
+    saveBtn.disabled=true;
+  } else {
+    var remHere=Math.max(0,_BE_MAX_LOAD-_beHourLoad(ds, parseInt(sel.value.split(':')[0],10), excludeId));
+    avail.textContent='Available — '+remHere.toLocaleString()+' seedlings of capacity remain at this slot.';
+    avail.style.color='var(--green-mid)';
+    saveBtn.disabled=false;
+  }
+}
+
 // Open the inline edit modal for a booking. The modal lets the
-// customer change date / start time / qty / note. Multi-hour blocks
-// and time-slot availability are intentionally NOT validated here —
-// for those the customer goes to collect.mjmnursery.com (link
-// rendered inside the modal). For straightforward "I typed the wrong
-// qty" / "I want next Tuesday instead" tweaks, the inline edit is
-// faster than re-doing the whole booking flow.
+// customer change date / start time / qty / note and validates the
+// new slot against shared_date_overrides + shared_collection_bookings
+// using the same capacity model as collect.mjmnursery.com.
 var P_EDIT_BOOKING = null;
-function pEditBooking(bookingId){
+async function pEditBooking(bookingId){
   var b = null;
   for(var i=0;i<P_ORDERS.length;i++){
     var bs=P_ORDERS[i].bookings||[];
@@ -3711,15 +3881,10 @@ function pEditBooking(bookingId){
   }
   if(!b){ showPortalToast('Booking not found'); return; }
   document.getElementById('p-be-date').value = b.booking_date || '';
-  document.getElementById('p-be-time').value = (b.start_time||'08:00').substring(0,5);
   document.getElementById('p-be-qty').value  = b.collection_qty || 1;
   document.getElementById('p-be-note').value = b.notes || '';
-  // Restrict to future-or-today so the customer can't accidentally
-  // re-pick yesterday.
   var today=new Date();
   document.getElementById('p-be-date').min = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
-  // Cap the qty input at the order's ordered quantity when this is a
-  // linked-to-order booking; tells the customer how much remains.
   var qtyInput=document.getElementById('p-be-qty');
   var qtyHint=document.getElementById('p-be-qty-hint');
   var ord = P_EDIT_BOOKING.order;
@@ -3735,7 +3900,18 @@ function pEditBooking(bookingId){
   document.getElementById('p-be-fullcal').href = 'https://collect.mjmnursery.com/';
   document.getElementById('p-be-save').disabled = false;
   document.getElementById('p-be-save').textContent = 'Save Changes';
+  // Pre-populate the time dropdown with the saved start_time so it
+  // shows during the initial availability fetch; pBeRefreshSlots
+  // will replace it with the live list a moment later.
+  var sel=document.getElementById('p-be-time');
+  sel.innerHTML='<option value="'+(b.start_time||'08:00').substring(0,5)+'">'+(b.start_time||'08:00').substring(0,5)+'</option>';
+  sel.value=(b.start_time||'08:00').substring(0,5);
   document.getElementById('p-booking-edit-modal').classList.add('open');
+  // Wire change listeners once — re-attach on each open is fine
+  // because the same handler just re-runs the availability check.
+  document.getElementById('p-be-date').oninput = pBeRefreshSlots;
+  document.getElementById('p-be-qty').oninput  = pBeRefreshSlots;
+  await pBeRefreshSlots();
 }
 function pCloseBookingEdit(){
   document.getElementById('p-booking-edit-modal').classList.remove('open');
@@ -3758,9 +3934,6 @@ async function pSaveBookingEdit(){
     errEl.style.display='block';
     return;
   }
-  // No "past date" rejection beyond the input min — the date picker's
-  // min attribute already enforces it on most browsers; double-check
-  // here for the few that don't.
   var picked = new Date(date+'T00:00:00');
   var today = new Date(); today.setHours(0,0,0,0);
   if(picked < today){
@@ -3768,11 +3941,20 @@ async function pSaveBookingEdit(){
     errEl.style.display='block';
     return;
   }
-  // end_time defaults to start_time + 1h — the inline editor doesn't
-  // try to recalc multi-hour blocks. Customers who need that go to
-  // the full calendar via the link at the bottom of the modal.
+  // Final availability re-check at save time — the dropdown blocks
+  // disabled options, but a slot could have filled while the modal
+  // sat open. Re-fetch the live state and re-validate before writing.
+  await _beFetchBookingsForDate(date);
   var startH = parseInt(st.split(':')[0],10);
-  var endH = startH + 1;
+  if(_beIsDateClosed(date)){ errEl.textContent='That date just became closed. Pick another day.'; errEl.style.display='block'; return; }
+  if(_beIsAdminFullyBooked(date)){ errEl.textContent='That date is now fully booked.'; errEl.style.display='block'; return; }
+  if(!_beCanFit(date, startH, qty, P_EDIT_BOOKING.booking.id)){
+    errEl.textContent='Sorry, that slot just filled up. Pick another time or reduce the quantity.';
+    errEl.style.display='block';
+    await pBeRefreshSlots();
+    return;
+  }
+  var endH = startH + _beHrsNeeded(qty);
   var et = String(endH).padStart(2,'0')+':00';
   var btn = document.getElementById('p-be-save');
   btn.disabled = true; btn.textContent = 'Saving…';
@@ -3789,13 +3971,10 @@ async function pSaveBookingEdit(){
     errEl.style.display='block';
     return;
   }
-  // Patch the in-memory booking so the order detail re-renders with
-  // the new values without a full reload of the portal.
   var b = P_EDIT_BOOKING.booking;
   b.booking_date=date; b.start_time=st; b.end_time=et; b.collection_qty=qty; b.notes=note||null;
   showPortalToast('Booking updated');
   pCloseBookingEdit();
-  // Re-render the order detail modal in place.
   if(ord) openOrderDetail(ord.id);
 }
 

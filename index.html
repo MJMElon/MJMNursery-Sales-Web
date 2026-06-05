@@ -1998,6 +1998,21 @@
   </div>
 </div>
 
+<!-- In-portal file viewer. Opened by the "View" button on each
+     attached document under "Attached Documents" in the order
+     detail modal. Renders images inline, PDFs in an iframe, and
+     falls back to a Download link for anything else. -->
+<div class="portal-modal-overlay" id="p-file-viewer-modal">
+  <div class="portal-modal" style="max-width:760px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;margin-bottom:.8rem;">
+      <h3 id="p-file-viewer-title" style="font-family:'Cormorant Garamond',serif;font-size:1.05rem;flex:1;word-break:break-all;">File</h3>
+      <a id="p-file-viewer-dl" href="#" target="_blank" rel="noopener noreferrer" style="font-size:11px;font-weight:600;color:var(--green-mid);text-decoration:none;border:1px solid var(--green-pale);padding:.3rem .7rem;border-radius:6px;white-space:nowrap;">⬇ Download</a>
+      <button onclick="pCloseFileViewer()" style="background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--text-mid);">✕</button>
+    </div>
+    <div id="p-file-viewer-body" style="min-height:300px;max-height:70vh;overflow:auto;background:var(--cream);border:1px solid var(--green-pale);border-radius:10px;padding:.5rem;display:flex;align-items:center;justify-content:center;"></div>
+  </div>
+</div>
+
 <div class="portal-modal-overlay" id="p-order-detail-modal">
   <div class="portal-modal" style="max-width:600px;">
     <div style="display:flex;justify-content:flex-end;margin-bottom:.3rem;">
@@ -3558,16 +3573,11 @@ function pOrderCard(o){
           '</div>';
         }).join('')+
       '</div>':'')+
-    // Attachments section
-    (o.attachments&&o.attachments.length?
-      '<div style="padding:.6rem .8rem;border-top:1px solid #f0f0ec;">'+
-        '<div style="font-size:10px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.4rem;">Documents</div>'+
-        o.attachments.map(function(a){
-          return '<div style="padding:.2rem 0;font-size:12px;">'+
-            '<a href="'+esc(a.file_url)+'" target="_blank" rel="noopener noreferrer" style="color:var(--green-mid);text-decoration:none;font-weight:500;">📎 '+esc(a.file_name)+'</a>'+
-          '</div>';
-        }).join('')+
-      '</div>':'')+
+    // Documents listed only inside the per-order modal (under
+    // "Attached Documents"), not inline on the row — keeps the order
+    // list visually tight. Clicking the row opens the modal where
+    // the customer gets the full categorised view + a "View" button
+    // per file.
     '<div class="p-order-foot">'+
       '<div class="p-order-total">RM '+o.total.toLocaleString('en-MY',{minimumFractionDigits:2})+'</div>'+
       '<div style="display:flex;gap:.4rem;align-items:center;">'+actionHtml+'</div>'+
@@ -3605,6 +3615,50 @@ async function loadPortalSettings(){
       if(pv)P_PAY_DETAILS={...P_PAY_DETAILS,...pv};
     }
   }catch(e){/* keep default */}
+}
+
+// Inline file viewer. Opens in #p-file-viewer-modal so the customer
+// stays inside the portal modal flow — no tab switching, no losing
+// scroll position on the order list. Image / PDF / fallback branches
+// chosen from the file extension first, then content-type as a hint.
+function pViewFile(url, name, type){
+  if(!url){return;}
+  document.getElementById('p-file-viewer-title').textContent = name || 'File';
+  var dl = document.getElementById('p-file-viewer-dl');
+  dl.href = url;
+  // download attribute is only honoured for same-origin URLs but it
+  // doesn't hurt to set it — the link still works as a plain new-tab
+  // fallback for cross-origin storage URLs.
+  dl.setAttribute('download', name || '');
+  var body = document.getElementById('p-file-viewer-body');
+  var lowerName = String(name||'').toLowerCase();
+  var lowerType = String(type||'').toLowerCase();
+  var isImage = /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i.test(url)
+             || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(lowerName)
+             || lowerType.indexOf('image/') === 0;
+  var isPdf = /\.pdf(\?|$)/i.test(url)
+           || /\.pdf$/i.test(lowerName)
+           || lowerType.indexOf('pdf') > -1;
+  if(isImage){
+    body.innerHTML = '<img src="'+url+'" alt="'+esc(name||'file')+'" style="max-width:100%;max-height:65vh;border-radius:8px;display:block;" onerror="this.outerHTML=\'<div style=&quot;padding:2rem;text-align:center;color:var(--text-mid);font-size:12px;&quot;>Could not preview this file. Use the Download button above.</div>\'">';
+  } else if(isPdf){
+    body.innerHTML = '<iframe src="'+url+'" style="width:100%;min-height:65vh;border:0;border-radius:8px;background:#fff;"></iframe>';
+  } else {
+    // Fallback for other formats — Excel, Word, etc. — that the
+    // browser can't render inline. Show a friendly note + the
+    // existing Download button is right there in the header.
+    body.innerHTML = '<div style="padding:2rem;text-align:center;font-size:13px;color:var(--text-mid);line-height:1.6;">'+
+      '<div style="font-size:36px;margin-bottom:.5rem;">📄</div>'+
+      'This file type can\'t be previewed in the browser.<br>Use <b>Download</b> above to open it on your device.'+
+    '</div>';
+  }
+  document.getElementById('p-file-viewer-modal').classList.add('open');
+}
+function pCloseFileViewer(){
+  document.getElementById('p-file-viewer-modal').classList.remove('open');
+  // Clear iframe src so a PDF doesn't keep loading in the background
+  // (mostly relevant for mobile data plans).
+  document.getElementById('p-file-viewer-body').innerHTML = '';
 }
 
 function openOrderDetail(ordNum){
@@ -3696,14 +3750,21 @@ function openOrderDetail(ordNum){
     h+=_odSection('Attached Documents');
 
     // Helper that renders one file-row inside whichever sub-group it
-    // belongs to. Keeps the inline styling consistent and DRY.
+    // belongs to. The file name is plain text now (not a link) — the
+    // "View" button on the right opens the file inline via
+    // pViewFile() instead of a tab navigation. Keeps the customer in
+    // the portal, especially on mobile where new tabs lose context.
     function _renderFileRow(a){
       var icon=a.file_type&&String(a.file_type).indexOf('pdf')>-1?'📄':'🖼️';
       var dt=a.created_at?new Date(a.created_at).toLocaleString('en-MY',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';
+      var safeUrl=String(a.file_url||'').replace(/[\\'"<>]/g,'');
+      var safeName=String(a.file_name||'file').replace(/[\\'"<>]/g,'');
+      var safeType=String(a.file_type||'').replace(/[\\'"<>]/g,'');
       return '<div style="display:flex;align-items:center;gap:.5rem;padding:.4rem .6rem;background:#fff;border:1px solid var(--green-pale);border-radius:8px;margin-bottom:.3rem;font-size:12px;">'+
         '<span>'+icon+'</span>'+
-        '<a href="'+(a.file_url||'#')+'" target="_blank" rel="noopener" style="flex:1;color:var(--green-mid);font-weight:500;text-decoration:none;word-break:break-all;">'+esc(a.file_name||'file')+'</a>'+
+        '<span style="flex:1;color:var(--text-dark);font-weight:500;word-break:break-all;">'+esc(a.file_name||'file')+'</span>'+
         (dt?'<span style="font-size:10px;color:var(--text-light);white-space:nowrap;">'+dt+'</span>':'')+
+        '<button type="button" onclick="pViewFile(\''+safeUrl+'\',\''+safeName+'\',\''+safeType+'\')" style="background:var(--green-dark);color:#fff;border:none;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:.3rem .65rem;border-radius:6px;cursor:pointer;font-family:inherit;">View</button>'+
       '</div>';
     }
 

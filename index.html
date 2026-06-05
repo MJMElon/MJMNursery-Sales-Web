@@ -2021,17 +2021,61 @@
      re-planning, the customer can still go to collect.mjmnursery.com
      directly via the "Use full booking calendar" link inside the
      modal. -->
+<style>
+/* Inline-edit calendar — same visual shape as the booking-site
+   month grid (collect.mjmnursery.com) but scaled to fit the portal
+   modal width. Other customers' bookings never render here, only
+   the signed-in customer's own booked dates get the green ring. */
+.p-be-cal-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:.4rem;}
+.p-be-cal-nav{background:#fff;border:1px solid var(--green-pale);color:var(--green-dark);width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;transition:all .15s;font-family:inherit;}
+.p-be-cal-nav:hover{background:var(--green-dark);color:#fff;border-color:var(--green-dark);}
+.p-be-cal-nav:disabled{opacity:.35;cursor:not-allowed;}
+.p-be-cal-label{font-size:13px;font-weight:700;color:var(--text-dark);}
+.p-be-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
+.p-be-cal-dow{font-size:9px;font-weight:700;text-align:center;color:var(--text-light);padding:4px 0;text-transform:uppercase;letter-spacing:.05em;}
+.p-be-cal-cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;flex-direction:column;font-size:11px;font-weight:600;border-radius:7px;background:#fff;border:1px solid var(--green-pale);cursor:pointer;transition:all .12s;position:relative;color:var(--text-dark);user-select:none;}
+.p-be-cal-cell:hover:not(.disabled):not(.selected){background:rgba(62,107,66,.08);border-color:var(--green-mid);}
+.p-be-cal-cell.other-month{visibility:hidden;}
+.p-be-cal-cell.disabled{cursor:not-allowed;}
+.p-be-cal-cell.past{background:#f5f5f0;color:#bfbfb0;}
+.p-be-cal-cell.closed{background:#fee2e2;color:#991b1b;}
+.p-be-cal-cell.full{background:#fef3c7;color:#92400e;}
+.p-be-cal-cell.today{box-shadow:inset 0 0 0 2px #2563eb;}
+.p-be-cal-cell.my-booking{box-shadow:inset 0 0 0 2px var(--green-mid);}
+.p-be-cal-cell.selected{background:var(--green-dark);color:#fff;border-color:var(--green-dark);box-shadow:none;}
+.p-be-cal-cell .tag{font-size:7px;font-weight:800;line-height:1;margin-top:1px;letter-spacing:.04em;text-transform:uppercase;opacity:.85;}
+.p-be-cal-legend{display:flex;flex-wrap:wrap;gap:.5rem;font-size:9.5px;color:var(--text-light);margin-top:.5rem;}
+.p-be-cal-legend span{display:inline-flex;align-items:center;gap:.25rem;}
+.p-be-cal-legend i{width:10px;height:10px;border-radius:3px;display:inline-block;}
+.p-be-selected-pill{background:rgba(62,107,66,.08);border:1px solid var(--green-pale);border-radius:8px;padding:.4rem .7rem;font-size:12px;color:var(--green-dark);font-weight:600;margin-top:.5rem;}
+</style>
+
 <div class="portal-modal-overlay" id="p-booking-edit-modal" style="z-index:600;">
-  <div class="portal-modal" style="max-width:480px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-      <h3 style="font-family:'Cormorant Garamond',serif;font-size:1.2rem;">Edit Collection Booking</h3>
+  <div class="portal-modal" style="max-width:520px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem;">
+      <h3 style="font-family:'Cormorant Garamond',serif;font-size:1.2rem;">Edit Collection Booking Time</h3>
       <button onclick="pCloseBookingEdit()" style="background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--text-mid);">✕</button>
     </div>
-    <div id="p-be-summary" style="background:var(--cream);border:1px solid var(--green-pale);border-radius:10px;padding:.6rem .8rem;font-size:12px;color:var(--text-mid);margin-bottom:1rem;"></div>
-    <div style="display:flex;flex-direction:column;gap:.7rem;">
+    <div id="p-be-summary" style="background:var(--cream);border:1px solid var(--green-pale);border-radius:10px;padding:.6rem .8rem;font-size:12px;color:var(--text-mid);margin-bottom:.8rem;">
+      <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-light);">Booking Number</div>
+      <div id="p-be-booking-no" style="font-size:14px;font-weight:700;color:var(--text-dark);margin-top:.1rem;">—</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:.6rem;">
       <div>
-        <label style="display:block;font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.3rem;">Date</label>
-        <input type="date" id="p-be-date" style="width:100%;background:var(--cream);border:1.5px solid var(--green-pale);border-radius:10px;padding:8px 12px;font-size:13px;font-family:inherit;">
+        <div class="p-be-cal-bar">
+          <button class="p-be-cal-nav" id="p-be-prev" onclick="pBePrevMonth()">‹</button>
+          <span class="p-be-cal-label" id="p-be-cal-label">—</span>
+          <button class="p-be-cal-nav" id="p-be-next" onclick="pBeNextMonth()">›</button>
+        </div>
+        <div class="p-be-cal-grid" id="p-be-cal-grid"></div>
+        <div class="p-be-cal-legend">
+          <span><i style="background:var(--green-dark);"></i>Selected</span>
+          <span><i style="background:#fff;border:2px solid var(--green-mid);"></i>Your booking</span>
+          <span><i style="background:#fef3c7;"></i>Fully booked</span>
+          <span><i style="background:#fee2e2;"></i>Closed / holiday</span>
+          <span><i style="background:#f5f5f0;"></i>Past</span>
+        </div>
+        <div id="p-be-selected-pill" class="p-be-selected-pill" style="display:none;">—</div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem;">
         <div>
@@ -3709,10 +3753,17 @@ var _BE_HOLIDAYS = {'2026-01-01':'New Year','2026-01-14':'Nuzul Al-Quran','2026-
 //   _BE_OVERRIDES        — full shared_date_overrides table keyed by
 //                          date_str. Loaded once per session.
 //   _BE_BOOKINGS_BY_DATE — { 'YYYY-MM-DD': [rows] } loaded per date
-//                          when the customer opens the picker /
-//                          changes the date.
+//                          when the customer picks a date in the
+//                          calendar.
+//   pBeSelectedDate      — 'YYYY-MM-DD' string of the currently-
+//                          picked calendar cell. Replaces the old
+//                          <input type=date>.
+//   pBeCalMonth / Year   — month being shown in the calendar grid.
 var _BE_OVERRIDES = null;
 var _BE_BOOKINGS_BY_DATE = {};
+var pBeSelectedDate = '';
+var pBeCalMonth = 0;
+var pBeCalYear = 2026;
 
 function _beHrsNeeded(q){ return Math.max(1, Math.ceil((Number(q)||0)/_BE_RATE)); }
 function _beHrLoad(q){ var qn=Number(q)||0; return qn/_beHrsNeeded(qn); }
@@ -3797,6 +3848,127 @@ async function _beFetchBookingsForDate(ds){
   return _BE_BOOKINGS_BY_DATE[ds];
 }
 
+// ── Calendar ─────────────────────────────────────────────────────
+// Render the month grid for the edit-booking modal. Same visual
+// shape as the booking-site month grid but stripped down to "what
+// the customer needs to know about THEIR booking": their own
+// booking dates ringed, closed / holiday / admin-full days
+// disabled. Other customers' booking details never render here.
+function _beFmtDate(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function _beIsPastDate(ds){
+  var t=new Date(); t.setHours(0,0,0,0);
+  return new Date(ds+'T00:00:00') < t;
+}
+// All non-cancelled bookings belonging to the signed-in customer,
+// across every one of their orders. Used to ring those calendar
+// cells so the customer can see their own collection schedule
+// without revealing anyone else's.
+function _beMyBookingDates(){
+  var set={};
+  (P_ORDERS||[]).forEach(function(o){
+    (o.bookings||[]).forEach(function(b){
+      if(b.booking_date && String(b.status||'').toLowerCase()!=='cancelled'){
+        set[b.booking_date]=true;
+      }
+    });
+  });
+  return set;
+}
+async function pBeRenderCalendar(){
+  if(!P_EDIT_BOOKING) return;
+  await _beFetchOverrides();
+  var grid=document.getElementById('p-be-cal-grid');
+  var label=document.getElementById('p-be-cal-label');
+  var MNAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  label.textContent = MNAMES[pBeCalMonth] + ' ' + pBeCalYear;
+  // Cap prev-nav at the current month — there's no use case for
+  // editing a booking into the past, and the calendar would just
+  // render every day as greyed-out anyway.
+  var now=new Date();
+  var prevBtn=document.getElementById('p-be-prev');
+  prevBtn.disabled = (pBeCalYear < now.getFullYear()) ||
+                     (pBeCalYear === now.getFullYear() && pBeCalMonth <= now.getMonth());
+
+  var firstDay=new Date(pBeCalYear, pBeCalMonth, 1);
+  // Week starts Monday — matches the booking site.
+  var startDow=firstDay.getDay(); if(startDow===0) startDow=7;
+  var cd=new Date(firstDay); cd.setDate(cd.getDate()-(startDow-1));
+
+  var myDates=_beMyBookingDates();
+  var todayStr=_beFmtDate(new Date());
+
+  var html='';
+  ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(function(d){
+    html += '<div class="p-be-cal-dow">'+d+'</div>';
+  });
+  for(var r=0;r<6;r++){
+    var has=false;
+    for(var c=0;c<7;c++){
+      var isThisMonth=cd.getMonth()===pBeCalMonth;
+      var ds=_beFmtDate(cd);
+      if(isThisMonth) has=true;
+      var classes=['p-be-cal-cell'];
+      var tag='';
+      var clickable=false;
+      if(!isThisMonth){
+        classes.push('other-month');
+      } else if(_beIsPastDate(ds)){
+        classes.push('past','disabled');
+      } else if(_beIsDateClosed(ds)){
+        classes.push('closed','disabled');
+        // Differentiate Sunday vs holiday vs admin-closed for the
+        // little tag under the day number.
+        var ovr=_BE_OVERRIDES && _BE_OVERRIDES[ds];
+        if(ovr && !ovr.is_open) tag='Closed';
+        else if(_BE_HOLIDAYS[ds]) tag='Holiday';
+        else tag='Sun';
+      } else if(_beIsAdminFullyBooked(ds)){
+        classes.push('full','disabled');
+        tag='Full';
+      } else {
+        clickable=true;
+      }
+      if(ds===todayStr) classes.push('today');
+      if(myDates[ds]) classes.push('my-booking');
+      if(ds===pBeSelectedDate) classes.push('selected');
+      var safeDs=ds.replace(/[\\'"<>]/g,'');
+      var click = clickable ? ' onclick="pBeSelectDate(\''+safeDs+'\')"' : '';
+      html += '<div class="'+classes.join(' ')+'"'+click+'>'+
+                '<span>'+cd.getDate()+'</span>'+
+                (tag?'<span class="tag">'+tag+'</span>':'')+
+              '</div>';
+      cd.setDate(cd.getDate()+1);
+    }
+    if(!has && r>4) break;
+  }
+  grid.innerHTML=html;
+}
+function pBePrevMonth(){
+  pBeCalMonth--;
+  if(pBeCalMonth<0){ pBeCalMonth=11; pBeCalYear--; }
+  pBeRenderCalendar();
+}
+function pBeNextMonth(){
+  pBeCalMonth++;
+  if(pBeCalMonth>11){ pBeCalMonth=0; pBeCalYear++; }
+  pBeRenderCalendar();
+}
+async function pBeSelectDate(ds){
+  if(_beIsPastDate(ds) || _beIsDateClosed(ds) || _beIsAdminFullyBooked(ds)) return;
+  pBeSelectedDate = ds;
+  // Re-render so the green Selected highlight moves to the new
+  // cell, then run the live availability check for the new date.
+  await pBeRenderCalendar();
+  var dateLabel = new Date(ds+'T00:00:00').toLocaleDateString('en-MY',
+    {weekday:'long',day:'2-digit',month:'short',year:'numeric'});
+  var pill=document.getElementById('p-be-selected-pill');
+  pill.style.display='block';
+  pill.textContent='Selected: '+dateLabel;
+  await pBeRefreshSlots();
+}
+
 // Refresh the time-slot dropdown using the live capacity model.
 // Disabled options are kept (greyed out + "— Full") instead of being
 // removed so the customer can see WHY a slot they expected isn't
@@ -3804,7 +3976,7 @@ async function _beFetchBookingsForDate(ds){
 // pickable slot at the requested qty.
 async function pBeRefreshSlots(){
   if(!P_EDIT_BOOKING) return;
-  var ds=document.getElementById('p-be-date').value;
+  var ds=pBeSelectedDate;
   if(!ds) return;
   var sel=document.getElementById('p-be-time');
   var avail=document.getElementById('p-be-avail');
@@ -3921,11 +4093,15 @@ async function pEditBooking(bookingId){
     if(b) break;
   }
   if(!b){ showPortalToast('Booking not found'); return; }
-  document.getElementById('p-be-date').value = b.booking_date || '';
+  // If the booking is in the past, don't let them open the editor —
+  // matches the gating on the Edit button itself but defends against
+  // a direct call via console or stale UI.
+  if(b.booking_date && _beIsPastDate(b.booking_date)){
+    showPortalToast('Past bookings can\'t be edited');
+    return;
+  }
   document.getElementById('p-be-qty').value  = b.collection_qty || 1;
   document.getElementById('p-be-note').value = b.notes || '';
-  var today=new Date();
-  document.getElementById('p-be-date').min = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
   var qtyInput=document.getElementById('p-be-qty');
   var qtyHint=document.getElementById('p-be-qty-hint');
   var ord = P_EDIT_BOOKING.order;
@@ -3936,7 +4112,7 @@ async function pEditBooking(bookingId){
     qtyInput.removeAttribute('max');
     qtyHint.textContent = '';
   }
-  document.getElementById('p-be-summary').textContent = 'Booking #'+(b.order_number||b.al_number||'—');
+  document.getElementById('p-be-booking-no').textContent = '#'+(b.order_number||b.al_number||b.id);
   document.getElementById('p-be-error').style.display='none';
   document.getElementById('p-be-fullcal').href = 'https://collect.mjmnursery.com/';
   document.getElementById('p-be-save').disabled = false;
@@ -3947,20 +4123,36 @@ async function pEditBooking(bookingId){
   var sel=document.getElementById('p-be-time');
   sel.innerHTML='<option value="'+(b.start_time||'08:00').substring(0,5)+'">'+(b.start_time||'08:00').substring(0,5)+'</option>';
   sel.value=(b.start_time||'08:00').substring(0,5);
+  // Calendar starts on the month of the existing booking (or today
+  // if the booking has no date for some reason).
+  var seed = b.booking_date ? new Date(b.booking_date+'T00:00:00') : new Date();
+  pBeCalMonth = seed.getMonth();
+  pBeCalYear  = seed.getFullYear();
+  pBeSelectedDate = b.booking_date || '';
   document.getElementById('p-booking-edit-modal').classList.add('open');
-  // Wire change listeners once — re-attach on each open is fine
-  // because the same handler just re-runs the availability check.
-  document.getElementById('p-be-date').oninput = pBeRefreshSlots;
+  // qty input change still triggers availability re-check (a higher
+  // qty might no longer fit the selected slot).
   document.getElementById('p-be-qty').oninput  = pBeRefreshSlots;
-  await pBeRefreshSlots();
+  await pBeRenderCalendar();
+  if(pBeSelectedDate){
+    var dateLabel = new Date(pBeSelectedDate+'T00:00:00').toLocaleDateString('en-MY',
+      {weekday:'long',day:'2-digit',month:'short',year:'numeric'});
+    var pill=document.getElementById('p-be-selected-pill');
+    pill.style.display='block';
+    pill.textContent='Selected: '+dateLabel;
+    await pBeRefreshSlots();
+  } else {
+    document.getElementById('p-be-selected-pill').style.display='none';
+  }
 }
 function pCloseBookingEdit(){
   document.getElementById('p-booking-edit-modal').classList.remove('open');
   P_EDIT_BOOKING = null;
+  pBeSelectedDate = '';
 }
 async function pSaveBookingEdit(){
   if(!P_EDIT_BOOKING){ pCloseBookingEdit(); return; }
-  var date = document.getElementById('p-be-date').value;
+  var date = pBeSelectedDate;
   var st   = document.getElementById('p-be-time').value;
   var qty  = parseInt(document.getElementById('p-be-qty').value,10);
   var note = document.getElementById('p-be-note').value.trim();
@@ -4169,11 +4361,19 @@ function openOrderDetail(ordNum){
       var statusStyle = statusLower==='completed' ? 'background:#d1fae5;color:#065f46;' :
                        statusLower==='confirmed' ? 'background:#dbeafe;color:#1e3a8a;' :
                                                    'background:#fef3c7;color:#92400e;';
-      // Hide the Edit button on completed/cancelled bookings — once
+      // Hide the Edit button on completed/cancelled bookings (once
       // the nursery has marked it done, the customer shouldn't be
-      // moving the slot. WhatsApp share stays available always so a
-      // customer can re-share the time even after confirmation.
-      var canEdit = statusLower !== 'completed' && statusLower !== 'cancelled';
+      // moving the slot) and on past-date bookings (no point
+      // editing a slot that already came and went). WhatsApp share
+      // stays available always so a customer can re-share the time
+      // even after confirmation.
+      var bookingIsPast = false;
+      if(b.booking_date){
+        var bd = new Date(b.booking_date+'T00:00:00');
+        var todayMid = new Date(); todayMid.setHours(0,0,0,0);
+        bookingIsPast = bd < todayMid;
+      }
+      var canEdit = statusLower !== 'completed' && statusLower !== 'cancelled' && !bookingIsPast;
       var idJs=String(b.id||'').replace(/[\\'"<>]/g,'');
       h+='<div style="background:#fff;border:1px solid var(--green-pale);border-radius:10px;padding:.7rem .85rem;margin-bottom:.4rem;font-size:12px;">';
       h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;">';

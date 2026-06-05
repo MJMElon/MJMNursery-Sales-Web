@@ -2045,6 +2045,15 @@
           <div id="p-be-qty-hint" style="font-size:10px;color:var(--text-light);margin-top:.2rem;"></div>
         </div>
       </div>
+      <!-- Live estimate box — mirrors the "Estimated Collection
+           Time" panel on collect.mjmnursery.com so the inline edit
+           gives the same at-a-glance read of what they're booking. -->
+      <div id="p-be-est" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:.7rem .85rem;">
+        <div style="font-size:9px;font-weight:900;color:#1d4ed8;text-transform:uppercase;letter-spacing:.12em;margin-bottom:.25rem;">⏱ Estimated Collection Time</div>
+        <div id="p-be-est-hrs" style="font-size:1.05rem;font-weight:800;color:#1e3a8a;">—</div>
+        <div id="p-be-est-range" style="font-size:11px;font-weight:600;color:#2563eb;margin-top:.15rem;">—</div>
+        <div id="p-be-est-desc" style="font-size:10px;color:var(--text-light);margin-top:.3rem;line-height:1.4;"></div>
+      </div>
       <div>
         <label style="display:block;font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.3rem;">Note (optional)</label>
         <textarea id="p-be-note" rows="2" style="width:100%;background:var(--cream);border:1.5px solid var(--green-pale);border-radius:10px;padding:8px 12px;font-size:13px;font-family:inherit;resize:vertical;"></textarea>
@@ -3805,29 +3814,36 @@ async function pBeRefreshSlots(){
   await _beFetchOverrides();
   await _beFetchBookingsForDate(ds);
   var prev=sel.value;
+  // Hide the estimate panel on every early-out so the customer
+  // doesn't see a leftover estimate from a previous date when the
+  // newly-picked date is closed / fully booked / has no slots.
+  var estBox=document.getElementById('p-be-est');
   if(_beIsDateClosed(ds)){
     sel.innerHTML='<option value="">Closed</option>';
     sel.disabled=true;
-    avail.textContent='Closed on this date — pick another day.';
+    avail.textContent='❌ Closed on this date';
     avail.style.color='#dc2626';
     saveBtn.disabled=true;
+    estBox.style.display='none';
     return;
   }
   if(_beIsAdminFullyBooked(ds)){
     sel.innerHTML='<option value="">Fully booked</option>';
     sel.disabled=true;
-    avail.textContent='This day is fully booked.';
+    avail.textContent='❌ Fully booked';
     avail.style.color='#dc2626';
     saveBtn.disabled=true;
+    estBox.style.display='none';
     return;
   }
   var hours=_beHoursFor(ds);
   if(!hours.length){
     sel.innerHTML='<option value="">No slots</option>';
     sel.disabled=true;
-    avail.textContent='No bookable hours on this date.';
+    avail.textContent='❌ No bookable hours';
     avail.style.color='#dc2626';
     saveBtn.disabled=true;
+    estBox.style.display='none';
     return;
   }
   var qty=parseInt(document.getElementById('p-be-qty').value,10)||1;
@@ -3856,15 +3872,40 @@ async function pBeRefreshSlots(){
     }
   }
   if(!anyOpen){
-    avail.textContent='No slots fit '+qty.toLocaleString()+' seedlings on this date. Reduce qty or pick another day.';
+    avail.textContent='❌ Not available';
     avail.style.color='#dc2626';
     saveBtn.disabled=true;
   } else {
-    var remHere=Math.max(0,_BE_MAX_LOAD-_beHourLoad(ds, parseInt(sel.value.split(':')[0],10), excludeId));
-    avail.textContent='Available — '+remHere.toLocaleString()+' seedlings of capacity remain at this slot.';
+    avail.textContent='✅ Available';
     avail.style.color='var(--green-mid)';
     saveBtn.disabled=false;
   }
+  _bePaintEstimate(ds, qty);
+}
+
+// Render the "Estimated Collection Time" panel under the form —
+// same shape and wording as the live one on
+// collect.mjmnursery.com so the customer sees a familiar at-a-glance
+// summary of what they're booking. Hidden when there's nothing
+// meaningful to show (no date / qty / time picked yet, or the
+// selected slot is disabled).
+function _bePaintEstimate(ds, qty){
+  var box=document.getElementById('p-be-est');
+  var sel=document.getElementById('p-be-time');
+  var st=sel && sel.value;
+  if(!st || !qty || sel.disabled || (sel.selectedOptions[0] && sel.selectedOptions[0].disabled)){
+    box.style.display='none';
+    return;
+  }
+  var startH=parseInt(st.split(':')[0],10);
+  var hrs=_beHrsNeeded(qty);
+  var endH=startH+hrs;
+  document.getElementById('p-be-est-hrs').textContent = hrs + ' hour' + (hrs>1?'s':'');
+  document.getElementById('p-be-est-range').textContent = _beFmtHour(startH) + ' to ' + _beFmtHour(endH);
+  document.getElementById('p-be-est-desc').textContent =
+    'Your selected quantity of ' + qty.toLocaleString() + ' seedlings will take approximately ' +
+    hrs + ' hour' + (hrs>1?'s':'') + ' to prepare and load.';
+  box.style.display='block';
 }
 
 // Open the inline edit modal for a booking. The modal lets the

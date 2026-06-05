@@ -3419,6 +3419,26 @@ async function loadCustomerOrders(){
       if(tl)tl.forEach(function(t){if(!timelinesByOrder[t.order_id])timelinesByOrder[t.order_id]=[];timelinesByOrder[t.order_id].push(t);});
     }
   }catch(e){console.error('Timeline load error:',e);}
+  // Collection bookings keyed by order_number. The booking app
+  // (CollectionTimeBooking) saves the verified order_number into
+  // shared_collection_bookings.order_number — we join on that. Filter
+  // out cancelled bookings so a customer who booked, cancelled, and
+  // re-booked doesn't see the cancelled slot still listed.
+  var bookingsByOrderNum={};
+  try{
+    if(orderNumbers.length){
+      var{data:bks}=await _sb.from('shared_collection_bookings')
+        .select('id,booking_date,start_time,end_time,collection_qty,status,notes,al_number,order_number,created_at')
+        .in('order_number',orderNumbers)
+        .neq('status','cancelled')
+        .order('booking_date',{ascending:true});
+      if(bks)bks.forEach(function(b){
+        var k=b.order_number;
+        if(!bookingsByOrderNum[k])bookingsByOrderNum[k]=[];
+        bookingsByOrderNum[k].push(b);
+      });
+    }
+  }catch(e){console.error('Bookings load error:',e);}
 
   P_ORDERS=orders.map(function(o){
     var oItems=itemsByOrder[o.id]||[];
@@ -3460,7 +3480,8 @@ async function loadCustomerOrders(){
       paymentMethod:o.customer_remark&&o.customer_remark.includes('Payment: offline')?'Offline Payment Method':'Online Payment Method',
       dos:dosByAL[o.order_number]||[],
       attachments:attachmentsByOrder[o.id]||[],
-      timeline:timelinesByOrder[o.id]||[]
+      timeline:timelinesByOrder[o.id]||[],
+      bookings:bookingsByOrderNum[o.order_number]||[]
     };
   });
 }
@@ -3723,6 +3744,35 @@ function openOrderDetail(ordNum){
     h+='<div style="font-size:12px;color:var(--text-mid);padding:.4rem .6rem;background:var(--cream);border:1px solid var(--green-pale);border-radius:8px;">'+esc(o.sellerNote)+'</div>';
   }
 
+  // ── Collection Booking ──
+  // Renders any non-cancelled rows from shared_collection_bookings
+  // that match this order's order_number. Customer self-bookings
+  // (made at CollectionTimeBooking with a verified order number) link
+  // here directly; walk-in bookings without a linked order won't show
+  // because they were saved with al_number 'PENDING' and an unrelated
+  // order_number. Multiple bookings (split collection) all render.
+  if(o.bookings && o.bookings.length){
+    h+=_odSection('Collection Booking');
+    o.bookings.forEach(function(b){
+      var dateStr=b.booking_date?new Date(b.booking_date+'T00:00:00').toLocaleDateString('en-MY',{weekday:'long',day:'2-digit',month:'short',year:'numeric'}):'—';
+      var st=(b.start_time||'').substring(0,5);
+      var et=(b.end_time||'').substring(0,5);
+      var statusLower=(b.status||'pending').toLowerCase();
+      var statusStyle = statusLower==='completed' ? 'background:#d1fae5;color:#065f46;' :
+                       statusLower==='confirmed' ? 'background:#dbeafe;color:#1e3a8a;' :
+                                                   'background:#fef3c7;color:#92400e;';
+      h+='<div style="background:#fff;border:1px solid var(--green-pale);border-radius:10px;padding:.7rem .85rem;margin-bottom:.4rem;font-size:12px;">';
+      h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;">';
+      h+='<div style="flex:1;min-width:0;">';
+      h+='<div style="font-weight:700;color:var(--text-dark);">📅 '+esc(dateStr)+'</div>';
+      h+='<div style="font-size:11px;color:var(--text-mid);margin-top:.15rem;">'+esc(st)+(et?' – '+esc(et):'')+' · Qty: <strong>'+(b.collection_qty||0)+'</strong></div>';
+      if(b.notes) h+='<div style="font-size:11px;color:var(--text-light);margin-top:.2rem;font-style:italic;">'+esc(b.notes)+'</div>';
+      h+='</div>';
+      h+='<span style="font-size:9px;font-weight:700;padding:.2rem .5rem;border-radius:6px;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap;'+statusStyle+'">'+esc(b.status||'pending')+'</span>';
+      h+='</div></div>';
+    });
+  }
+
   // ── Attached Documents ──
   // Two sources feed this section:
   //   1. salesweb_order_attachments — files uploaded against this order
@@ -3870,10 +3920,28 @@ function openOrderDetail(ordNum){
         var pNote = pointsCount>0 ? (pointsCount+' loyalty points credited') : 'Loyalty points credited';
         steps.push({label:'Points Issued',note:pNote,date:stampPoints,done:true});
       }
+      // Collection step has three possible states (in order of
+      // priority):
+      //   1. A DO marked Delivered → collected.
+      //   2. A non-cancelled booking exists in
+      //      shared_collection_bookings → "Collection Booked" with
+      //      the actual booked date/time pulled from the row.
+      //   3. Paid but no booking yet → "Book Your Collection" CTA.
+      var firstBooking = (o.bookings && o.bookings.length) ? o.bookings[0] : null;
       if(stampCollected){
-        steps.push({label:'Collection Booked',note:'Collection slot confirmed',done:true});
+        if(firstBooking){
+          var bDate=new Date(firstBooking.booking_date+'T00:00:00').toLocaleDateString('en-MY',{day:'2-digit',month:'short',year:'numeric'});
+          var bTime=(firstBooking.start_time||'').substring(0,5);
+          steps.push({label:'Collection Booked',note:bDate+(bTime?' · '+bTime:''),done:true});
+        } else {
+          steps.push({label:'Collection Booked',note:'Collection slot confirmed',done:true});
+        }
         var cDate=new Date(stampCollected).toLocaleDateString('en-MY',{day:'2-digit',month:'short',year:'numeric'});
         steps.push({label:'Collected Seedling on '+cDate,note:'',date:stampCollected,done:true,files:collectedFiles});
+      } else if(firstBooking){
+        var bDate2=new Date(firstBooking.booking_date+'T00:00:00').toLocaleDateString('en-MY',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
+        var bTime2=(firstBooking.start_time||'').substring(0,5);
+        steps.push({label:'Collection Booked',note:bDate2+(bTime2?' · '+bTime2:'')+' · '+(firstBooking.collection_qty||0)+' seedlings',done:true,isCurrent:true});
       } else {
         steps.push({label:'Book Your Collection',note:'Pick a collection time at the nursery',done:false,action:'book'});
       }

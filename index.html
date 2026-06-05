@@ -3667,13 +3667,63 @@ function openOrderDetail(ordNum){
     h+='<div style="font-size:12px;color:var(--text-mid);padding:.4rem .6rem;background:var(--cream);border:1px solid var(--green-pale);border-radius:8px;">'+esc(o.sellerNote)+'</div>';
   }
 
-  // ── Documents & Attachments ──
-  var hasDocs=(o.dos&&o.dos.length)||(o.attachments&&o.attachments.length);
+  // ── Attached Documents ──
+  // Two sources feed this section:
+  //   1. salesweb_order_attachments — files uploaded against this order
+  //      by either the customer (payment proofs, from payment-proof.html)
+  //      or staff (invoices / receipts / etc. from the admin orders
+  //      view). We split them by matching uploaded_by against the
+  //      customer's own email so the customer immediately sees which
+  //      side put what here.
+  //   2. shared_do_records — DOs allocated against the AL. Rendered as
+  //      cards with their own delivery-date / qty / status because the
+  //      shape is richer than a plain file row.
+  var atts=(o.attachments||[]);
+  var custEmail=String(o.email||'').toLowerCase();
+  var customerUploads=[];
+  var adminUploads=[];
+  atts.forEach(function(a){
+    var who=String(a.uploaded_by||'').toLowerCase();
+    // Customer-side uploads come from payment-proof.html which stamps
+    // the user's email into uploaded_by; the legacy fallback was the
+    // literal string "customer". Anything else (including null) is
+    // treated as a staff upload.
+    var isCustomer = (who==='customer') || (custEmail && who===custEmail);
+    (isCustomer ? customerUploads : adminUploads).push(a);
+  });
+  var hasDocs=(o.dos&&o.dos.length)||atts.length;
   if(hasDocs){
-    h+=_odSection('Documents & Attachments');
+    h+=_odSection('Attached Documents');
 
-    // DOs
+    // Helper that renders one file-row inside whichever sub-group it
+    // belongs to. Keeps the inline styling consistent and DRY.
+    function _renderFileRow(a){
+      var icon=a.file_type&&String(a.file_type).indexOf('pdf')>-1?'📄':'🖼️';
+      var dt=a.created_at?new Date(a.created_at).toLocaleString('en-MY',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';
+      return '<div style="display:flex;align-items:center;gap:.5rem;padding:.4rem .6rem;background:#fff;border:1px solid var(--green-pale);border-radius:8px;margin-bottom:.3rem;font-size:12px;">'+
+        '<span>'+icon+'</span>'+
+        '<a href="'+(a.file_url||'#')+'" target="_blank" rel="noopener" style="flex:1;color:var(--green-mid);font-weight:500;text-decoration:none;word-break:break-all;">'+esc(a.file_name||'file')+'</a>'+
+        (dt?'<span style="font-size:10px;color:var(--text-light);white-space:nowrap;">'+dt+'</span>':'')+
+      '</div>';
+    }
+
+    // Customer uploads (payment proofs etc.)
+    if(customerUploads.length){
+      h+='<div style="font-size:10px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin:.4rem 0 .35rem;">📤 Your Uploads</div>';
+      customerUploads.forEach(function(a){h+=_renderFileRow(a);});
+    }
+
+    // Admin / MJM Nursery uploads (invoices, receipts, etc.)
+    if(adminUploads.length){
+      h+='<div style="font-size:10px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin:.6rem 0 .35rem;">📥 From MJM Nursery</div>';
+      adminUploads.forEach(function(a){h+=_renderFileRow(a);});
+    }
+
+    // Delivery Orders — separate card style because each DO has
+    // delivery date, qty, status, and an optional linked BA, none of
+    // which fit the plain "file link + date" row above.
     if(o.dos&&o.dos.length){
+      h+='<div style="font-size:10px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin:.6rem 0 .35rem;">📦 Delivery Orders</div>';
       o.dos.forEach(function(d){
         var doDate=d.delivery_date?new Date(d.delivery_date).toLocaleDateString('en-MY',{day:'2-digit',month:'short',year:'numeric'}):'—';
         var doStatusColor=d.status==='Delivered'?'#15803d':d.status==='Cancelled'?'#dc2626':'var(--gold)';
@@ -3687,22 +3737,9 @@ function openOrderDetail(ordNum){
           if(d.ba_image_url)h+=' <a href="'+d.ba_image_url+'" target="_blank" style="color:var(--green-mid);font-size:10px;">[View BA]</a>';
           h+='</div>';
         }
-        if(d.image_url&&!d.image_url.startsWith('data:')){
+        if(d.image_url&&!String(d.image_url).startsWith('data:')){
           h+='<div style="margin-top:.3rem;"><a href="'+d.image_url+'" target="_blank" style="font-size:10px;color:var(--green-mid);text-decoration:none;">📄 View DO Document</a></div>';
         }
-        h+='</div>';
-      });
-    }
-
-    // Admin-uploaded attachments
-    if(o.attachments&&o.attachments.length){
-      o.attachments.forEach(function(a){
-        var icon=a.file_type&&a.file_type.includes('pdf')?'📄':'🖼️';
-        var dt=a.created_at?new Date(a.created_at).toLocaleDateString('en-MY',{day:'2-digit',month:'short',year:'numeric'}):'';
-        h+='<div style="display:flex;align-items:center;gap:.5rem;padding:.35rem 0;border-bottom:1px solid #f0f0ec;font-size:12px;">';
-        h+='<span>'+icon+'</span>';
-        h+='<a href="'+a.file_url+'" target="_blank" style="flex:1;color:var(--green-mid);font-weight:500;text-decoration:none;">'+esc(a.file_name)+'</a>';
-        h+='<span style="font-size:10px;color:var(--text-light);">'+dt+'</span>';
         h+='</div>';
       });
     }

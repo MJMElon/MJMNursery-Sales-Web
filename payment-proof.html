@@ -116,6 +116,14 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-d
   <!-- Upload proof -->
   <div class="card">
     <div class="card-title">Upload Payment Proof</div>
+    <!-- Existing-proof list: populated by loadExistingProofs() on page
+         load. When the customer returns to this page after a previous
+         upload, the proofs they already submitted show here with a link
+         and a delete button. -->
+    <div id="proof-existing-wrap" style="display:none;margin-bottom:1rem;">
+      <div style="font-size:11px;font-weight:600;color:var(--green-mid);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.4rem;">✓ Already uploaded</div>
+      <div id="proof-existing-list"></div>
+    </div>
     <p style="font-size:12px;color:var(--text-mid);margin-bottom:.8rem;">After making payment, upload your receipt or screenshot below for faster verification.</p>
     <input type="file" id="proof-file" accept="image/*,.pdf" style="display:none;" onchange="previewFile(this)">
     <div class="upload-area" onclick="document.getElementById('proof-file').click()">
@@ -128,6 +136,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-d
       <div class="upload-preview-name" id="proof-name"></div>
     </div>
     <button class="btn-submit" id="btn-submit" onclick="submitProof()" disabled>Submit Payment Proof</button>
+    <div id="proof-error" style="display:none;font-size:12px;color:#dc2626;background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:.6rem .8rem;margin-top:.6rem;line-height:1.4;"></div>
   </div>
 
   <div style="display:flex;align-items:center;gap:1rem;margin:0 0 1rem;"><div style="flex:1;height:1px;background:var(--green-pale);"></div><span style="font-size:11px;font-weight:600;color:var(--text-light);letter-spacing:.08em;text-transform:uppercase;">or pay online</span><div style="flex:1;height:1px;background:var(--green-pale);"></div></div>
@@ -353,42 +362,127 @@ async function payOnline(){
   }
 }
 
+function showProofError(msg){
+  var el=document.getElementById('proof-error');
+  el.textContent=msg;
+  el.style.display='block';
+}
+function clearProofError(){
+  var el=document.getElementById('proof-error');
+  if(el){el.style.display='none';el.textContent='';}
+}
+
+// Pull any payment-proof attachments already submitted for this order
+// and render them in the "Already uploaded" section. Runs on page load
+// AND after every successful submit so the list stays current without
+// a full page refresh. Failure here is non-fatal — the upload flow
+// still works even if this read errors.
+async function loadExistingProofs(){
+  if(!orderId)return;
+  try{
+    var{data,error}=await _sb.from('salesweb_order_attachments')
+      .select('id,file_name,file_url,file_type,created_at')
+      .eq('order_id',orderId)
+      .order('created_at',{ascending:false});
+    if(error){console.warn('loadExistingProofs:',error);return;}
+    var wrap=document.getElementById('proof-existing-wrap');
+    var list=document.getElementById('proof-existing-list');
+    if(!data||!data.length){
+      wrap.style.display='none';
+      list.innerHTML='';
+      return;
+    }
+    var html='';
+    data.forEach(function(a){
+      var safeUrl=String(a.file_url||'').replace(/"/g,'&quot;');
+      var safeName=String(a.file_name||'file').replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});
+      var when=a.created_at?new Date(a.created_at).toLocaleString('en-MY',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';
+      var icon=String(a.file_type||'').indexOf('pdf')>-1?'📄':'🖼️';
+      html+='<div style="display:flex;align-items:center;gap:.5rem;padding:.5rem .7rem;background:var(--cream);border:1px solid var(--green-pale);border-radius:8px;margin-bottom:.35rem;font-size:12px;">'+
+        '<span>'+icon+'</span>'+
+        '<a href="'+safeUrl+'" target="_blank" rel="noopener" style="flex:1;color:var(--green-mid);font-weight:500;text-decoration:none;word-break:break-all;">'+safeName+'</a>'+
+        (when?'<span style="font-size:10px;color:var(--text-light);white-space:nowrap;">'+when+'</span>':'')+
+      '</div>';
+    });
+    list.innerHTML=html;
+    wrap.style.display='block';
+  }catch(e){console.warn('loadExistingProofs threw:',e);}
+}
+
 // Submit proof
 async function submitProof(){
+  clearProofError();
   if(!proofFile){showToast('Please select a file');return;}
   if(!orderId){showToast('No order found');return;}
 
   var btn=document.getElementById('btn-submit');
   btn.disabled=true;btn.textContent='Uploading...';
 
-  // Try upload to Supabase storage
-  var ext=proofFile.name.split('.').pop();
+  // 1. Upload to Supabase storage. Stop on error and surface it — the
+  //    previous version silently continued if storage failed, which
+  //    meant nothing got persisted and the customer thought their
+  //    proof was on file when it wasn't.
+  var ext=(proofFile.name.split('.').pop()||'').toLowerCase();
   var path='payment-proofs/'+orderId+'/proof_'+Date.now()+'.'+ext;
-  var uploadUrl='';
+  var{error:upErr}=await _sb.storage.from('order-files').upload(path,proofFile,{
+    cacheControl:'3600',
+    upsert:false,
+    contentType:proofFile.type||undefined
+  });
+  if(upErr){
+    btn.disabled=false;btn.textContent='Submit Payment Proof';
+    showProofError('Could not upload file: '+(upErr.message||upErr)+'. Please check your connection and try again, or contact MJM Nursery if this keeps happening.');
+    return;
+  }
+  var{data:urlData}=_sb.storage.from('order-files').getPublicUrl(path);
+  var uploadUrl=(urlData&&urlData.publicUrl)||'';
 
-  var{error:upErr}=await _sb.storage.from('order-files').upload(path,proofFile);
-  if(!upErr){
-    var{data:urlData}=_sb.storage.from('order-files').getPublicUrl(path);
-    uploadUrl=urlData?.publicUrl||path;
+  // 2. Insert the attachment row — THIS is what the customer portal
+  //    and the admin orders view read from. Previously this step was
+  //    missing entirely, which is why a returning customer never saw
+  //    their proof and the admin didn't either.
+  var who=sessionStorage.getItem('mjm_user_email')||'customer';
+  var{error:attErr}=await _sb.from('salesweb_order_attachments').insert([{
+    order_id:orderId,
+    file_name:proofFile.name,
+    file_url:uploadUrl||path,
+    file_type:proofFile.type||null,
+    uploaded_by:who
+  }]);
+  if(attErr){
+    btn.disabled=false;btn.textContent='Submit Payment Proof';
+    showProofError('Uploaded but could not record the file ('+attErr.message+'). Please contact MJM Nursery — your file is at: '+uploadUrl);
+    return;
   }
 
-  // Add timeline entry
+  // 3. Timeline entry — informational, not load-bearing.
   await _sb.from('salesweb_order_timeline').insert([{
     order_id:orderId,
     status:'Payment Proof Submitted',
     note:'Customer uploaded payment proof'+(uploadUrl?' — '+uploadUrl:' (file: '+proofFile.name+')'),
-    changed_by:sessionStorage.getItem('mjm_user_email')||'customer'
+    changed_by:who
   }]);
 
-  btn.textContent='Submitted!';
-  btn.style.background='#059669';
+  // Refresh the "Already uploaded" list so the new file appears
+  // immediately, and reset the upload area for the next file if the
+  // customer wants to add another receipt.
+  await loadExistingProofs();
+  proofFile=null;
+  document.getElementById('proof-file').value='';
+  document.getElementById('proof-preview').style.display='none';
+  btn.textContent='Submit Payment Proof';
+  btn.disabled=true;
+  btn.style.background='';
   showToast('Payment proof submitted! We will verify shortly.');
 
-  // Clean up — terminal success for the offline flow, safe to clear the cart now.
-  sessionStorage.removeItem('mjm_pay_order_id');
-  sessionStorage.removeItem('mjm_pay_order_total');
+  // Cart can be cleared — terminal success for the offline flow.
+  // Keep mjm_pay_order_id so the customer can re-open this page and
+  // see their proof / upload more without losing context.
   sessionStorage.removeItem('mjm_cart');
 }
+
+// Load any existing proofs on page mount.
+loadExistingProofs();
 </script>
 </body>
 </html>

@@ -2044,6 +2044,8 @@
 .p-be-cal-cell.my-booking{box-shadow:inset 0 0 0 2px var(--green-mid);}
 .p-be-cal-cell.selected{background:var(--green-dark);color:#fff;border-color:var(--green-dark);box-shadow:none;}
 .p-be-cal-cell .tag{font-size:7px;font-weight:800;line-height:1;margin-top:1px;letter-spacing:.04em;text-transform:uppercase;opacity:.85;}
+.p-be-cal-cell .mine{font-size:8px;font-weight:700;line-height:1.15;margin-top:2px;color:var(--green-mid);text-align:center;letter-spacing:.02em;}
+.p-be-cal-cell.selected .mine{color:#d9f5dc;}
 .p-be-cal-legend{display:flex;flex-wrap:wrap;gap:.5rem;font-size:9.5px;color:var(--text-light);margin-top:.5rem;}
 .p-be-cal-legend span{display:inline-flex;align-items:center;gap:.25rem;}
 .p-be-cal-legend i{width:10px;height:10px;border-radius:3px;display:inline-block;}
@@ -3862,19 +3864,35 @@ function _beIsPastDate(ds){
   return new Date(ds+'T00:00:00') < t;
 }
 // All non-cancelled bookings belonging to the signed-in customer,
-// across every one of their orders. Used to ring those calendar
-// cells so the customer can see their own collection schedule
-// without revealing anyone else's.
-function _beMyBookingDates(){
-  var set={};
+// across every one of their orders, keyed by date. The full booking
+// row is kept so the calendar cell can show time + qty inline ("8A ·
+// 100") — this is the customer's own data, never anybody else's.
+function _beMyBookingsByDate(){
+  var map={};
   (P_ORDERS||[]).forEach(function(o){
     (o.bookings||[]).forEach(function(b){
       if(b.booking_date && String(b.status||'').toLowerCase()!=='cancelled'){
-        set[b.booking_date]=true;
+        map[b.booking_date]=b;
       }
     });
   });
-  return set;
+  return map;
+}
+// Compact hour formatter for use inside calendar cells, where every
+// extra character is real estate that gets cramped at 7-col grid.
+function _beFmtHourShort(h){
+  if(h===0) return '12A';
+  if(h===12) return '12P';
+  if(h<12) return h+'A';
+  return (h-12)+'P';
+}
+// Compact qty formatter: 100 → "100", 1500 → "1.5k", 12000 → "12k".
+// Keeps the cell from busting its grid track on a four-figure order.
+function _beFmtQtyShort(q){
+  q=Number(q)||0;
+  if(q<1000) return String(q);
+  var k=q/1000;
+  return (k>=10 ? Math.round(k) : Math.round(k*10)/10)+'k';
 }
 async function pBeRenderCalendar(){
   if(!P_EDIT_BOOKING) return;
@@ -3896,7 +3914,7 @@ async function pBeRenderCalendar(){
   var startDow=firstDay.getDay(); if(startDow===0) startDow=7;
   var cd=new Date(firstDay); cd.setDate(cd.getDate()-(startDow-1));
 
-  var myDates=_beMyBookingDates();
+  var myBookings=_beMyBookingsByDate();
   var todayStr=_beFmtDate(new Date());
 
   var html='';
@@ -3931,13 +3949,26 @@ async function pBeRenderCalendar(){
         clickable=true;
       }
       if(ds===todayStr) classes.push('today');
-      if(myDates[ds]) classes.push('my-booking');
+      var myB=myBookings[ds]||null;
+      if(myB) classes.push('my-booking');
       if(ds===pBeSelectedDate) classes.push('selected');
+      // Cell content: day number on top. For the customer's own
+      // booked dates, also show start-hour + qty so they can see at
+      // a glance what they booked without opening the time / qty
+      // inputs. Closed/holiday tag wins on the second line when
+      // both apply (rare: an override could open a Sunday they have
+      // a booking on — show the closed reason).
+      var lineTwo='';
+      if(tag) lineTwo='<span class="tag">'+tag+'</span>';
+      else if(myB){
+        var startH=parseInt(String(myB.start_time||'00').split(':')[0],10);
+        lineTwo='<span class="mine">'+_beFmtHourShort(startH)+' · '+_beFmtQtyShort(myB.collection_qty)+'</span>';
+      }
       var safeDs=ds.replace(/[\\'"<>]/g,'');
       var click = clickable ? ' onclick="pBeSelectDate(\''+safeDs+'\')"' : '';
       html += '<div class="'+classes.join(' ')+'"'+click+'>'+
                 '<span>'+cd.getDate()+'</span>'+
-                (tag?'<span class="tag">'+tag+'</span>':'')+
+                lineTwo+
               '</div>';
       cd.setDate(cd.getDate()+1);
     }
@@ -4189,6 +4220,30 @@ async function pSaveBookingEdit(){
   }
   var endH = startH + _beHrsNeeded(qty);
   var et = String(endH).padStart(2,'0')+':00';
+
+  // Confirm the change before writing — date / time / qty edits all
+  // affect the nursery's prep schedule, so a "did you mean to change
+  // this?" prompt protects against an accidental click. Notes-only
+  // edits skip the confirm (low blast radius). Format the before vs
+  // after as plain text so it reads cleanly in the browser confirm
+  // dialog on every platform.
+  var oldB = P_EDIT_BOOKING.booking;
+  var dateChanged = (date !== oldB.booking_date);
+  var stChanged   = (st   !== (String(oldB.start_time||'').substring(0,5)));
+  var qtyChanged  = (qty  !== (Number(oldB.collection_qty)||0));
+  if(dateChanged || stChanged || qtyChanged){
+    function _fmtForConfirm(d, s, q){
+      var dt = d ? new Date(d+'T00:00:00').toLocaleDateString('en-MY',{weekday:'long',day:'2-digit',month:'short',year:'numeric'}) : '—';
+      var hr = parseInt(String(s||'00').split(':')[0],10);
+      var tt = isNaN(hr) ? (s||'—') : _beFmtHour(hr);
+      return dt + '  ·  ' + tt + '  ·  ' + (Number(q)||0).toLocaleString() + ' seedlings';
+    }
+    var prompt = 'Confirm change to your collection booking?\n\n'+
+      'FROM:\n  '+_fmtForConfirm(oldB.booking_date, (oldB.start_time||'').substring(0,5), oldB.collection_qty)+'\n\n'+
+      'TO:\n  '+_fmtForConfirm(date, st, qty);
+    if(!confirm(prompt)) return;
+  }
+
   var btn = document.getElementById('p-be-save');
   btn.disabled = true; btn.textContent = 'Saving…';
   var{error} = await _sb.from('shared_collection_bookings').update({

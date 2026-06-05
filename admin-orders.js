@@ -340,6 +340,24 @@ async function viewOrder(id){
     });
   }
 
+  // Billplz payment outcome — read the most recent payment-related timeline
+  // event. If the latest event is "Payment Failed" and the order has not
+  // since been settled, surface a red banner in the payment tracking card.
+  // Webhook writes "Payment Failed" when Billplz reports paid=false (see
+  // supabase/functions/billplz-webhook/index.ts).
+  var billplzFailed = false;
+  try {
+    var{data:tlRows} = await sb.from('salesweb_order_timeline')
+      .select('status,note,changed_by,created_at')
+      .eq('order_id', id)
+      .or('status.eq.Payment Failed,status.eq.Paid')
+      .order('created_at', { ascending: false })
+      .limit(1);
+    if (tlRows && tlRows.length && tlRows[0].status === 'Payment Failed' && !orderFullyPaid(order)) {
+      billplzFailed = true;
+    }
+  } catch(e) { /* non-fatal — banner just won't show */ }
+
   // For credit orders, fetch per-collection events + all of this customer's
   // monthly invoices so the per-month breakdown table can render.
   var creditCollections=[];
@@ -358,9 +376,19 @@ async function viewOrder(id){
   var shortId=order.order_number||order.id.substring(0,8).toUpperCase();
   // order_number sometimes already contains a leading '#' — avoid "Order ##10539".
   var titleId=String(shortId);if(titleId.charAt(0)!=='#')titleId='#'+titleId;
-  document.getElementById('mo-title').textContent='Order '+titleId;
+  // The modal heading now carries both the order number and the
+  // human-readable created-at timestamp so admins can see when the
+  // order was placed without scrolling to the timeline.
+  document.getElementById('mo-title').innerHTML='Order '+esc(titleId)+
+    '<div style="font-size:11px;font-weight:500;color:var(--ink4);margin-top:.15rem;letter-spacing:0;">Placed '+esc(fmtDateTime(order.created_at))+'</div>';
 
   var html='';
+
+  // ── 0. Proforma Invoice (admin can email a pre-payment quote to customer) ──
+  html+='<div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;padding:.6rem .8rem;margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap;">';
+  html+='<div style="font-size:12px;color:#3730a3;"><strong>Proforma Invoice</strong> &mdash; send a pre-payment quote to the customer on request.</div>';
+  html+='<button class="btn btn-primary btn-sm" onclick="openProformaInvoice(\''+id+'\')" style="font-size:11px;padding:6px 12px;">Send Proforma Invoice</button>';
+  html+='</div>';
 
   // ── 1. Status + Payment Terms (top, side-by-side) ──
   var currentTerms=order.payment_terms==='credit'?'credit':'cash';
@@ -440,7 +468,14 @@ async function viewOrder(id){
   if(_parsed.billIc)   html+='<div style="font-size:12px;color:var(--ink3);">I/C: '+esc(_parsed.billIc)+'</div>';
   html+='<div style="font-size:12px;color:var(--ink3);">Tax ID (TIN): '+esc(order.billing_tax_id||'—')+'</div>';
   if(_parsed.billMpob) html+='<div style="font-size:12px;color:var(--ink3);">MPOB License: '+esc(_parsed.billMpob)+'</div>';
-  if(_parsed.billAddr) html+='<div style="font-size:12px;color:var(--ink3);margin-top:.3rem;white-space:pre-wrap;">'+esc(_parsed.billAddr)+'</div>';
+  // Always show a Billing Address row. The storefront only persists the
+  // billing address inside customer_remark ("Billing Addr: …"), so when
+  // that's missing — typical for self-collection orders without e-Invoice
+  // details — fall back to the shipping address.
+  var billAddrShown = _parsed.billAddr || order.shipping_address || '';
+  var billAddrLabel = _parsed.billAddr ? 'Billing Address' : (order.shipping_address ? 'Address (Shipping)' : 'Billing Address');
+  html+='<div style="font-size:12px;color:var(--ink3);margin-top:.3rem;">'+billAddrLabel+':</div>';
+  html+='<div style="font-size:12px;color:var(--ink3);white-space:pre-wrap;">'+(billAddrShown?esc(billAddrShown):'<span style="color:var(--ink4);">—</span>')+'</div>';
   html+='<div style="font-size:12px;color:var(--ink3);margin-top:.3rem;">Points issued: '+(order.points_issued||0)+'</div>';
   html+='</div>';
   html+='<div id="mo-billing-edit" style="display:none;">';
@@ -472,8 +507,11 @@ async function viewOrder(id){
   if(order.discount_amount>0)html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;color:var(--red);"><span>Discount</span><span>-RM '+fmtMYR(order.discount_amount)+'</span></div>';
   if(order.coupon_code)html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;color:var(--red);"><span>Coupon ('+esc(order.coupon_code)+')</span><span>-RM '+fmtMYR(order.coupon_discount)+'</span></div>';
   html+='<div style="display:flex;justify-content:space-between;padding:.4rem 0;border-top:1.5px solid var(--border);margin-top:.3rem;font-size:15px;font-weight:700;"><span>Total</span><span>RM '+fmtMYR(order.total)+'</span></div>';
+  html+='</div>';
+  html+='</div>'; // /Order Items card
 
-  // Paid / Balance line inside the totals card
+  // Compute payment state once — used by both the discount/coupon block and
+  // the dedicated payment tracking card below.
   var paidNow = Number(order.amount_paid||0);
   var totalNow = Number(order.total||0);
   // A settled status (Paid / Ready for Collection / Completed) means the
@@ -483,32 +521,12 @@ async function viewOrder(id){
   var paidDisplay = settled ? totalNow : paidNow;
   var balanceNow = settled ? 0 : Math.max(0, totalNow - paidNow);
   var payState = settled ? 'paid' : (paidNow <= 0 ? 'unpaid' : 'partial');
-  var payColor = payState === 'paid' ? 'var(--green)' : payState === 'partial' ? '#a16207' : 'var(--ink3)';
-  html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;color:'+payColor+';"><span>Paid</span><span>RM '+fmtMYR(paidDisplay)+'</span></div>';
-  html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;font-weight:600;color:'+(balanceNow>0?'var(--red)':'var(--green)')+';"><span>Balance</span><span>RM '+fmtMYR(balanceNow)+'</span></div>';
-  html+='</div>';
 
-  // ── Payment Received (record / update amount_paid) ──
-  html+='<div style="background:var(--bg);border-radius:10px;padding:1rem;margin-bottom:1rem;">';
-  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">';
-  html+='<div style="font-size:13px;font-weight:600;">Payment Received</div>';
-  var payBadge = payState === 'paid' ? '<span class="badge badge-blue" style="font-size:11px;padding:4px 10px;">Fully Paid</span>'
-               : payState === 'partial' ? '<span class="badge badge-amber" style="font-size:11px;padding:4px 10px;">Partially Paid</span>'
-               : '<span class="badge badge-grey" style="font-size:11px;padding:4px 10px;">Unpaid</span>';
-  html+=payBadge+'</div>';
-  html+='<div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;">';
-  html+='<label style="font-size:11px;color:var(--ink3);">Amount paid (RM)</label>';
-  html+='<input class="form-input" id="mo-amount-paid" type="number" step="0.01" min="0" value="'+paidDisplay.toFixed(2)+'" style="width:120px;font-size:12px;padding:6px 10px;">';
-  html+='<button class="btn btn-primary btn-sm" onclick="updateOrderAmountPaid(\''+id+'\','+totalNow+')">Update</button>';
-  html+='</div>';
-  html+='<div style="margin-top:.5rem;font-size:11px;color:var(--ink3);">Total RM '+fmtMYR(totalNow)+' · Outstanding <strong style="color:'+(balanceNow>0?'var(--red)':'var(--green)')+';">RM '+fmtMYR(balanceNow)+'</strong></div>';
-  if(paidDisplay>0 && order.amount_paid_at){
-    html+='<div style="margin-top:.2rem;font-size:11px;color:var(--ink4);">Payment received: '+fmtDateTime(order.amount_paid_at)+'</div>';
-  }
-  html+='</div>';
-
-  // Discount + Coupon controls (collapsible)
-  html+='<div style="margin-top:.6rem;padding-top:.6rem;border-top:1px solid var(--border);display:flex;gap:.5rem;flex-wrap:wrap;">';
+  // ── Discount + Coupon controls (placed ABOVE the Payment Tracking card
+  //    so admins set adjustments first, then see the updated balance) ──
+  html+='<div style="background:var(--bg);border-radius:10px;padding:.8rem 1rem;margin-bottom:1rem;">';
+  html+='<div style="font-size:13px;font-weight:600;margin-bottom:.5rem;">Adjustments</div>';
+  html+='<div style="display:flex;gap:.5rem;flex-wrap:wrap;">';
   html+='<button class="btn btn-outline btn-sm" onclick="var el=document.getElementById(\'mo-discount-panel\');el.style.display=el.style.display===\'none\'?\'flex\':\'none\';" style="font-size:11px;">Set Discount</button>';
   html+='<button class="btn btn-outline btn-sm" onclick="var el=document.getElementById(\'mo-coupon-panel\');el.style.display=el.style.display===\'none\'?\'flex\':\'none\';" style="font-size:11px;">Apply Coupon</button>';
   html+='</div>';
@@ -518,6 +536,53 @@ async function viewOrder(id){
   html+='<div id="mo-coupon-panel" style="display:none;gap:.5rem;align-items:center;margin-top:.5rem;flex-wrap:wrap;">';
   html+='<input class="form-input" id="mo-coupon" type="text" value="'+(order.coupon_code||'')+'" style="width:120px;font-size:12px;padding:6px 10px;text-transform:uppercase;" placeholder="Coupon code"><button class="btn btn-primary btn-sm" onclick="applyCoupon(\''+id+'\')">Apply Coupon</button>';
   html+='</div>';
+  html+='</div>';
+
+  // ── Payment Tracking — one section to monitor everything about money:
+  //    order amount, amount paid/received, outstanding balance, plus
+  //    a Billplz-failed banner when the last payment event was a failure. ──
+  html+='<div style="background:var(--bg);border:1.5px solid var(--border);border-radius:10px;padding:1rem;margin-bottom:1rem;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem;">';
+  html+='<div style="font-size:13px;font-weight:700;">Payment Tracking</div>';
+  var payBadge = payState === 'paid'    ? '<span class="badge badge-blue"  style="font-size:11px;padding:4px 10px;">Fully Paid</span>'
+               : payState === 'partial' ? '<span class="badge badge-amber" style="font-size:11px;padding:4px 10px;">Partially Paid</span>'
+                                        : '<span class="badge badge-grey"  style="font-size:11px;padding:4px 10px;">Unpaid</span>';
+  html+=payBadge+'</div>';
+
+  // Billplz failure banner — only when timeline confirms a failed Billplz
+  // attempt that hasn't been superseded by a successful payment.
+  if(billplzFailed){
+    html+='<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:.5rem .75rem;margin-bottom:.6rem;display:flex;align-items:center;gap:.5rem;font-size:12px;color:#991b1b;">';
+    html+='<strong>Billplz payment failed.</strong>';
+    html+='<span style="color:#7f1d1d;">Customer initiated an online payment but it did not complete. They may retry from their order page.</span>';
+    html+='</div>';
+  }
+
+  // Three-up summary tiles: Order Amount / Amount Paid / Outstanding Balance.
+  html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;margin-bottom:.6rem;">';
+  html+='<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:.6rem;">';
+  html+='<div style="font-size:10px;color:var(--ink4);text-transform:uppercase;letter-spacing:.04em;font-weight:600;">Order Amount</div>';
+  html+='<div style="font-size:16px;font-weight:700;margin-top:.15rem;">RM '+fmtMYR(totalNow)+'</div>';
+  html+='</div>';
+  html+='<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:.6rem;">';
+  html+='<div style="font-size:10px;color:var(--ink4);text-transform:uppercase;letter-spacing:.04em;font-weight:600;">Amount Paid</div>';
+  html+='<div style="font-size:16px;font-weight:700;margin-top:.15rem;color:'+(paidDisplay>0?'var(--green)':'var(--ink3)')+';">RM '+fmtMYR(paidDisplay)+'</div>';
+  html+='</div>';
+  html+='<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:.6rem;">';
+  html+='<div style="font-size:10px;color:var(--ink4);text-transform:uppercase;letter-spacing:.04em;font-weight:600;">Outstanding</div>';
+  html+='<div style="font-size:16px;font-weight:700;margin-top:.15rem;color:'+(balanceNow>0?'var(--red)':'var(--green)')+';">RM '+fmtMYR(balanceNow)+'</div>';
+  html+='</div>';
+  html+='</div>';
+
+  // Inline editor — record a payment received from the customer.
+  html+='<div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;padding-top:.5rem;border-top:1px solid var(--border);">';
+  html+='<label style="font-size:11px;color:var(--ink3);">Record amount paid (RM)</label>';
+  html+='<input class="form-input" id="mo-amount-paid" type="number" step="0.01" min="0" value="'+paidDisplay.toFixed(2)+'" style="width:120px;font-size:12px;padding:6px 10px;">';
+  html+='<button class="btn btn-primary btn-sm" onclick="updateOrderAmountPaid(\''+id+'\','+totalNow+')">Update</button>';
+  html+='</div>';
+  if(paidDisplay>0 && order.amount_paid_at){
+    html+='<div style="margin-top:.3rem;font-size:11px;color:var(--ink4);">Payment received: '+fmtDateTime(order.amount_paid_at)+'</div>';
+  }
   html+='</div>';
 
   // ── 4. Customer Remark ──
@@ -614,7 +679,7 @@ async function viewOrder(id){
   // Section heading matches the customer portal modal title style
   // ("Documents") so an admin reviewing an order sees the same label
   // the customer sees when they tap an attachment chip in their portal.
-  html+='<div style="margin-bottom:1rem;"><div style="font-size:13px;font-weight:600;margin-bottom:.4rem;">📎 Documents</div>';
+  html+='<div style="margin-bottom:1rem;"><div style="font-size:13px;font-weight:600;margin-bottom:.4rem;">Documents</div>';
   html+='<div id="mo-attachments"><div style="font-size:12px;color:var(--ink4);">Loading...</div></div>';
   html+='<div style="margin-top:.5rem;display:flex;gap:.5rem;align-items:center;">';
   html+='<input type="file" id="mo-att-file" style="font-size:12px;">';
@@ -1022,17 +1087,17 @@ async function setOrderCreditBilled(orderId,billed){
 // ═══════════════════════════════════════
 //  ATTACHMENTS
 // ═══════════════════════════════════════
-// Pick an emoji that loosely matches the file's MIME type so admin
-// attachment rows mirror the icon style used in the customer portal's
-// attachment modal (att-file-icon).
+// Plain-text type label (no emoji) shown in each attachment row. The
+// 3-letter tag keeps rows scan-able without leaning on emoji glyphs
+// that render inconsistently across browsers/OSes.
 function attIcon(fileType, fileName){
   var t=(fileType||'').toLowerCase();
   var ext=((fileName||'').split('.').pop()||'').toLowerCase();
-  if(t.indexOf('image/')===0||['jpg','jpeg','png','gif','webp','heic'].indexOf(ext)>=0) return '🖼️';
-  if(t.indexOf('pdf')>=0||ext==='pdf') return '📄';
-  if(t.indexOf('word')>=0||['doc','docx'].indexOf(ext)>=0) return '📝';
-  if(t.indexOf('sheet')>=0||t.indexOf('excel')>=0||['xls','xlsx','csv'].indexOf(ext)>=0) return '📊';
-  return '📎';
+  if(t.indexOf('image/')===0||['jpg','jpeg','png','gif','webp','heic'].indexOf(ext)>=0) return 'IMG';
+  if(t.indexOf('pdf')>=0||ext==='pdf') return 'PDF';
+  if(t.indexOf('word')>=0||['doc','docx'].indexOf(ext)>=0) return 'DOC';
+  if(t.indexOf('sheet')>=0||t.indexOf('excel')>=0||['xls','xlsx','csv'].indexOf(ext)>=0) return 'XLS';
+  return 'FILE';
 }
 
 function fmtFileSize(bytes){
@@ -1047,20 +1112,52 @@ async function loadAttachments(orderId){
   var{data}=await sb.from('salesweb_order_attachments').select('*').eq('order_id',orderId).order('created_at',{ascending:false});
   var el=document.getElementById('mo-attachments');
   if(!data||!data.length){el.innerHTML='<div style="font-size:12px;color:var(--ink4);padding:.3rem 0;">No documents uploaded yet.</div>';return;}
-  // Card-style row matches customer-portal .att-file: icon, filename +
-  // meta line, then a clear "View" button (opens the file in a new
-  // tab) followed by the destructive delete affordance.
+  // Card-style row matches customer-portal .att-file: type tag, filename +
+  // meta line, then a "View" button that opens the file inside a floating
+  // preview modal (PDF/image inline iframe) instead of jumping the admin
+  // away to a new tab, followed by the destructive delete affordance.
   el.innerHTML=data.map(function(a){
     var dt=fmtDate(a.created_at);
     var meta=[a.file_type||'File',fmtFileSize(a.file_size),dt,a.uploaded_by].filter(Boolean).join(' · ');
     var idJs=String(a.id||'').replace(/[\\'"<>]/g,'');
+    var urlJs=String(a.file_url||'').replace(/'/g,'%27');
+    var nameJs=String(a.file_name||'').replace(/'/g,'\\\'');
+    var typeJs=String(a.file_type||'').replace(/'/g,'\\\'');
     return '<div class="mo-att-row">'+
       '<div class="mo-att-icon">'+attIcon(a.file_type,a.file_name)+'</div>'+
       '<div class="mo-att-info"><strong>'+esc(a.file_name||'Untitled document')+'</strong><span>'+esc(meta)+'</span></div>'+
-      '<a href="'+esc(a.file_url)+'" target="_blank" rel="noopener" class="btn btn-outline btn-sm mo-att-view">👁 View</a>'+
+      '<button class="btn btn-outline btn-sm mo-att-view" onclick="openAttachmentPreview(\''+urlJs+'\',\''+nameJs+'\',\''+typeJs+'\')">View</button>'+
       '<button class="btn btn-outline btn-sm mo-att-del" onclick="deleteAttachment(\''+idJs+'\',\''+orderId+'\')">✕</button>'+
     '</div>';
   }).join('');
+}
+
+// ─── Floating attachment preview ────────────────────────────────
+// Renders the file inline inside #modal-att-preview so admins can review
+// without leaving the order modal. Images render in an <img>, PDFs in an
+// <iframe>; anything else falls back to a "Download" link.
+function openAttachmentPreview(fileUrl, fileName, fileType){
+  var url=String(fileUrl||'');
+  var name=String(fileName||'Document');
+  var t=(fileType||'').toLowerCase();
+  var ext=((name).split('.').pop()||'').toLowerCase();
+  var isImg = t.indexOf('image/')===0 || ['jpg','jpeg','png','gif','webp','heic'].indexOf(ext)>=0;
+  var isPdf = t.indexOf('pdf')>=0 || ext==='pdf';
+
+  document.getElementById('att-preview-title').textContent=name;
+  var body=document.getElementById('att-preview-body');
+  if(isImg){
+    body.innerHTML='<img src="'+esc(url)+'" alt="'+esc(name)+'" style="max-width:100%;max-height:70vh;display:block;margin:0 auto;border-radius:6px;">';
+  } else if(isPdf){
+    body.innerHTML='<iframe src="'+esc(url)+'" style="width:100%;height:70vh;border:0;border-radius:6px;background:#fff;"></iframe>';
+  } else {
+    body.innerHTML='<div style="padding:1.5rem;text-align:center;color:var(--ink3);font-size:13px;">'+
+      'Inline preview is not supported for this file type.<br><br>'+
+      '<a href="'+esc(url)+'" target="_blank" rel="noopener" class="btn btn-primary btn-sm">Open / Download</a>'+
+    '</div>';
+  }
+  document.getElementById('att-preview-open').setAttribute('href',url);
+  openModal('modal-att-preview');
 }
 
 async function uploadOrderAttachment(orderId){
@@ -2123,4 +2220,117 @@ async function submitNewOrder(){
   closeModal('modal-new-order');
   toast('Order #'+orderNum+' created'+(terms==='credit'?' · AL issued for credit collection':''));
   loadOrders();
+}
+
+// ═══════════════════════════════════════
+//  PROFORMA INVOICE
+// ═══════════════════════════════════════
+// Renders a print-ready Proforma Invoice inside #modal-proforma. The admin
+// can preview, print to PDF, or email a copy to the customer via the same
+// send-order-email edge function the storefront uses. The edge function
+// recognises body.type === 'proforma' and switches the template.
+
+async function openProformaInvoice(orderId){
+  var{data:order}=await sb.from('salesweb_customer_orders').select('*').eq('id',orderId).single();
+  if(!order){toast('Order not found','error');return;}
+  var{data:items}=await sb.from('salesweb_order_items').select('*').eq('order_id',orderId);
+  items=items||[];
+
+  // Parse the billing address out of customer_remark — same logic as viewOrder.
+  var billAddr='', billReg='', billIc='', billMpob='';
+  if(order.customer_remark){
+    String(order.customer_remark).split(' | ').forEach(function(p){
+      p=p.trim();
+      if      (p.indexOf('Billing Addr: ')===0) billAddr=p.substring(14);
+      else if (p.indexOf('Reg: ')===0)          billReg =p.substring(5);
+      else if (p.indexOf('IC: ')===0)           billIc  =p.substring(4);
+      else if (p.indexOf('MPOB: ')===0)         billMpob=p.substring(6);
+    });
+  }
+  var addr = billAddr || order.shipping_address || '';
+  var subtotal = items.reduce(function(s,it){return s+(it.subtotal||0);},0);
+  var orderNum = order.order_number || ('#'+String(order.id||'').substring(0,8).toUpperCase());
+  if(orderNum.charAt(0)!=='#') orderNum='#'+orderNum;
+
+  var html='';
+  html+='<div id="proforma-doc" style="background:#fff;padding:1.5rem;border-radius:8px;font-family:system-ui,sans-serif;color:#111;">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;border-bottom:2px solid #111;padding-bottom:.6rem;">';
+  html+='<div><div style="font-size:18px;font-weight:800;">MJM Nursery</div><div style="font-size:11px;color:#555;">Niah Land District, Miri, 98000, Sarawak</div><div style="font-size:11px;color:#555;">orders@mjmnursery.com</div></div>';
+  html+='<div style="text-align:right;"><div style="font-size:20px;font-weight:800;letter-spacing:.04em;">PROFORMA INVOICE</div><div style="font-size:12px;color:#555;margin-top:.2rem;">Order '+esc(orderNum)+'</div><div style="font-size:11px;color:#555;">Date: '+esc(fmtDate(order.created_at))+'</div></div>';
+  html+='</div>';
+
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;font-size:12px;">';
+  html+='<div><div style="font-weight:700;margin-bottom:.2rem;">Bill To</div>';
+  html+='<div>'+esc(order.billing_name||order.customer_name||'—')+'</div>';
+  if(billReg)  html+='<div>Reg No: '+esc(billReg)+'</div>';
+  if(billIc)   html+='<div>IC: '+esc(billIc)+'</div>';
+  if(order.billing_tax_id) html+='<div>TIN: '+esc(order.billing_tax_id)+'</div>';
+  if(billMpob) html+='<div>MPOB: '+esc(billMpob)+'</div>';
+  if(addr)     html+='<div style="white-space:pre-wrap;margin-top:.2rem;">'+esc(addr)+'</div>';
+  if(order.customer_email) html+='<div style="margin-top:.2rem;color:#555;">'+esc(order.customer_email)+'</div>';
+  html+='</div>';
+  html+='<div style="text-align:right;"><div style="font-weight:700;margin-bottom:.2rem;">Payment</div>';
+  html+='<div>Terms: '+(order.payment_terms==='credit'?'Credit':'Cash on Collection')+'</div>';
+  html+='<div style="color:#555;">This is a proforma quote &mdash; payment is requested before delivery / collection.</div>';
+  html+='</div></div>';
+
+  html+='<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:1rem;">';
+  html+='<thead><tr style="background:#f4f4f5;"><th style="text-align:left;padding:.5rem;border-bottom:1px solid #111;">Product</th><th style="text-align:right;padding:.5rem;border-bottom:1px solid #111;">Unit Price</th><th style="text-align:right;padding:.5rem;border-bottom:1px solid #111;">Qty</th><th style="text-align:right;padding:.5rem;border-bottom:1px solid #111;">Subtotal</th></tr></thead><tbody>';
+  items.forEach(function(it){
+    html+='<tr><td style="padding:.4rem .5rem;border-bottom:1px solid #eee;">'+esc(it.product_name||'—')+'</td>'+
+      '<td style="text-align:right;padding:.4rem .5rem;border-bottom:1px solid #eee;">RM '+fmtMYR(it.unit_price)+'</td>'+
+      '<td style="text-align:right;padding:.4rem .5rem;border-bottom:1px solid #eee;">'+it.quantity+'</td>'+
+      '<td style="text-align:right;padding:.4rem .5rem;border-bottom:1px solid #eee;font-weight:600;">RM '+fmtMYR(it.subtotal)+'</td></tr>';
+  });
+  html+='</tbody></table>';
+
+  html+='<div style="display:flex;justify-content:flex-end;margin-bottom:1rem;"><table style="font-size:12px;min-width:240px;">';
+  html+='<tr><td style="padding:.2rem .5rem;">Subtotal</td><td style="padding:.2rem .5rem;text-align:right;">RM '+fmtMYR(subtotal)+'</td></tr>';
+  if(order.discount_amount>0) html+='<tr><td style="padding:.2rem .5rem;color:#b91c1c;">Discount</td><td style="padding:.2rem .5rem;text-align:right;color:#b91c1c;">-RM '+fmtMYR(order.discount_amount)+'</td></tr>';
+  if(order.coupon_code)       html+='<tr><td style="padding:.2rem .5rem;color:#b91c1c;">Coupon ('+esc(order.coupon_code)+')</td><td style="padding:.2rem .5rem;text-align:right;color:#b91c1c;">-RM '+fmtMYR(order.coupon_discount)+'</td></tr>';
+  html+='<tr style="border-top:2px solid #111;"><td style="padding:.4rem .5rem;font-weight:800;font-size:14px;">Total Due</td><td style="padding:.4rem .5rem;text-align:right;font-weight:800;font-size:14px;">RM '+fmtMYR(order.total)+'</td></tr>';
+  html+='</table></div>';
+
+  html+='<div style="font-size:11px;color:#555;margin-top:1.5rem;border-top:1px solid #ddd;padding-top:.5rem;">This proforma invoice is for quotation only. It does not constitute a tax invoice and no payment has been received. A formal tax invoice will follow once payment is confirmed.</div>';
+  html+='</div>'; // /proforma-doc
+
+  document.getElementById('proforma-title').textContent='Proforma Invoice — '+orderNum;
+  document.getElementById('proforma-body').innerHTML=html;
+  document.getElementById('proforma-send').onclick=function(){ sendProformaInvoice(orderId, order.customer_email||''); };
+  document.getElementById('proforma-print').onclick=function(){
+    var w=window.open('','_blank');
+    if(!w){toast('Allow pop-ups to print','error');return;}
+    w.document.write('<html><head><title>Proforma '+esc(orderNum)+'</title></head><body>'+document.getElementById('proforma-doc').outerHTML+'</body></html>');
+    w.document.close();
+    setTimeout(function(){w.print();}, 250);
+  };
+  openModal('modal-proforma');
+}
+
+async function sendProformaInvoice(orderId, defaultEmail){
+  var email = prompt('Send proforma to email address:', defaultEmail||'');
+  if(!email) return;
+  email = String(email).trim();
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ toast('Invalid email address','error'); return; }
+  try{
+    var session = await sb.auth.getSession();
+    var token = session?.data?.session?.access_token || '';
+    var url = SB_URL + '/functions/v1/send-order-email';
+    var r = await fetch(url, {
+      method:'POST',
+      headers:{
+        'Authorization': 'Bearer '+token,
+        'Content-Type':'application/json',
+      },
+      body: JSON.stringify({ order_id: orderId, type:'proforma', to: email }),
+    });
+    if(!r.ok){
+      var t = await r.text();
+      toast('Send failed: '+(t||r.status),'error');
+      return;
+    }
+    toast('Proforma invoice emailed to '+email);
+  }catch(e){
+    toast('Send failed: '+(e.message||'network error'),'error');
+  }
 }

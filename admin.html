@@ -778,6 +778,33 @@ input,select,textarea,button{font-family:inherit;}
 <!-- ORDER DETAIL MODAL -->
 <div class="modal-overlay" id="modal-order" style="z-index:250;"><div class="modal" style="max-width:750px;"><div class="modal-head"><h2 id="mo-title">Order Details</h2><button class="modal-close" onclick="closeModal('modal-order');">&#x2715;</button></div><div class="modal-body" id="mo-body" style="max-height:75vh;overflow-y:auto;"></div><div class="modal-foot" id="mo-foot"></div></div></div>
 
+<!-- ATTACHMENT PREVIEW (floating viewer for order documents — avoids tab-jumping) -->
+<div class="modal-overlay" id="modal-att-preview" style="z-index:260;"><div class="modal" style="max-width:900px;">
+  <div class="modal-head">
+    <h2 id="att-preview-title" style="font-size:1.05rem;">Document</h2>
+    <button class="modal-close" onclick="closeModal('modal-att-preview')">&#x2715;</button>
+  </div>
+  <div class="modal-body" id="att-preview-body" style="max-height:78vh;overflow:auto;background:#f1f5f9;border-radius:8px;"></div>
+  <div class="modal-foot">
+    <a id="att-preview-open" href="#" target="_blank" rel="noopener" class="btn btn-outline">Open in new tab</a>
+    <button class="btn btn-outline" onclick="closeModal('modal-att-preview')">Close</button>
+  </div>
+</div></div>
+
+<!-- PROFORMA INVOICE (preview + print + email) -->
+<div class="modal-overlay" id="modal-proforma" style="z-index:260;"><div class="modal" style="max-width:780px;">
+  <div class="modal-head">
+    <h2 id="proforma-title" style="font-size:1.05rem;">Proforma Invoice</h2>
+    <button class="modal-close" onclick="closeModal('modal-proforma')">&#x2715;</button>
+  </div>
+  <div class="modal-body" id="proforma-body" style="max-height:75vh;overflow:auto;background:#f1f5f9;"></div>
+  <div class="modal-foot">
+    <button id="proforma-print" class="btn btn-outline">Print / Save PDF</button>
+    <button id="proforma-send" class="btn btn-primary">Email to Customer</button>
+    <button class="btn btn-outline" onclick="closeModal('modal-proforma')">Close</button>
+  </div>
+</div></div>
+
 <!-- ADD-ORDER (admin-created order) -->
 <div class="modal-overlay" id="modal-new-order" style="z-index:255;"><div class="modal" style="max-width:820px;">
   <div class="modal-head"><h2>+ New Order</h2><button class="modal-close" onclick="closeModal('modal-new-order')">&#x2715;</button></div>

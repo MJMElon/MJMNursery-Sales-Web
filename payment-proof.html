@@ -424,7 +424,7 @@ async function submitProof(){
   //    proof was on file when it wasn't.
   var ext=(proofFile.name.split('.').pop()||'').toLowerCase();
   var path='payment-proofs/'+orderId+'/proof_'+Date.now()+'.'+ext;
-  var{error:upErr}=await _sb.storage.from('order-files').upload(path,proofFile,{
+  var{error:upErr}=await _sb.storage.from('order-attachments').upload(path,proofFile,{
     cacheControl:'3600',
     upsert:false,
     contentType:proofFile.type||undefined
@@ -434,7 +434,7 @@ async function submitProof(){
     showProofError('Could not upload file: '+(upErr.message||upErr)+'. Please check your connection and try again, or contact MJM Nursery if this keeps happening.');
     return;
   }
-  var{data:urlData}=_sb.storage.from('order-files').getPublicUrl(path);
+  var{data:urlData}=_sb.storage.from('order-attachments').getPublicUrl(path);
   var uploadUrl=(urlData&&urlData.publicUrl)||'';
 
   // 2. Insert the attachment row — THIS is what the customer portal

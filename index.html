@@ -2015,6 +2015,59 @@
   </div>
 </div>
 
+<!-- Booking edit modal — quick inline edits to a saved collection
+     booking (date / time / qty / note). Opens above the order detail
+     modal (z-index 600). For full availability + multi-hour
+     re-planning, the customer can still go to collect.mjmnursery.com
+     directly via the "Use full booking calendar" link inside the
+     modal. -->
+<div class="portal-modal-overlay" id="p-booking-edit-modal" style="z-index:600;">
+  <div class="portal-modal" style="max-width:480px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+      <h3 style="font-family:'Cormorant Garamond',serif;font-size:1.2rem;">Edit Collection Booking</h3>
+      <button onclick="pCloseBookingEdit()" style="background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--text-mid);">✕</button>
+    </div>
+    <div id="p-be-summary" style="background:var(--cream);border:1px solid var(--green-pale);border-radius:10px;padding:.6rem .8rem;font-size:12px;color:var(--text-mid);margin-bottom:1rem;"></div>
+    <div style="display:flex;flex-direction:column;gap:.7rem;">
+      <div>
+        <label style="display:block;font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.3rem;">Date</label>
+        <input type="date" id="p-be-date" style="width:100%;background:var(--cream);border:1.5px solid var(--green-pale);border-radius:10px;padding:8px 12px;font-size:13px;font-family:inherit;">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem;">
+        <div>
+          <label style="display:block;font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.3rem;">Start Time</label>
+          <select id="p-be-time" style="width:100%;background:var(--cream);border:1.5px solid var(--green-pale);border-radius:10px;padding:8px 12px;font-size:13px;font-family:inherit;">
+            <option value="08:00">8:00 AM</option>
+            <option value="09:00">9:00 AM</option>
+            <option value="10:00">10:00 AM</option>
+            <option value="11:00">11:00 AM</option>
+            <option value="12:00">12:00 PM</option>
+            <option value="13:00">1:00 PM</option>
+            <option value="14:00">2:00 PM</option>
+            <option value="15:00">3:00 PM</option>
+            <option value="16:00">4:00 PM</option>
+          </select>
+        </div>
+        <div>
+          <label style="display:block;font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.3rem;">Quantity</label>
+          <input type="number" id="p-be-qty" min="1" style="width:100%;background:var(--cream);border:1.5px solid var(--green-pale);border-radius:10px;padding:8px 12px;font-size:13px;font-family:inherit;">
+          <div id="p-be-qty-hint" style="font-size:10px;color:var(--text-light);margin-top:.2rem;"></div>
+        </div>
+      </div>
+      <div>
+        <label style="display:block;font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.3rem;">Note (optional)</label>
+        <textarea id="p-be-note" rows="2" style="width:100%;background:var(--cream);border:1.5px solid var(--green-pale);border-radius:10px;padding:8px 12px;font-size:13px;font-family:inherit;resize:vertical;"></textarea>
+      </div>
+      <div id="p-be-error" style="display:none;font-size:12px;color:#dc2626;background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:.5rem .7rem;"></div>
+      <div style="display:flex;gap:.5rem;margin-top:.3rem;">
+        <button onclick="pCloseBookingEdit()" style="flex:1;background:#fff;border:1.5px solid var(--green-pale);color:var(--text-mid);padding:.6rem;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">Cancel</button>
+        <button onclick="pSaveBookingEdit()" id="p-be-save" style="flex:2;background:var(--green-dark);border:none;color:#fff;padding:.6rem;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">Save Changes</button>
+      </div>
+      <a id="p-be-fullcal" href="#" target="_blank" rel="noopener" style="font-size:11px;color:var(--green-mid);text-align:center;text-decoration:none;">Use full booking calendar →</a>
+    </div>
+  </div>
+</div>
+
 <div class="portal-modal-overlay" id="p-order-detail-modal">
   <div class="portal-modal" style="max-width:600px;">
     <div style="display:flex;justify-content:flex-end;margin-bottom:.3rem;">
@@ -3640,6 +3693,141 @@ async function loadPortalSettings(){
   }catch(e){/* keep default */}
 }
 
+// ── Collection-booking edit / share ────────────────────────────────
+// Open the inline edit modal for a booking. The modal lets the
+// customer change date / start time / qty / note. Multi-hour blocks
+// and time-slot availability are intentionally NOT validated here —
+// for those the customer goes to collect.mjmnursery.com (link
+// rendered inside the modal). For straightforward "I typed the wrong
+// qty" / "I want next Tuesday instead" tweaks, the inline edit is
+// faster than re-doing the whole booking flow.
+var P_EDIT_BOOKING = null;
+function pEditBooking(bookingId){
+  var b = null;
+  for(var i=0;i<P_ORDERS.length;i++){
+    var bs=P_ORDERS[i].bookings||[];
+    for(var j=0;j<bs.length;j++){ if(bs[j].id===bookingId){ b=bs[j]; P_EDIT_BOOKING={booking:b, order:P_ORDERS[i]}; break; } }
+    if(b) break;
+  }
+  if(!b){ showPortalToast('Booking not found'); return; }
+  document.getElementById('p-be-date').value = b.booking_date || '';
+  document.getElementById('p-be-time').value = (b.start_time||'08:00').substring(0,5);
+  document.getElementById('p-be-qty').value  = b.collection_qty || 1;
+  document.getElementById('p-be-note').value = b.notes || '';
+  // Restrict to future-or-today so the customer can't accidentally
+  // re-pick yesterday.
+  var today=new Date();
+  document.getElementById('p-be-date').min = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  // Cap the qty input at the order's ordered quantity when this is a
+  // linked-to-order booking; tells the customer how much remains.
+  var qtyInput=document.getElementById('p-be-qty');
+  var qtyHint=document.getElementById('p-be-qty-hint');
+  var ord = P_EDIT_BOOKING.order;
+  if(ord && Number(ord.qty)>0){
+    qtyInput.max = ord.qty;
+    qtyHint.textContent = 'Order quantity: '+ord.qty+' seedlings';
+  } else {
+    qtyInput.removeAttribute('max');
+    qtyHint.textContent = '';
+  }
+  document.getElementById('p-be-summary').textContent = 'Booking #'+(b.order_number||b.al_number||'—');
+  document.getElementById('p-be-error').style.display='none';
+  document.getElementById('p-be-fullcal').href = 'https://collect.mjmnursery.com/';
+  document.getElementById('p-be-save').disabled = false;
+  document.getElementById('p-be-save').textContent = 'Save Changes';
+  document.getElementById('p-booking-edit-modal').classList.add('open');
+}
+function pCloseBookingEdit(){
+  document.getElementById('p-booking-edit-modal').classList.remove('open');
+  P_EDIT_BOOKING = null;
+}
+async function pSaveBookingEdit(){
+  if(!P_EDIT_BOOKING){ pCloseBookingEdit(); return; }
+  var date = document.getElementById('p-be-date').value;
+  var st   = document.getElementById('p-be-time').value;
+  var qty  = parseInt(document.getElementById('p-be-qty').value,10);
+  var note = document.getElementById('p-be-note').value.trim();
+  var errEl = document.getElementById('p-be-error');
+  errEl.style.display='none';
+  if(!date){ errEl.textContent='Please pick a date.'; errEl.style.display='block'; return; }
+  if(!st){   errEl.textContent='Please pick a start time.'; errEl.style.display='block'; return; }
+  if(!(qty>0)){ errEl.textContent='Quantity must be at least 1.'; errEl.style.display='block'; return; }
+  var ord = P_EDIT_BOOKING.order;
+  if(ord && Number(ord.qty)>0 && qty>Number(ord.qty)){
+    errEl.textContent='Quantity cannot exceed your ordered '+ord.qty+' seedlings.';
+    errEl.style.display='block';
+    return;
+  }
+  // No "past date" rejection beyond the input min — the date picker's
+  // min attribute already enforces it on most browsers; double-check
+  // here for the few that don't.
+  var picked = new Date(date+'T00:00:00');
+  var today = new Date(); today.setHours(0,0,0,0);
+  if(picked < today){
+    errEl.textContent='Please pick today or a future date.';
+    errEl.style.display='block';
+    return;
+  }
+  // end_time defaults to start_time + 1h — the inline editor doesn't
+  // try to recalc multi-hour blocks. Customers who need that go to
+  // the full calendar via the link at the bottom of the modal.
+  var startH = parseInt(st.split(':')[0],10);
+  var endH = startH + 1;
+  var et = String(endH).padStart(2,'0')+':00';
+  var btn = document.getElementById('p-be-save');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  var{error} = await _sb.from('shared_collection_bookings').update({
+    booking_date: date,
+    start_time: st,
+    end_time: et,
+    collection_qty: qty,
+    notes: note || null
+  }).eq('id', P_EDIT_BOOKING.booking.id);
+  if(error){
+    btn.disabled=false; btn.textContent='Save Changes';
+    errEl.textContent='Could not save: '+error.message;
+    errEl.style.display='block';
+    return;
+  }
+  // Patch the in-memory booking so the order detail re-renders with
+  // the new values without a full reload of the portal.
+  var b = P_EDIT_BOOKING.booking;
+  b.booking_date=date; b.start_time=st; b.end_time=et; b.collection_qty=qty; b.notes=note||null;
+  showPortalToast('Booking updated');
+  pCloseBookingEdit();
+  // Re-render the order detail modal in place.
+  if(ord) openOrderDetail(ord.id);
+}
+
+// Compose a WhatsApp message with the booking details and open the
+// share sheet. wa.me with no recipient lets the customer pick who to
+// send it to — useful for sharing with family, drivers, etc.
+function pShareBookingWhatsApp(bookingId){
+  var b = null;
+  var orderRef = '';
+  for(var i=0;i<P_ORDERS.length;i++){
+    var bs=P_ORDERS[i].bookings||[];
+    for(var j=0;j<bs.length;j++){ if(bs[j].id===bookingId){ b=bs[j]; orderRef=P_ORDERS[i].id; break; } }
+    if(b) break;
+  }
+  if(!b){ showPortalToast('Booking not found'); return; }
+  var dateStr = b.booking_date ? new Date(b.booking_date+'T00:00:00').toLocaleDateString('en-MY',{weekday:'long',day:'2-digit',month:'short',year:'numeric'}) : 'TBC';
+  var st = (b.start_time||'').substring(0,5);
+  var et = (b.end_time||'').substring(0,5);
+  var lines = [];
+  lines.push('Hi! I\'ve booked my seedling collection at MJM Nursery.');
+  lines.push('');
+  lines.push('📅 ' + dateStr);
+  if(st) lines.push('⏰ ' + st + (et ? ' – ' + et : ''));
+  lines.push('🌱 Qty: ' + (b.collection_qty||0) + ' seedlings');
+  if(orderRef) lines.push('📦 Order #' + orderRef);
+  lines.push('');
+  lines.push('See you at MJM Nursery!');
+  var text = lines.join('\n');
+  var url = 'https://wa.me/?text=' + encodeURIComponent(text);
+  window.open(url, '_blank', 'noopener');
+}
+
 // Inline file viewer. Opens in #p-file-viewer-modal so the customer
 // stays inside the portal modal flow — no tab switching, no losing
 // scroll position on the order list. Image / PDF / fallback branches
@@ -3761,6 +3949,12 @@ function openOrderDetail(ordNum){
       var statusStyle = statusLower==='completed' ? 'background:#d1fae5;color:#065f46;' :
                        statusLower==='confirmed' ? 'background:#dbeafe;color:#1e3a8a;' :
                                                    'background:#fef3c7;color:#92400e;';
+      // Hide the Edit button on completed/cancelled bookings — once
+      // the nursery has marked it done, the customer shouldn't be
+      // moving the slot. WhatsApp share stays available always so a
+      // customer can re-share the time even after confirmation.
+      var canEdit = statusLower !== 'completed' && statusLower !== 'cancelled';
+      var idJs=String(b.id||'').replace(/[\\'"<>]/g,'');
       h+='<div style="background:#fff;border:1px solid var(--green-pale);border-radius:10px;padding:.7rem .85rem;margin-bottom:.4rem;font-size:12px;">';
       h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;">';
       h+='<div style="flex:1;min-width:0;">';
@@ -3769,7 +3963,17 @@ function openOrderDetail(ordNum){
       if(b.notes) h+='<div style="font-size:11px;color:var(--text-light);margin-top:.2rem;font-style:italic;">'+esc(b.notes)+'</div>';
       h+='</div>';
       h+='<span style="font-size:9px;font-weight:700;padding:.2rem .5rem;border-radius:6px;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap;'+statusStyle+'">'+esc(b.status||'pending')+'</span>';
-      h+='</div></div>';
+      h+='</div>';
+      // Action row — Edit (when allowed) + WhatsApp share. Buttons
+      // are small inline pills so they don't dominate the card; the
+      // booking summary is still the focus.
+      h+='<div style="display:flex;gap:.4rem;justify-content:flex-end;margin-top:.55rem;padding-top:.5rem;border-top:1px solid #f0f0ec;">';
+      if(canEdit){
+        h+='<button onclick="pEditBooking(\''+idJs+'\')" style="background:#fff;border:1.5px solid var(--green-pale);color:var(--green-dark);padding:.3rem .7rem;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:.25rem;transition:all .15s;" onmouseover="this.style.background=\'var(--green-dark)\';this.style.color=\'#fff\';this.style.borderColor=\'var(--green-dark)\';" onmouseout="this.style.background=\'#fff\';this.style.color=\'var(--green-dark)\';this.style.borderColor=\'var(--green-pale)\';">✏️ Edit</button>';
+      }
+      h+='<button onclick="pShareBookingWhatsApp(\''+idJs+'\')" style="background:#25D366;border:none;color:#fff;padding:.3rem .7rem;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:.25rem;transition:background .15s;" onmouseover="this.style.background=\'#1FAA52\';" onmouseout="this.style.background=\'#25D366\';">📱 Share to WhatsApp</button>';
+      h+='</div>';
+      h+='</div>';
     });
   }
 

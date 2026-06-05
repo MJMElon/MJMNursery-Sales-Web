@@ -2001,8 +2001,10 @@
 <!-- In-portal file viewer. Opened by the "View" button on each
      attached document under "Attached Documents" in the order
      detail modal. Renders images inline, PDFs in an iframe, and
-     falls back to a Download link for anything else. -->
-<div class="portal-modal-overlay" id="p-file-viewer-modal">
+     falls back to a Download link for anything else.
+     z-index sits ABOVE the order detail modal (z-index 500) so
+     the viewer surfaces on top instead of disappearing behind. -->
+<div class="portal-modal-overlay" id="p-file-viewer-modal" style="z-index:600;">
   <div class="portal-modal" style="max-width:760px;">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;margin-bottom:.8rem;">
       <h3 id="p-file-viewer-title" style="font-family:'Cormorant Garamond',serif;font-size:1.05rem;flex:1;word-break:break-all;">File</h3>
@@ -3768,23 +3770,17 @@ function openOrderDetail(ordNum){
       '</div>';
     }
 
-    // Customer uploads (payment proofs etc.)
-    if(customerUploads.length){
-      h+='<div style="font-size:10px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin:.4rem 0 .35rem;">📤 Your Uploads</div>';
-      customerUploads.forEach(function(a){h+=_renderFileRow(a);});
-    }
+    // All attachments + DOs render under the single "Attached
+    // Documents" header — no sub-section labels. Customer uploads
+    // (payment proofs) come first, then staff uploads (invoices /
+    // receipts / etc.), then delivery-order cards.
+    customerUploads.forEach(function(a){h+=_renderFileRow(a);});
+    adminUploads.forEach(function(a){h+=_renderFileRow(a);});
 
-    // Admin / MJM Nursery uploads (invoices, receipts, etc.)
-    if(adminUploads.length){
-      h+='<div style="font-size:10px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin:.6rem 0 .35rem;">📥 From MJM Nursery</div>';
-      adminUploads.forEach(function(a){h+=_renderFileRow(a);});
-    }
-
-    // Delivery Orders — separate card style because each DO has
-    // delivery date, qty, status, and an optional linked BA, none of
-    // which fit the plain "file link + date" row above.
+    // Delivery Orders keep their richer card style because each DO
+    // has delivery date, qty, status, and an optional linked BA —
+    // none of which fit the plain "file link + date" row above.
     if(o.dos&&o.dos.length){
-      h+='<div style="font-size:10px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin:.6rem 0 .35rem;">📦 Delivery Orders</div>';
       o.dos.forEach(function(d){
         var doDate=d.delivery_date?new Date(d.delivery_date).toLocaleDateString('en-MY',{day:'2-digit',month:'short',year:'numeric'}):'—';
         var doStatusColor=d.status==='Delivered'?'#15803d':d.status==='Cancelled'?'#dc2626':'var(--gold)';

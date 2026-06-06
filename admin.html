@@ -786,8 +786,37 @@ input,select,textarea,button{font-family:inherit;}
   </div>
   <div class="modal-body" id="att-preview-body" style="max-height:78vh;overflow:auto;background:#f1f5f9;border-radius:8px;"></div>
   <div class="modal-foot">
-    <a id="att-preview-open" href="#" target="_blank" rel="noopener" class="btn btn-outline">Open in new tab</a>
+    <button class="btn btn-outline" onclick="printAttachment()">Print</button>
     <button class="btn btn-outline" onclick="closeModal('modal-att-preview')">Close</button>
+  </div>
+</div></div>
+
+<!-- ADD PAYMENT ENTRY (ledger row for salesweb_order_payments) -->
+<div class="modal-overlay" id="modal-add-payment" style="z-index:265;"><div class="modal" style="max-width:480px;">
+  <div class="modal-head"><h2 style="font-size:1.05rem;">Record Payment</h2><button class="modal-close" onclick="closeModal('modal-add-payment')">&#x2715;</button></div>
+  <div class="modal-body" style="max-height:75vh;overflow-y:auto;">
+    <input type="hidden" id="pay-order-id">
+    <div style="margin-bottom:.6rem;">
+      <label style="font-size:11px;color:var(--ink3);display:block;margin-bottom:.2rem;">Date received *</label>
+      <input class="form-input" id="pay-date" type="date" style="font-size:13px;">
+    </div>
+    <div style="margin-bottom:.6rem;">
+      <label style="font-size:11px;color:var(--ink3);display:block;margin-bottom:.2rem;">Amount (RM) *</label>
+      <input class="form-input" id="pay-amount" type="number" step="0.01" min="0" placeholder="0.00" style="font-size:13px;">
+    </div>
+    <div style="margin-bottom:.6rem;">
+      <label style="font-size:11px;color:var(--ink3);display:block;margin-bottom:.2rem;">Note (optional)</label>
+      <input class="form-input" id="pay-note" type="text" placeholder="e.g. Maybank transfer ref 88123" style="font-size:13px;">
+    </div>
+    <div style="margin-bottom:.6rem;">
+      <label style="font-size:11px;color:var(--ink3);display:block;margin-bottom:.2rem;">Attachment (optional)</label>
+      <input class="form-input" id="pay-file" type="file" style="font-size:12px;">
+      <div style="font-size:10px;color:var(--ink4);margin-top:.2rem;">Payment proof, bank slip, etc. Stored alongside order documents.</div>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn btn-outline" onclick="closeModal('modal-add-payment')">Cancel</button>
+    <button class="btn btn-primary" onclick="savePaymentEntry()">Save Payment</button>
   </div>
 </div></div>
 

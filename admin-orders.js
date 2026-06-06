@@ -358,6 +358,18 @@ async function viewOrder(id){
     }
   } catch(e) { /* non-fatal — banner just won't show */ }
 
+  // Payment ledger — one row per partial payment received. amount_paid on
+  // the order row is kept in sync via the salesweb_recalc_order_amount_paid
+  // trigger, so the order's amount_paid number always matches SUM(rows).
+  var paymentRows = [];
+  try {
+    var{data:pmRows} = await sb.from('salesweb_order_payments')
+      .select('id, paid_at, amount, note, attachment_url, attachment_name, created_by')
+      .eq('order_id', id)
+      .order('paid_at', { ascending: false });
+    paymentRows = pmRows || [];
+  } catch(e) { /* ledger table may not exist yet on a stale DB; fall back to empty */ }
+
   // For credit orders, fetch per-collection events + all of this customer's
   // monthly invoices so the per-month breakdown table can render.
   var creditCollections=[];
@@ -522,25 +534,53 @@ async function viewOrder(id){
   var balanceNow = settled ? 0 : Math.max(0, totalNow - paidNow);
   var payState = settled ? 'paid' : (paidNow <= 0 ? 'unpaid' : 'partial');
 
-  // ── Discount + Coupon controls (placed ABOVE the Payment Tracking card
-  //    so admins set adjustments first, then see the updated balance) ──
+  // ── Adjustments (Set Discount / Apply Coupon) — placed ABOVE Payment
+  //    Tracking. Discounts can be entered as either an RM amount OR a
+  //    percentage (toggled via the RM/% buttons). Existing discounts and
+  //    coupons each get an inline ✕ that removes them outright. ──
   html+='<div style="background:var(--bg);border-radius:10px;padding:.8rem 1rem;margin-bottom:1rem;">';
   html+='<div style="font-size:13px;font-weight:600;margin-bottom:.5rem;">Adjustments</div>';
+
+  // Show currently-applied discount with a delete affordance.
+  if(Number(order.discount_amount||0) > 0){
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem .6rem;background:#fff;border:1px solid var(--border);border-radius:6px;margin-bottom:.4rem;font-size:12px;">';
+    html+='<span><strong>Discount applied:</strong> -RM '+fmtMYR(order.discount_amount)+'</span>';
+    html+='<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 8px;color:var(--red);border-color:var(--red);" onclick="removeDiscount(\''+id+'\')">✕ Remove</button>';
+    html+='</div>';
+  }
+  if(order.coupon_code){
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem .6rem;background:#fff;border:1px solid var(--border);border-radius:6px;margin-bottom:.4rem;font-size:12px;">';
+    html+='<span><strong>Coupon '+esc(order.coupon_code)+':</strong> -RM '+fmtMYR(order.coupon_discount)+'</span>';
+    html+='<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 8px;color:var(--red);border-color:var(--red);" onclick="removeCoupon(\''+id+'\')">✕ Remove</button>';
+    html+='</div>';
+  }
+
   html+='<div style="display:flex;gap:.5rem;flex-wrap:wrap;">';
   html+='<button class="btn btn-outline btn-sm" onclick="var el=document.getElementById(\'mo-discount-panel\');el.style.display=el.style.display===\'none\'?\'flex\':\'none\';" style="font-size:11px;">Set Discount</button>';
   html+='<button class="btn btn-outline btn-sm" onclick="var el=document.getElementById(\'mo-coupon-panel\');el.style.display=el.style.display===\'none\'?\'flex\':\'none\';" style="font-size:11px;">Apply Coupon</button>';
   html+='</div>';
+
+  // Discount panel — RM/% toggle determines how the typed value is
+  // interpreted before being saved as a flat RM amount on the order.
   html+='<div id="mo-discount-panel" style="display:none;gap:.5rem;align-items:center;margin-top:.5rem;flex-wrap:wrap;">';
-  html+='<input class="form-input" id="mo-discount" type="number" step="0.01" value="'+(order.discount_amount||0)+'" style="width:120px;font-size:12px;padding:6px 10px;" placeholder="Amount (RM)"><button class="btn btn-primary btn-sm" onclick="addDiscount(\''+id+'\')">Apply Discount</button>';
+  html+='<input class="form-input" id="mo-discount" type="number" step="0.01" min="0" value="'+(order.discount_amount||0)+'" style="width:110px;font-size:12px;padding:6px 10px;" placeholder="Value">';
+  html+='<div role="group" style="display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;">';
+  html+='<button id="mo-discount-mode-rm" type="button" class="btn btn-sm" data-mode="rm" onclick="setDiscountMode(\'rm\')" style="font-size:11px;padding:5px 10px;border:0;background:var(--ink2);color:#fff;">RM</button>';
+  html+='<button id="mo-discount-mode-pct" type="button" class="btn btn-sm" data-mode="pct" onclick="setDiscountMode(\'pct\')" style="font-size:11px;padding:5px 10px;border:0;background:transparent;color:var(--ink2);">%</button>';
   html+='</div>';
+  html+='<button class="btn btn-primary btn-sm" onclick="addDiscount(\''+id+'\','+subtotal+')">Apply Discount</button>';
+  html+='</div>';
+
   html+='<div id="mo-coupon-panel" style="display:none;gap:.5rem;align-items:center;margin-top:.5rem;flex-wrap:wrap;">';
-  html+='<input class="form-input" id="mo-coupon" type="text" value="'+(order.coupon_code||'')+'" style="width:120px;font-size:12px;padding:6px 10px;text-transform:uppercase;" placeholder="Coupon code"><button class="btn btn-primary btn-sm" onclick="applyCoupon(\''+id+'\')">Apply Coupon</button>';
+  html+='<input class="form-input" id="mo-coupon" type="text" value="'+esc(order.coupon_code||'')+'" style="width:120px;font-size:12px;padding:6px 10px;text-transform:uppercase;" placeholder="Coupon code"><button class="btn btn-primary btn-sm" onclick="applyCoupon(\''+id+'\')">Apply Coupon</button>';
   html+='</div>';
   html+='</div>';
 
   // ── Payment Tracking — one section to monitor everything about money:
   //    order amount, amount paid/received, outstanding balance, plus
-  //    a Billplz-failed banner when the last payment event was a failure. ──
+  //    a Billplz-failed banner when the last payment event was a failure.
+  //    'Amount Paid' is the SUM of the salesweb_order_payments ledger
+  //    rendered just below; admins add a row for every payment received. ──
   html+='<div style="background:var(--bg);border:1.5px solid var(--border);border-radius:10px;padding:1rem;margin-bottom:1rem;">';
   html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem;">';
   html+='<div style="font-size:13px;font-weight:700;">Payment Tracking</div>';
@@ -574,15 +614,39 @@ async function viewOrder(id){
   html+='</div>';
   html+='</div>';
 
-  // Inline editor — record a payment received from the customer.
-  html+='<div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;padding-top:.5rem;border-top:1px solid var(--border);">';
-  html+='<label style="font-size:11px;color:var(--ink3);">Record amount paid (RM)</label>';
-  html+='<input class="form-input" id="mo-amount-paid" type="number" step="0.01" min="0" value="'+paidDisplay.toFixed(2)+'" style="width:120px;font-size:12px;padding:6px 10px;">';
-  html+='<button class="btn btn-primary btn-sm" onclick="updateOrderAmountPaid(\''+id+'\','+totalNow+')">Update</button>';
+  // Payment ledger — one row per payment received. Sum of `amount` here is
+  // what feeds the "Amount Paid" tile above (kept in sync by the
+  // salesweb_recalc_order_amount_paid trigger).
+  html+='<div style="padding-top:.5rem;border-top:1px solid var(--border);">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem;">';
+  html+='<div style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.04em;">Payment Entries</div>';
+  html+='<button class="btn btn-primary btn-sm" onclick="openAddPaymentModal(\''+id+'\','+balanceNow.toFixed(2)+')" style="font-size:11px;padding:5px 10px;">+ Add Payment</button>';
   html+='</div>';
-  if(paidDisplay>0 && order.amount_paid_at){
-    html+='<div style="margin-top:.3rem;font-size:11px;color:var(--ink4);">Payment received: '+fmtDateTime(order.amount_paid_at)+'</div>';
+  if(paymentRows.length){
+    html+='<table class="data-table" style="font-size:12px;"><thead><tr>'+
+      '<th>Date</th><th style="text-align:right;">Amount</th><th>Note</th><th>Document</th><th style="text-align:right;">Action</th>'+
+      '</tr></thead><tbody>';
+    paymentRows.forEach(function(p){
+      var rid = String(p.id||'').replace(/[\\'"<>]/g,'');
+      var docCell = '—';
+      if(p.attachment_url){
+        var u = String(p.attachment_url).replace(/'/g,'%27');
+        var n = String(p.attachment_name||'document').replace(/'/g,'\\\'');
+        docCell = '<a href="#" onclick="event.preventDefault();openAttachmentPreview(\''+u+'\',\''+n+'\',\'\');" style="font-size:11px;color:var(--green);text-decoration:underline;">View</a>';
+      }
+      html+='<tr>'+
+        '<td>'+esc(fmtDate(p.paid_at))+'</td>'+
+        '<td style="text-align:right;font-weight:600;">RM '+fmtMYR(p.amount)+'</td>'+
+        '<td style="color:var(--ink3);">'+esc(p.note||'—')+'</td>'+
+        '<td>'+docCell+'</td>'+
+        '<td style="text-align:right;"><button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 8px;color:var(--red);border-color:var(--red);" onclick="deletePaymentEntry(\''+rid+'\',\''+id+'\')">✕</button></td>'+
+      '</tr>';
+    });
+    html+='</tbody></table>';
+  } else {
+    html+='<div style="font-size:12px;color:var(--ink4);padding:.4rem 0;">No payments recorded yet. Click <strong>+ Add Payment</strong> above to log the first one.</div>';
   }
+  html+='</div>';
   html+='</div>';
 
   // ── 4. Customer Remark ──
@@ -943,16 +1007,78 @@ async function confirmCancelWithRestore(orderId,oldStatus,itemCount){
 // ═══════════════════════════════════════
 //  DISCOUNT & COUPON
 // ═══════════════════════════════════════
-async function addDiscount(orderId){
-  var amt=parseFloat(document.getElementById('mo-discount').value)||0;
+// Discount mode is held in module-local state; the panel buttons flip the
+// styling and this var toggles whether the typed value is treated as a flat
+// RM amount or as a % of subtotal before being persisted (always as RM).
+var _moDiscountMode = 'rm';
+function setDiscountMode(mode){
+  _moDiscountMode = (mode === 'pct') ? 'pct' : 'rm';
+  var rmBtn  = document.getElementById('mo-discount-mode-rm');
+  var pctBtn = document.getElementById('mo-discount-mode-pct');
+  if(rmBtn && pctBtn){
+    var on  = 'background:var(--ink2);color:#fff;';
+    var off = 'background:transparent;color:var(--ink2);';
+    rmBtn.style.cssText  = 'font-size:11px;padding:5px 10px;border:0;' + (_moDiscountMode==='rm'  ? on : off);
+    pctBtn.style.cssText = 'font-size:11px;padding:5px 10px;border:0;' + (_moDiscountMode==='pct' ? on : off);
+  }
+  var inp = document.getElementById('mo-discount');
+  if(inp){ inp.placeholder = (_moDiscountMode === 'pct') ? '% off subtotal' : 'Amount (RM)'; }
+}
+
+async function addDiscount(orderId, subtotalHint){
+  var raw = parseFloat(document.getElementById('mo-discount').value) || 0;
+  if(raw < 0){ toast('Discount must be ≥ 0','error'); return; }
+  // % is converted to a flat RM amount at the point of saving so all
+  // downstream consumers (totals breakdown, customer portal, proforma email)
+  // continue to read a single source of truth from discount_amount.
+  var amt = raw;
+  if(_moDiscountMode === 'pct'){
+    if(raw > 100){ toast('Percentage must be ≤ 100','error'); return; }
+    var subtotal = Number(subtotalHint || 0);
+    if(!subtotal){
+      var{data:items}=await sb.from('salesweb_order_items').select('subtotal').eq('order_id',orderId);
+      subtotal = (items||[]).reduce(function(s,i){return s+(i.subtotal||0);},0);
+    }
+    amt = Math.round(subtotal * raw) / 100;
+  }
   await sb.from('salesweb_customer_orders').update({discount_amount:amt,updated_at:new Date().toISOString()}).eq('id',orderId);
   // Recalc total
+  var{data:items2}=await sb.from('salesweb_order_items').select('subtotal').eq('order_id',orderId);
+  var{data:order}=await sb.from('salesweb_customer_orders').select('coupon_discount').eq('id',orderId).single();
+  var sub2=(items2||[]).reduce(function(s,i){return s+(i.subtotal||0);},0);
+  var total=Math.max(0, sub2 - amt - (order && order.coupon_discount || 0));
+  await sb.from('salesweb_customer_orders').update({total:total}).eq('id',orderId);
+  toast('Discount applied: RM '+fmtMYR(amt) + (_moDiscountMode==='pct' ? ' ('+raw+'%)' : ''));
+  viewOrder(orderId);
+}
+
+// Removes whatever discount is currently on the order, even when a coupon is
+// also applied. Keeps the coupon untouched and recomputes the total.
+async function removeDiscount(orderId){
+  if(!confirm('Remove the discount from this order?')) return;
+  await sb.from('salesweb_customer_orders').update({discount_amount:0,updated_at:new Date().toISOString()}).eq('id',orderId);
   var{data:items}=await sb.from('salesweb_order_items').select('subtotal').eq('order_id',orderId);
   var{data:order}=await sb.from('salesweb_customer_orders').select('coupon_discount').eq('id',orderId).single();
   var subtotal=(items||[]).reduce(function(s,i){return s+(i.subtotal||0);},0);
-  var total=Math.max(0,subtotal-amt-(order?.coupon_discount||0));
+  var total=Math.max(0, subtotal - (order && order.coupon_discount || 0));
   await sb.from('salesweb_customer_orders').update({total:total}).eq('id',orderId);
-  toast('Discount applied: RM '+fmtMYR(amt));
+  toast('Discount removed');
+  viewOrder(orderId);
+}
+
+// Removes an applied coupon, clearing both the code and the recorded
+// coupon_discount. Recomputes total against whatever flat discount remains.
+async function removeCoupon(orderId){
+  if(!confirm('Remove the coupon from this order?')) return;
+  await sb.from('salesweb_customer_orders')
+    .update({coupon_code:null, coupon_discount:0, updated_at:new Date().toISOString()})
+    .eq('id',orderId);
+  var{data:items}=await sb.from('salesweb_order_items').select('subtotal').eq('order_id',orderId);
+  var{data:order}=await sb.from('salesweb_customer_orders').select('discount_amount').eq('id',orderId).single();
+  var subtotal=(items||[]).reduce(function(s,i){return s+(i.subtotal||0);},0);
+  var total=Math.max(0, subtotal - (order && order.discount_amount || 0));
+  await sb.from('salesweb_customer_orders').update({total:total}).eq('id',orderId);
+  toast('Coupon removed');
   viewOrder(orderId);
 }
 
@@ -1135,7 +1261,12 @@ async function loadAttachments(orderId){
 // ─── Floating attachment preview ────────────────────────────────
 // Renders the file inline inside #modal-att-preview so admins can review
 // without leaving the order modal. Images render in an <img>, PDFs in an
-// <iframe>; anything else falls back to a "Download" link.
+// <iframe>; anything else falls back to a "Download" link. The current
+// document is stashed in _attPreviewState so the modal's Print button
+// can spawn a new window pointing at the same file.
+
+var _attPreviewState = { url:'', name:'', isImg:false, isPdf:false };
+
 function openAttachmentPreview(fileUrl, fileName, fileType){
   var url=String(fileUrl||'');
   var name=String(fileName||'Document');
@@ -1143,6 +1274,7 @@ function openAttachmentPreview(fileUrl, fileName, fileType){
   var ext=((name).split('.').pop()||'').toLowerCase();
   var isImg = t.indexOf('image/')===0 || ['jpg','jpeg','png','gif','webp','heic'].indexOf(ext)>=0;
   var isPdf = t.indexOf('pdf')>=0 || ext==='pdf';
+  _attPreviewState = { url:url, name:name, isImg:isImg, isPdf:isPdf };
 
   document.getElementById('att-preview-title').textContent=name;
   var body=document.getElementById('att-preview-body');
@@ -1153,11 +1285,35 @@ function openAttachmentPreview(fileUrl, fileName, fileType){
   } else {
     body.innerHTML='<div style="padding:1.5rem;text-align:center;color:var(--ink3);font-size:13px;">'+
       'Inline preview is not supported for this file type.<br><br>'+
-      '<a href="'+esc(url)+'" target="_blank" rel="noopener" class="btn btn-primary btn-sm">Open / Download</a>'+
+      '<a href="'+esc(url)+'" download class="btn btn-primary btn-sm">Download</a>'+
     '</div>';
   }
-  document.getElementById('att-preview-open').setAttribute('href',url);
   openModal('modal-att-preview');
+}
+
+// Opens the current attachment in a new window and triggers the print
+// dialog as soon as it loads. Works for images (printed as a sized image)
+// and PDFs (browser's native PDF print). Unsupported types just open in
+// the new window for the user to print manually.
+function printAttachment(){
+  var s = _attPreviewState || {};
+  if(!s.url){ toast('Nothing to print','error'); return; }
+  var w = window.open('', '_blank');
+  if(!w){ toast('Allow pop-ups to print','error'); return; }
+  if(s.isPdf){
+    // PDFs need a same-tab navigation so the browser print can include them.
+    w.location.href = s.url;
+    setTimeout(function(){ try{ w.print(); }catch(e){} }, 800);
+  } else if(s.isImg){
+    w.document.write(
+      '<html><head><title>'+esc(s.name)+'</title>'+
+      '<style>body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;}img{max-width:100%;max-height:100vh;}</style>'+
+      '</head><body><img src="'+esc(s.url)+'" alt="'+esc(s.name)+'" onload="setTimeout(function(){window.print();},150);"></body></html>'
+    );
+    w.document.close();
+  } else {
+    w.location.href = s.url;
+  }
 }
 
 async function uploadOrderAttachment(orderId){
@@ -2236,6 +2392,18 @@ async function openProformaInvoice(orderId){
   var{data:items}=await sb.from('salesweb_order_items').select('*').eq('order_id',orderId);
   items=items||[];
 
+  // Pull bank/payment details out of salesweb_app_settings so they can be
+  // rendered as the "Payment Instructions" block at the bottom of the
+  // proforma. Same row admin writes from admin.html → Settings → Payment.
+  var pd = { bank_name:'', account_name:'', account_number:'', duitnow_qr_url:'' };
+  try{
+    var{data:pdRow}=await sb.from('salesweb_app_settings').select('value').eq('key','payment_details').maybeSingle();
+    if(pdRow && pdRow.value){
+      var parsed = typeof pdRow.value === 'string' ? JSON.parse(pdRow.value) : pdRow.value;
+      pd = Object.assign(pd, parsed||{});
+    }
+  }catch(e){ /* leave defaults — bank block just won't render */ }
+
   // Parse the billing address out of customer_remark — same logic as viewOrder.
   var billAddr='', billReg='', billIc='', billMpob='';
   if(order.customer_remark){
@@ -2291,6 +2459,20 @@ async function openProformaInvoice(orderId){
   html+='<tr style="border-top:2px solid #111;"><td style="padding:.4rem .5rem;font-weight:800;font-size:14px;">Total Due</td><td style="padding:.4rem .5rem;text-align:right;font-weight:800;font-size:14px;">RM '+fmtMYR(order.total)+'</td></tr>';
   html+='</table></div>';
 
+  // Bank / payment instructions block (only renders when at least one
+  // payment-details field is filled in admin → Settings → Payment).
+  var hasBank = pd.bank_name || pd.account_name || pd.account_number || pd.duitnow_qr_url;
+  if(hasBank){
+    html+='<div style="margin-top:1.25rem;padding:.85rem 1rem;background:#FFF8EB;border:1px solid #F2D58F;border-radius:8px;font-size:12px;color:#5C4308;line-height:1.7;">';
+    html+='<div style="font-size:11px;font-weight:700;color:#8A6314;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.4rem;">Payment Instructions</div>';
+    if(pd.bank_name)      html+='<div><strong>Bank:</strong> '+esc(pd.bank_name)+'</div>';
+    if(pd.account_name)   html+='<div><strong>Account Name:</strong> '+esc(pd.account_name)+'</div>';
+    if(pd.account_number) html+='<div><strong>Account Number:</strong> '+esc(pd.account_number)+'</div>';
+    if(pd.duitnow_qr_url) html+='<div style="margin-top:.4rem;"><img src="'+esc(pd.duitnow_qr_url)+'" alt="DuitNow QR" style="max-width:140px;border:1px solid #E2C76E;border-radius:6px;background:#fff;padding:4px;"></div>';
+    html+='<div style="margin-top:.5rem;padding-top:.4rem;border-top:1px dashed #E2C76E;font-size:11px;">Please use <strong>Order '+esc(orderNum)+'</strong> as your payment reference.</div>';
+    html+='</div>';
+  }
+
   html+='<div style="font-size:11px;color:#555;margin-top:1.5rem;border-top:1px solid #ddd;padding-top:.5rem;">This proforma invoice is for quotation only. It does not constitute a tax invoice and no payment has been received. A formal tax invoice will follow once payment is confirmed.</div>';
   html+='</div>'; // /proforma-doc
 
@@ -2333,4 +2515,95 @@ async function sendProformaInvoice(orderId, defaultEmail){
   }catch(e){
     toast('Send failed: '+(e.message||'network error'),'error');
   }
+}
+
+// ═══════════════════════════════════════
+//  PAYMENT LEDGER (multi-row amount_paid)
+// ═══════════════════════════════════════
+// Each row in salesweb_order_payments is one payment received. The
+// trigger on that table keeps salesweb_customer_orders.amount_paid in
+// sync as SUM(amount), so every other reader of that column (status
+// badges, customer portal, send-order-email, etc.) sees a live value
+// without needing any code changes.
+
+function openAddPaymentModal(orderId, outstandingHint){
+  document.getElementById('pay-order-id').value = orderId;
+  // Default the date to today and pre-fill the amount with the outstanding
+  // balance so single-payment-in-full is one click.
+  var today = new Date().toISOString().slice(0,10);
+  document.getElementById('pay-date').value = today;
+  var amt = Number(outstandingHint || 0);
+  document.getElementById('pay-amount').value = amt > 0 ? amt.toFixed(2) : '';
+  document.getElementById('pay-note').value = '';
+  document.getElementById('pay-file').value = '';
+  openModal('modal-add-payment');
+}
+
+async function savePaymentEntry(){
+  var orderId = document.getElementById('pay-order-id').value;
+  var dateStr = document.getElementById('pay-date').value;
+  var amtRaw  = document.getElementById('pay-amount').value;
+  var noteRaw = document.getElementById('pay-note').value;
+  var fileInp = document.getElementById('pay-file');
+
+  if(!orderId){ toast('Missing order','error'); return; }
+  var amt = parseFloat(amtRaw);
+  if(!(amt > 0)){ toast('Amount must be greater than 0','error'); return; }
+  // Build a stable ISO timestamp from the picked date — keeps the current
+  // time-of-day so back-dated entries still order naturally.
+  var paidAt = dateStr
+    ? new Date(dateStr + 'T' + new Date().toTimeString().slice(0,8)).toISOString()
+    : new Date().toISOString();
+
+  // Optional attachment upload — reuses the existing order-attachments
+  // bucket. The file is saved with a payment_<orderid>_<ts>.<ext> name
+  // so it's distinguishable from regular order document uploads.
+  var attUrl = null, attName = null;
+  if(fileInp && fileInp.files && fileInp.files[0]){
+    var f = fileInp.files[0];
+    var ext = (f.name.split('.').pop()||'bin').toLowerCase();
+    var key = 'payment_' + orderId.substring(0,8) + '_' + Date.now() + '.' + ext;
+    var{error:upErr} = await sb.storage.from('order-attachments').upload(key, f, { contentType: f.type, upsert: true });
+    if(upErr){ toast('Upload failed: '+upErr.message,'error'); return; }
+    var{data:urlData} = sb.storage.from('order-attachments').getPublicUrl(key);
+    attUrl = urlData && urlData.publicUrl || null;
+    attName = f.name;
+  }
+
+  var session = await sb.auth.getSession();
+  var user = session && session.data && session.data.session && session.data.session.user && session.data.session.user.email || 'admin';
+
+  var{error} = await sb.from('salesweb_order_payments').insert([{
+    order_id: orderId,
+    paid_at:  paidAt,
+    amount:   amt,
+    note:     noteRaw ? String(noteRaw).trim() : null,
+    attachment_url: attUrl,
+    attachment_name: attName,
+    created_by: user,
+  }]);
+  if(error){ toast('Save failed: '+error.message,'error'); return; }
+
+  // Timeline entry so admins reviewing the order history see the payment
+  // event in context with status changes.
+  try{
+    await sb.from('salesweb_order_timeline').insert([{
+      order_id: orderId,
+      status: 'Payment Recorded',
+      note: 'RM '+fmtMYR(amt)+' received'+(noteRaw?(' — '+noteRaw):'')+(attUrl?' (with attachment)':''),
+      changed_by: user,
+    }]);
+  }catch(e){ /* non-fatal */ }
+
+  closeModal('modal-add-payment');
+  toast('Payment recorded: RM '+fmtMYR(amt));
+  viewOrder(orderId);
+}
+
+async function deletePaymentEntry(paymentId, orderId){
+  if(!confirm('Delete this payment entry? The order’s Amount Paid total will recalculate automatically.')) return;
+  var{error} = await sb.from('salesweb_order_payments').delete().eq('id', paymentId);
+  if(error){ toast('Delete failed: '+error.message,'error'); return; }
+  toast('Payment entry deleted');
+  viewOrder(orderId);
 }

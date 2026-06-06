@@ -74,7 +74,14 @@ function fmtDate(d: string | null | undefined): string {
   catch { return '—' }
 }
 
-function buildProformaHtml(order: OrderRow, cfg: NotificationConfig, items: Array<{product_name:string;quantity:number;unit_price:number;subtotal:number}>): string {
+interface PaymentDetails {
+  bank_name?: string
+  account_name?: string
+  account_number?: string
+  duitnow_qr_url?: string
+}
+
+function buildProformaHtml(order: OrderRow, cfg: NotificationConfig, items: Array<{product_name:string;quantity:number;unit_price:number;subtotal:number}>, pd: PaymentDetails = {}): string {
   const orderNum = order.order_number || (order.id || '').substring(0, 8).toUpperCase()
   const fromName = cfg.from_name || 'MJM Nursery'
   const total = Number(order.total) || 0
@@ -154,6 +161,16 @@ function buildProformaHtml(order: OrderRow, cfg: NotificationConfig, items: Arra
         ${order.coupon_code ? `<tr><td style="padding:4px 10px;text-align:right;font-size:13px;color:#B91C1C;">Coupon (${esc(order.coupon_code)})</td><td style="padding:4px 10px;text-align:right;font-size:13px;color:#B91C1C;">-${fmtRM(order.coupon_discount || 0)}</td></tr>` : ''}
         <tr><td style="padding:8px 10px;text-align:right;font-size:15px;font-weight:800;border-top:2px solid #2D4A30;">Total Due</td><td style="padding:8px 10px;text-align:right;font-size:15px;font-weight:800;border-top:2px solid #2D4A30;color:#2D4A30;">${fmtRM(total)}</td></tr>
       </table>
+
+      ${(pd.bank_name || pd.account_name || pd.account_number || pd.duitnow_qr_url) ? `
+      <div style="margin:18px 0 0;padding:14px 16px;background:#FFF8EB;border:1px solid #F2D58F;border-radius:8px;font-size:13px;color:#5C4308;line-height:1.7;">
+        <div style="font-size:11px;font-weight:700;color:#8A6314;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Payment Instructions</div>
+        ${pd.bank_name      ? `<div><strong>Bank:</strong> ${esc(pd.bank_name)}</div>` : ''}
+        ${pd.account_name   ? `<div><strong>Account Name:</strong> ${esc(pd.account_name)}</div>` : ''}
+        ${pd.account_number ? `<div><strong>Account Number:</strong> ${esc(pd.account_number)}</div>` : ''}
+        ${pd.duitnow_qr_url ? `<div style="margin-top:8px;"><img src="${esc(pd.duitnow_qr_url)}" alt="DuitNow QR" style="max-width:160px;border:1px solid #E2C76E;border-radius:6px;background:#fff;padding:4px;"></div>` : ''}
+        <div style="margin-top:8px;padding-top:8px;border-top:1px dashed #E2C76E;font-size:12px;">Please use <strong>Order #${esc(orderNum)}</strong> as your payment reference, then upload your payment proof from your customer portal.</div>
+      </div>` : ''}
 
       <p style="margin:18px 0 0;font-size:12px;line-height:1.6;color:#4A6B4C;">If you have any questions, reply to this email and we'll get back to you.</p>
       <p style="margin:6px 0 0;font-size:12px;line-height:1.6;color:#4A6B4C;">— The ${esc(fromName)} Team</p>
@@ -290,6 +307,24 @@ serve(async (req) => {
       } catch (_e) { /* keep defaults */ }
     }
 
+    // Bank / payment instructions block — only used by the proforma
+    // template. Stored in the same salesweb_app_settings table under
+    // key='payment_details', mirroring what the customer portal reads.
+    let paymentDetails: PaymentDetails = {}
+    if (emailType === 'proforma') {
+      const { data: pdRow } = await sb
+        .from('salesweb_app_settings')
+        .select('value')
+        .eq('key', 'payment_details')
+        .maybeSingle()
+      if (pdRow && pdRow.value) {
+        try {
+          const parsed = typeof pdRow.value === 'string' ? JSON.parse(pdRow.value) : pdRow.value
+          paymentDetails = (parsed || {}) as PaymentDetails
+        } catch (_e) { /* leave empty — block won't render */ }
+      }
+    }
+
     const fromEmail = cfg.from_email || 'orders@mjmnursery.com'
     const fromName  = cfg.from_name  || 'MJM Nursery'
     const orderNum  = order.order_number || order.id.substring(0, 8).toUpperCase()
@@ -298,7 +333,7 @@ serve(async (req) => {
       ? `Proforma invoice — Order #${orderNum}`
       : `Payment confirmed — Order #${orderNum}`
     const htmlBody = emailType === 'proforma'
-      ? buildProformaHtml(order as OrderRow, cfg, orderItems)
+      ? buildProformaHtml(order as OrderRow, cfg, orderItems, paymentDetails)
       : buildEmailHtml(order as OrderRow, cfg, orderItems)
 
     const payload = {

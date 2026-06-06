@@ -2042,8 +2042,17 @@
 .p-be-cal-cell.full{background:#fef3c7;color:#92400e;}
 .p-be-cal-cell.today{box-shadow:inset 0 0 0 2px #2563eb;}
 .p-be-cal-cell.my-booking{box-shadow:inset 0 0 0 2px var(--green-mid);}
-.p-be-cal-cell.selected{background:var(--green-dark);color:#fff;border-color:var(--green-dark);box-shadow:none;}
-.p-be-cal-cell.selected::after{content:'✓';position:absolute;top:3px;right:5px;font-size:10px;font-weight:900;color:#fff;line-height:1;text-shadow:0 1px 2px rgba(0,0,0,.3);}
+/* Selected wins over my-booking. Background, text colour, and a
+   strong outer ring all stack so the cell is immediately
+   identifiable as the one the customer has chosen. */
+.p-be-cal-cell.selected,
+.p-be-cal-cell.my-booking.selected{background:var(--green-dark) !important;color:#fff !important;border-color:var(--green-dark) !important;box-shadow:0 0 0 3px rgba(45,74,48,.25) !important;}
+.p-be-cal-cell.selected > span:first-child{color:#fff;font-weight:800;font-size:13px;}
+.p-be-cal-cell.selected .booked-label,
+.p-be-cal-cell.selected .booked-time,
+.p-be-cal-cell.selected .tag{display:none;}
+.p-be-cal-cell .sel-label{display:none;}
+.p-be-cal-cell.selected .sel-label{display:block;font-size:9px;font-weight:900;letter-spacing:.10em;color:#fff;line-height:1.1;margin-top:2px;text-transform:uppercase;}
 .p-be-cal-cell .tag{font-size:7px;font-weight:800;line-height:1;margin-top:1px;letter-spacing:.04em;text-transform:uppercase;opacity:.85;}
 .p-be-cal-cell.my-booking{background:rgba(62,107,66,.10);border-color:var(--green-mid);border-width:2px;box-shadow:none;}
 .p-be-cal-cell.my-booking:hover:not(.selected){background:rgba(62,107,66,.18);}
@@ -3966,9 +3975,15 @@ async function pBeRenderCalendar(){
       }
       var safeDs=ds.replace(/[\\'"<>]/g,'');
       var click = clickable ? ' onclick="pBeSelectDate(\''+safeDs+'\')"' : '';
+      // The .selected ::before would have been a cleaner spot for
+      // the "SELECTED" word, but stacking pseudo-elements on a
+      // flex parent gets squirrelly across browsers. Render it as
+      // a real <span> always-present and let the CSS show it only
+      // when the cell carries the .selected class.
       html += '<div class="'+classes.join(' ')+'"'+click+'>'+
                 '<span>'+cd.getDate()+'</span>'+
                 lineTwo+
+                '<span class="sel-label">Selected</span>'+
               '</div>';
       cd.setDate(cd.getDate()+1);
     }
@@ -4602,25 +4617,40 @@ function openOrderDetail(ordNum){
       // Collection step has three possible states (in order of
       // priority):
       //   1. A DO marked Delivered → collected.
-      //   2. A non-cancelled booking exists in
-      //      shared_collection_bookings → "Collection Booked" with
-      //      the actual booked date/time pulled from the row.
+      //   2. One or more non-cancelled bookings exist in
+      //      shared_collection_bookings → one "Collection Booked"
+      //      step per booking, oldest first, with the actual
+      //      booked date/time/qty pulled from the row. The split-
+      //      collection case (two pickups for one order) shows
+      //      both steps so the customer can see their full plan.
       //   3. Paid but no booking yet → "Book Your Collection" CTA.
-      var firstBooking = (o.bookings && o.bookings.length) ? o.bookings[0] : null;
+      var bookingsForTimeline = (o.bookings||[]).slice().sort(function(a,b){
+        return String(a.booking_date||'').localeCompare(String(b.booking_date||''));
+      });
+      function _fmtBookingNote(b, withQty){
+        var d = b.booking_date ? new Date(b.booking_date+'T00:00:00').toLocaleDateString('en-MY',{weekday:'short',day:'2-digit',month:'short',year:'numeric'}) : '—';
+        var t = (b.start_time||'').substring(0,5);
+        var base = d + (t?' · '+t:'');
+        return withQty ? (base + ' · '+(b.collection_qty||0)+' seedlings') : base;
+      }
       if(stampCollected){
-        if(firstBooking){
-          var bDate=new Date(firstBooking.booking_date+'T00:00:00').toLocaleDateString('en-MY',{day:'2-digit',month:'short',year:'numeric'});
-          var bTime=(firstBooking.start_time||'').substring(0,5);
-          steps.push({label:'Collection Booked',note:bDate+(bTime?' · '+bTime:''),done:true});
+        if(bookingsForTimeline.length){
+          bookingsForTimeline.forEach(function(b){
+            steps.push({label:'Collection Booked',note:_fmtBookingNote(b,true),done:true});
+          });
         } else {
           steps.push({label:'Collection Booked',note:'Collection slot confirmed',done:true});
         }
         var cDate=new Date(stampCollected).toLocaleDateString('en-MY',{day:'2-digit',month:'short',year:'numeric'});
         steps.push({label:'Collected Seedling on '+cDate,note:'',date:stampCollected,done:true,files:collectedFiles});
-      } else if(firstBooking){
-        var bDate2=new Date(firstBooking.booking_date+'T00:00:00').toLocaleDateString('en-MY',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
-        var bTime2=(firstBooking.start_time||'').substring(0,5);
-        steps.push({label:'Collection Booked',note:bDate2+(bTime2?' · '+bTime2:'')+' · '+(firstBooking.collection_qty||0)+' seedlings',done:true,isCurrent:true});
+      } else if(bookingsForTimeline.length){
+        // Mark only the most recent (last after sort = furthest future)
+        // as the current step; earlier ones are completed slots already
+        // booked, so they show as plain done steps in the curated flow.
+        bookingsForTimeline.forEach(function(b, i){
+          var isLast = (i === bookingsForTimeline.length-1);
+          steps.push({label:'Collection Booked',note:_fmtBookingNote(b,true),done:true,isCurrent:isLast});
+        });
       } else {
         steps.push({label:'Book Your Collection',note:'Pick a collection time at the nursery',done:false,action:'book'});
       }

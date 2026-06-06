@@ -1876,7 +1876,7 @@
           </div>
         </div>
         <div style="margin-bottom:.8rem;">
-          <input type="text" id="pp-order-search" name="mjm-portal-search" autocomplete="off" inputmode="search" data-form-type="other" data-1p-ignore data-lpignore="true" placeholder="Search by order #, billing name, item..." oninput="pFilterOrders()" style="width:100%;padding:8px 12px;border:1.5px solid var(--green-pale);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;background:var(--cream);color:var(--text-dark);transition:border-color .15s;" onfocus="this.style.borderColor='var(--green-mid)'" onblur="this.style.borderColor='var(--green-pale)'">
+          <input type="text" id="pp-order-search" name="mjm-portal-search" autocomplete="off" readonly inputmode="search" data-form-type="other" data-1p-ignore data-lpignore="true" placeholder="Search by order #, billing name, item..." oninput="pFilterOrders()" style="width:100%;padding:8px 12px;border:1.5px solid var(--green-pale);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;background:var(--cream);color:var(--text-dark);transition:border-color .15s;" onfocus="this.removeAttribute('readonly');this.style.borderColor='var(--green-mid)'" onblur="this.style.borderColor='var(--green-pale)'">
         </div>
         <div id="pp-orders"></div>
         <div id="pp-history" style="display:none;"></div>

@@ -2423,7 +2423,7 @@ async function openProformaInvoice(orderId){
   var html='';
   html+='<div id="proforma-doc" style="background:#fff;padding:1.5rem;border-radius:8px;font-family:system-ui,sans-serif;color:#111;">';
   html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;border-bottom:2px solid #111;padding-bottom:.6rem;">';
-  html+='<div><div style="font-size:18px;font-weight:800;">MJM Nursery</div><div style="font-size:11px;color:#555;">Niah Land District, Miri, 98000, Sarawak</div><div style="font-size:11px;color:#555;">orders@mjmnursery.com</div></div>';
+  html+='<div><div style="font-size:18px;font-weight:800;">MJM Nursery</div><div style="font-size:12px;color:#333;font-weight:600;">MEGA JUTAMAS SDN BHD</div><div style="font-size:11px;color:#555;">Lot 1180, Bangunan Bei, Krokop 2, Miri, Sarawak, Malaysia</div></div>';
   html+='<div style="text-align:right;"><div style="font-size:20px;font-weight:800;letter-spacing:.04em;">PROFORMA INVOICE</div><div style="font-size:12px;color:#555;margin-top:.2rem;">Order '+esc(orderNum)+'</div><div style="font-size:11px;color:#555;">Date: '+esc(fmtDate(order.created_at))+'</div></div>';
   html+='</div>';
 

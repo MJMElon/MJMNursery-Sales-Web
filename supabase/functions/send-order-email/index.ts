@@ -112,12 +112,14 @@ function buildProformaHtml(order: OrderRow, cfg: NotificationConfig, items: Arra
   return `<!DOCTYPE html>
 <html><body style="margin:0;padding:0;background:#F7F3EC;font-family:'Helvetica Neue',Arial,sans-serif;color:#1A2E1B;">
   <div style="max-width:640px;margin:24px auto;background:#FFF;border:1px solid #C8DFC9;border-radius:14px;overflow:hidden;">
-    <div style="background:#2D4A30;padding:22px 28px;color:#FFF;display:flex;justify-content:space-between;align-items:flex-start;">
+    <div style="background:#2D4A30;padding:22px 28px;color:#FFF;display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
       <div>
-        <div style="font-size:11px;letter-spacing:.18em;text-transform:uppercase;opacity:.7;">${esc(fromName)}</div>
-        <div style="font-family:'Cormorant Garamond',Georgia,serif;font-size:22px;margin-top:6px;">Proforma Invoice</div>
+        <div style="font-family:'Cormorant Garamond',Georgia,serif;font-size:22px;font-weight:700;">MJM Nursery</div>
+        <div style="font-size:12px;font-weight:700;letter-spacing:.04em;margin-top:4px;opacity:.95;">MEGA JUTAMAS SDN BHD</div>
+        <div style="font-size:11px;line-height:1.5;margin-top:2px;opacity:.8;">Lot 1180, Bangunan Bei, Krokop 2,<br>Miri, Sarawak, Malaysia</div>
       </div>
-      <div style="text-align:right;font-size:11px;line-height:1.6;opacity:.85;">
+      <div style="text-align:right;font-size:11px;line-height:1.6;opacity:.9;">
+        <div style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px;">Proforma Invoice</div>
         <div>Order #${esc(orderNum)}</div>
         <div>${esc(fmtDate(order.created_at || null))}</div>
       </div>

@@ -249,12 +249,12 @@ async function loadOrders(){
   var revenue=all.filter(function(o){return o.status!=='Cancelled';}).reduce(function(s,o){return s+(o.total||0);},0);
   var creditOutstanding=all.filter(function(o){return o.payment_terms==='credit'&&!o.credit_billed_at&&o.status!=='Cancelled';}).reduce(function(s,o){return s+(o.total||0);},0);
   document.getElementById('order-stats').innerHTML=
-    '<div class="stat-box"><div class="stat-label">Total Orders</div><div class="stat-val">'+all.length+'</div></div>'+
-    '<div class="stat-box"><div class="stat-label">Pending Payment</div><div class="stat-val" style="color:var(--amber)">'+pending+'</div></div>'+
-    '<div class="stat-box"><div class="stat-label">Paid</div><div class="stat-val" style="color:var(--blue)">'+paid+'</div></div>'+
-    '<div class="stat-box"><div class="stat-label">Completed</div><div class="stat-val green">'+completed+'</div></div>'+
-    '<div class="stat-box"><div class="stat-label">Credit Outstanding</div><div class="stat-val" style="color:#a16207;">RM '+fmtMYR(creditOutstanding)+'</div></div>'+
-    '<div class="stat-box"><div class="stat-label">Revenue</div><div class="stat-val">RM '+fmtMYR(revenue)+'</div></div>';
+    '<div class="stat-box stat-orders" title="All orders"><div class="stat-icon">📦</div><div class="stat-body"><div class="stat-label">Total Orders</div><div class="stat-val">'+all.length+'</div></div></div>'+
+    '<div class="stat-box stat-pending" title="Pending Payment"><div class="stat-icon">⏳</div><div class="stat-body"><div class="stat-label">Pending Payment</div><div class="stat-val" style="color:var(--amber);">'+pending+'</div></div></div>'+
+    '<div class="stat-box stat-paid" title="Paid"><div class="stat-icon">💵</div><div class="stat-body"><div class="stat-label">Paid</div><div class="stat-val" style="color:var(--blue);">'+paid+'</div></div></div>'+
+    '<div class="stat-box stat-completed" title="Completed"><div class="stat-icon">✅</div><div class="stat-body"><div class="stat-label">Completed</div><div class="stat-val green">'+completed+'</div></div></div>'+
+    '<div class="stat-box stat-credit" title="Credit Outstanding"><div class="stat-icon">💳</div><div class="stat-body"><div class="stat-label">Credit Outstanding</div><div class="stat-val" style="color:#a16207;">RM '+fmtMYR(creditOutstanding)+'</div></div></div>'+
+    '<div class="stat-box stat-revenue" title="Revenue"><div class="stat-icon">📈</div><div class="stat-body"><div class="stat-label">Revenue</div><div class="stat-val" style="color:#047857;">RM '+fmtMYR(revenue)+'</div></div></div>';
 
   if(!orders.length){document.getElementById('orders-table').innerHTML='<div class="loading">No orders found</div>';clearOrderSelection();return;}
   var html='<table class="data-table"><thead><tr><th style="width:34px;text-align:center;"><input type="checkbox" id="order-select-all" onclick="toggleSelectAllOrders(this)" title="Select all"></th><th>Order</th><th>Date</th><th>Customer</th><th>Terms</th><th>Status</th><th>Total</th><th>Action</th></tr></thead><tbody>';

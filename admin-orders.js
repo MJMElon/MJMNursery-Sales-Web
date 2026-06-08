@@ -1933,7 +1933,6 @@ async function openNewOrder(){
   document.getElementById('no-cust-addr').value='Self Collection — MJM Nursery Office, Niah Land District, Miri, 98000, Sarawak';
   document.getElementById('no-status').value='Pending Payment';
   document.getElementById('no-terms').value='cash';
-  var _noCh=document.getElementById('no-channel'); if(_noCh) _noCh.value='admin_panel';
   document.getElementById('no-internal-note').value='';
   document.getElementById('no-discount').value='0';
   resetNewOrderBilling();
@@ -2222,8 +2221,10 @@ async function submitNewOrder(){
   var custId=_newOrderSelectedCustomerId||null;
   var status=document.getElementById('no-status').value;
   var terms=document.getElementById('no-terms').value;
-  var channelEl=document.getElementById('no-channel');
-  var channel=(channelEl && channelEl.value) || 'admin_panel';
+  // Orders entered through the admin portal are always tagged Admin Panel.
+  // Google / WhatsApp tagging happens on the customer-facing storefront
+  // via URL utm_source / referrer detection at session start.
+  var channel='admin_panel';
   var internalNote=document.getElementById('no-internal-note').value.trim();
   var discount=parseFloat(document.getElementById('no-discount').value)||0;
 

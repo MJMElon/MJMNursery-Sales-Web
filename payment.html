@@ -1073,7 +1073,9 @@ async function placeOrder(){
       customer_email:email,
       status:'Pending Payment',
       total:finalTotal,
-      channel:'online_store',
+      // Sticky channel from the landing URL (utm_source / referrer) — see
+      // detection block at the end of index.html. Defaults to online_store.
+      channel:(function(){ try{ return sessionStorage.getItem('mjm_channel')||'online_store'; }catch(e){ return 'online_store'; } })(),
       shipping_address:'Self Collection — MJM Nursery Office, Niah Land District, Miri, 98000, Sarawak',
       customer_remark:remarkParts.join(' | '),
       billing_name:billingName,

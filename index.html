@@ -2031,9 +2031,32 @@
 .p-be-cal-nav:hover{background:var(--green-dark);color:#fff;border-color:var(--green-dark);}
 .p-be-cal-nav:disabled{opacity:.35;cursor:not-allowed;}
 .p-be-cal-label{font-size:13px;font-weight:700;color:var(--text-dark);}
-.p-be-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
+/* minmax(0,1fr) is the fix for grid overflow on narrow viewports —
+   the default 1fr is effectively minmax(auto,1fr), and "auto" =
+   min-content, which is the WIDEST content in the cell. On mobile
+   that pushed the right two columns off-screen. */
+.p-be-cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;width:100%;}
 .p-be-cal-dow{font-size:9px;font-weight:700;text-align:center;color:var(--text-light);padding:4px 0;text-transform:uppercase;letter-spacing:.05em;}
-.p-be-cal-cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;flex-direction:column;font-size:11px;font-weight:600;border-radius:7px;background:#fff;border:1px solid var(--green-pale);cursor:pointer;transition:all .12s;position:relative;color:var(--text-dark);user-select:none;}
+.p-be-cal-cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;flex-direction:column;font-size:11px;font-weight:600;border-radius:7px;background:#fff;border:1px solid var(--green-pale);cursor:pointer;transition:all .12s;position:relative;color:var(--text-dark);user-select:none;min-width:0;overflow:hidden;padding:2px 1px;}
+/* Phone breakpoint — tighten paddings and fonts so all 7 cells
+   stay onscreen even on a 360px viewport. */
+@media (max-width:480px){
+  /* Calendar takes most of the modal width on phones, so claw
+     back some of the modal-level padding. The cells gain about
+     20px of room each at 390px wide. */
+  #p-booking-edit-modal.portal-modal-overlay{padding:.6rem;}
+  #p-booking-edit-modal .portal-modal{padding:1rem;border-radius:14px;}
+  .p-be-cal-grid{gap:2px;}
+  .p-be-cal-cell{font-size:10px;border-radius:6px;}
+  .p-be-cal-cell .booked-label,
+  .p-be-cal-cell .sel-label{font-size:7px;letter-spacing:.06em;margin-top:1px;}
+  .p-be-cal-cell .booked-time{font-size:8px;margin-top:0;}
+  .p-be-cal-cell .tag{font-size:6.5px;}
+  .p-be-cal-dow{font-size:8px;padding:3px 0;}
+  .p-be-cal-cell.selected::after{font-size:8px;top:2px;right:3px;}
+  .p-be-cal-legend{font-size:9px;}
+  .p-be-selected-pill{font-size:11px;padding:.35rem .55rem;}
+}
 .p-be-cal-cell:hover:not(.disabled):not(.selected){background:rgba(62,107,66,.08);border-color:var(--green-mid);}
 .p-be-cal-cell.other-month{visibility:hidden;}
 .p-be-cal-cell.disabled{cursor:not-allowed;}

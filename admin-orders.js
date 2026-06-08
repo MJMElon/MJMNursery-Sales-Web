@@ -268,6 +268,19 @@ async function loadOrders(){
     '<div class="stat-box stat-credit" title="Credit Outstanding"><div class="stat-icon">💳</div><div class="stat-body"><div class="stat-label">Credit Outstanding</div><div class="stat-val" style="color:#a16207;">RM '+fmtMYR(creditOutstanding)+'</div></div></div>'+
     '<div class="stat-box stat-revenue" title="Revenue"><div class="stat-icon">📈</div><div class="stat-body"><div class="stat-label">Revenue</div><div class="stat-val" style="color:#047857;">RM '+fmtMYR(revenue)+'</div></div></div>';
 
+  // Count indicator above the table — shows how many orders match the
+  // current search/filter and the total in the DB. Filter button badge
+  // already carries the active-filter count; this surfaces the match count.
+  var countEl = document.getElementById('orders-count');
+  if(countEl){
+    var totalAll = (data||[]).length;
+    var matched  = orders.length;
+    var isFiltered = !!q || !!status || (countActiveOrderFilters && countActiveOrderFilters() > 0);
+    countEl.innerHTML = isFiltered
+      ? '<span><strong style="color:var(--ink);">'+matched.toLocaleString()+'</strong> order'+(matched===1?'':'s')+' match — out of '+totalAll.toLocaleString()+' total</span>'
+      : '<span><strong style="color:var(--ink);">'+matched.toLocaleString()+'</strong> order'+(matched===1?'':'s')+'</span>';
+  }
+
   if(!orders.length){document.getElementById('orders-table').innerHTML='<div class="loading">No orders found</div>';clearOrderSelection();return;}
   var html='<table class="data-table"><thead><tr><th style="width:34px;text-align:center;"><input type="checkbox" id="order-select-all" onclick="toggleSelectAllOrders(this)" title="Select all"></th><th>Order</th><th>Date</th><th>Customer</th><th>Terms</th><th>Status</th><th>Total</th><th>Action</th></tr></thead><tbody>';
   orders.forEach(function(o){

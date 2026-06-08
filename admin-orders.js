@@ -29,6 +29,17 @@ var ORDER_STATUSES = ['Pending Payment','Partially Paid','Paid','Ready for Colle
 function fmtMYR(n){ return (Number(n)||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 // Date + time formatter for timestamps (e.g. payment received).
 function fmtDateTime(d){ if(!d) return '—'; try{ return new Date(d).toLocaleString('en-MY',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}); }catch(e){ return '—'; } }
+// Channel icon shown next to the order number so admins can spot the source
+// (online store / admin entry / Google enquiry / WhatsApp enquiry) at a glance.
+function channelIcon(ch){
+  switch(ch){
+    case 'online_store': return '<span class="ch-ico ch-online" title="Online Store">🏪</span>';
+    case 'admin_panel':  return '<span class="ch-ico ch-admin" title="Admin Panel">🛠️</span>';
+    case 'google':       return '<span class="ch-ico ch-google" title="Google">G</span>';
+    case 'whatsapp':     return '<span class="ch-ico ch-whatsapp" title="WhatsApp">💬</span>';
+    default:             return '<span class="ch-ico ch-unknown" title="Unknown">·</span>';
+  }
+}
 // Statuses that mean the order is fully settled — no outstanding balance is
 // shown regardless of the recorded amount_paid (marking an order Paid means
 // the amount has been settled).
@@ -294,7 +305,7 @@ async function loadOrders(){
     }
     html+='<tr onclick="viewOrder(\''+idJs+'\')" style="cursor:pointer;">'+
       '<td style="text-align:center;" onclick="event.stopPropagation();"><input type="checkbox" class="order-select" value="'+idJs+'" onclick="event.stopPropagation();onOrderSelectChange();"></td>'+
-      '<td style="font-weight:600;">#'+esc(shortId)+'</td>'+
+      '<td style="font-weight:600;white-space:nowrap;">'+channelIcon(o.channel)+'#'+esc(shortId)+'</td>'+
       '<td style="font-size:12px;">'+fmtDate(o.created_at)+'</td>'+
       '<td>'+custNameCell+billingLine+'</td>'+
       '<td>'+termsBadge+'</td>'+
@@ -1909,6 +1920,7 @@ async function openNewOrder(){
   document.getElementById('no-cust-addr').value='Self Collection — MJM Nursery Office, Niah Land District, Miri, 98000, Sarawak';
   document.getElementById('no-status').value='Pending Payment';
   document.getElementById('no-terms').value='cash';
+  var _noCh=document.getElementById('no-channel'); if(_noCh) _noCh.value='admin_panel';
   document.getElementById('no-internal-note').value='';
   document.getElementById('no-discount').value='0';
   resetNewOrderBilling();
@@ -2197,6 +2209,8 @@ async function submitNewOrder(){
   var custId=_newOrderSelectedCustomerId||null;
   var status=document.getElementById('no-status').value;
   var terms=document.getElementById('no-terms').value;
+  var channelEl=document.getElementById('no-channel');
+  var channel=(channelEl && channelEl.value) || 'admin_panel';
   var internalNote=document.getElementById('no-internal-note').value.trim();
   var discount=parseFloat(document.getElementById('no-discount').value)||0;
 
@@ -2321,7 +2335,7 @@ async function submitNewOrder(){
       customer_email:email||null,
       status:status,
       total:total,
-      channel:'admin_panel',
+      channel:channel,
       shipping_address:addr||null,
       customer_remark:remarkParts.join(' | '),
       billing_name:billingName||name,

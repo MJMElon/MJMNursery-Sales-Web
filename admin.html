@@ -91,6 +91,14 @@ input,select,textarea,button{font-family:inherit;}
 .stat-completed .stat-icon{background:#dcfce7;color:#15803d;}
 .stat-credit .stat-icon{background:#ffedd5;color:#9a3412;}
 .stat-revenue .stat-icon{background:#d1fae5;color:#047857;}
+
+/* Order channel icon badge — sits next to the order number in the list */
+.ch-ico{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;font-size:12px;line-height:1;margin-right:.4rem;flex-shrink:0;vertical-align:middle;}
+.ch-online{background:#dcfce7;color:#15803d;}
+.ch-admin{background:#ede9fe;color:#5b21b6;}
+.ch-google{background:#fff;border:1.5px solid #e5e7eb;color:#4285F4;font-weight:900;font-family:Arial,sans-serif;}
+.ch-whatsapp{background:#25D366;color:#fff;}
+.ch-unknown{background:#f3f4f6;color:#94a3b8;}
 .data-table{width:100%;border-collapse:collapse;font-size:13px;}
 .data-table th{background:var(--bg);padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border);}
 .data-table td{padding:10px 12px;border-bottom:1px solid var(--border);font-weight:500;}
@@ -417,16 +425,12 @@ input,select,textarea,button{font-family:inherit;}
           <div class="fd-title">Channel</div>
           <label class="fd-check"><input type="checkbox" class="fd-channel" value="online_store"> Online Store</label>
           <label class="fd-check"><input type="checkbox" class="fd-channel" value="admin_panel"> Admin Panel</label>
-          <label class="fd-check"><input type="checkbox" class="fd-channel" value="shopping_app"> Shopping App <span class="fd-note">†</span></label>
-          <label class="fd-check"><input type="checkbox" class="fd-channel" value="google"> Google <span class="fd-note">†</span></label>
-          <label class="fd-check"><input type="checkbox" class="fd-channel" value="whatsapp"> WhatsApp <span class="fd-note">†</span></label>
+          <label class="fd-check"><input type="checkbox" class="fd-channel" value="google"> Google</label>
+          <label class="fd-check"><input type="checkbox" class="fd-channel" value="whatsapp"> WhatsApp</label>
         </div>
         <div class="fd-section">
           <div class="fd-title">Product</div>
           <input type="text" id="fd-product" class="fd-input" placeholder="e.g. Oil Palm Seedling">
-        </div>
-        <div class="fd-section" style="border-bottom:none;">
-          <div class="fd-footnote">† Reserved channel values; no orders enter through these paths yet.</div>
         </div>
       </div>
       <div class="fd-foot">
@@ -914,6 +918,7 @@ input,select,textarea,button{font-family:inherit;}
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;">
           <div><label style="font-size:11px;color:var(--ink3);">Status</label><select class="form-input" id="no-status" style="font-size:12px;padding:6px 10px;"><option>Pending Payment</option><option>Paid</option><option>Ready for Collection</option><option>Completed</option></select></div>
           <div><label style="font-size:11px;color:var(--ink3);">Payment terms</label><select class="form-input" id="no-terms" style="font-size:12px;padding:6px 10px;"><option value="cash">💵 Cash</option><option value="credit">💳 Credit</option></select></div>
+          <div><label style="font-size:11px;color:var(--ink3);">Channel</label><select class="form-input" id="no-channel" style="font-size:12px;padding:6px 10px;"><option value="admin_panel">🛠️ Admin Panel</option><option value="google">🅖 Google</option><option value="whatsapp">💬 WhatsApp</option></select></div>
           <div style="grid-column:1 / -1;"><label style="font-size:11px;color:var(--ink3);">Internal notes (admin-only)</label><textarea class="form-input" id="no-internal-note" rows="2" style="font-size:12px;padding:6px 10px;resize:vertical;"></textarea></div>
         </div>
       </div>
@@ -1591,7 +1596,7 @@ document.addEventListener('DOMContentLoaded',function(){
 });
 </script>
 
-<script src="admin-orders.js?v=2026-05-28-points-flow"></script>
+<script src="admin-orders.js?v=2026-05-28-channel-icons"></script>
 <script src="admin-customers.js?v=2026-05-27-cust-edit"></script>
 <script src="admin-products.js?v=2026-05-18-points-ledger"></script>
 <script src="admin-payments.js?v=2026-05-20-payment-verification"></script>

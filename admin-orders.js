@@ -1145,10 +1145,17 @@ async function markCreditInvoicePaid(invoiceId,orderId){
   if(!confirm('Mark this invoice as paid?'))return;
   var{error}=await sb.from('salesweb_credit_invoices').update({status:'paid',paid_at:new Date().toISOString()}).eq('id',invoiceId);
   if(error){toast('Failed: '+error.message,'error');return;}
+  // The credit customer has now actually paid — credit loyalty points
+  // (idempotent: issuePoints exits if points_issued is already set).
+  var pointsNote = '';
+  try{
+    var{data:o}=await sb.from('salesweb_customer_orders').select('total,points_issued').eq('id',orderId).maybeSingle();
+    if(o && !o.points_issued){ await issuePoints(orderId, Number(o.total)||0); pointsNote = ' · loyalty points credited'; }
+  }catch(e){ console.warn('[Credit paid] issuePoints failed:', e); }
   var session=await sb.auth.getSession();
   var user=session?.data?.session?.user?.email||'admin';
-  await sb.from('salesweb_order_timeline').insert([{order_id:orderId,status:'Invoice Paid',note:'Credit invoice marked as paid',changed_by:user}]);
-  toast('Invoice marked as paid');
+  await sb.from('salesweb_order_timeline').insert([{order_id:orderId,status:'Invoice Paid',note:'Credit invoice marked as paid'+pointsNote,changed_by:user}]);
+  toast('Invoice marked as paid'+pointsNote);
   viewOrder(orderId);
 }
 
@@ -1180,12 +1187,13 @@ async function updateOrderPaymentTerms(orderId){
   // Newly-credit orders proceed straight to collection (billed monthly),
   // so fire the same paid-side-effects: issue points + create AL + send
   // confirmation email. All three are idempotent.
+  // Switching Cash → Credit: customer can collect (AL + confirmation email)
+  // but NO points yet — points are credited when the monthly invoice is paid.
   var creditSideEffects = '';
   if(newTerms==='credit' && oldTerms!=='credit'){
     try{
       var{data:fullOrder}=await sb.from('salesweb_customer_orders').select('order_number,total,customer_name,billing_name,customer_email').eq('id',orderId).single();
       if(fullOrder){
-        await issuePoints(orderId, fullOrder.total||0);
         await createALFromOrder(orderId, fullOrder);
         sb.functions.invoke('send-order-email', { body: { order_id: orderId } })
           .catch(function(err){ console.error('[email] invoke threw:', err); });
@@ -2363,18 +2371,26 @@ async function submitNewOrder(){
     changed_by:by
   }]).then(function(){});
 
-  // Credit-term orders proceed straight to collection — they're billed
-  // monthly. Fire the same side effects as a Paid order (points issued,
-  // AL created, confirmation email) so the customer can act on it.
-  // issuePoints and createALFromOrder are idempotent; send-order-email
-  // is idempotent via email_sent_at.
+  // Credit-term orders can collect immediately (AL issued + confirmation
+  // email) but DO NOT earn loyalty points yet — points are credited only
+  // when the monthly credit invoice is marked paid (see markCreditInvoicePaid).
   if(terms === 'credit'){
+    try{
+      await createALFromOrder(order.id, order);
+      sb.functions.invoke('send-order-email', { body: { order_id: order.id } })
+        .catch(function(err){ console.error('[email] invoke threw:', err); });
+    }catch(e){ console.warn('[Add Order] credit side effects failed:', e); }
+  }
+  // Cash orders created already in a settled state (admin set status to
+  // Paid / Ready for Collection / Completed at creation): fire the Paid
+  // side effects since no status-change ever runs for these.
+  else if(SETTLED_STATUSES[status]){
     try{
       await issuePoints(order.id, total);
       await createALFromOrder(order.id, order);
       sb.functions.invoke('send-order-email', { body: { order_id: order.id } })
         .catch(function(err){ console.error('[email] invoke threw:', err); });
-    }catch(e){ console.warn('[Add Order] credit side effects failed:', e); }
+    }catch(e){ console.warn('[Add Order] paid-at-creation side effects failed:', e); }
   }
 
   closeModal('modal-new-order');

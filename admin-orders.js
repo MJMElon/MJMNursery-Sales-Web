@@ -2238,6 +2238,11 @@ async function submitNewOrder(){
   var subtotal=validItems.reduce(function(s,it){return s+(Number(it.quantity)||0)*(Number(it.unit_price)||0);},0);
   var total=Math.max(0,Math.round((subtotal-discount)*100)/100);
 
+  // Zero-total order = nothing to pay → auto-mark Paid (the existing
+  // paid-at-creation branch below fires AL + confirmation email so the
+  // customer can still collect; points credit is 0 × rate = 0).
+  if(total <= 0) status='Paid';
+
   // ── Billing / E-Invoice (same shape as the customer checkout) ──
   // billing_name + billing_tax_id are stored as columns; the rest of the
   // billing detail is appended to customer_remark, matching payment.html.

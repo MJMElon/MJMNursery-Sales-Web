@@ -1071,7 +1071,9 @@ async function placeOrder(){
       customer_id:userId,
       customer_name:contactName,
       customer_email:email,
-      status:'Pending Payment',
+      // Zero-total orders (voucher/points covered the whole bill) skip the
+      // payment step and land as Paid immediately.
+      status:(Number(finalTotal)||0)<=0 ? 'Paid' : 'Pending Payment',
       total:finalTotal,
       // Sticky channel from the landing URL (utm_source / referrer) — see
       // detection block at the end of index.html. Defaults to online_store.

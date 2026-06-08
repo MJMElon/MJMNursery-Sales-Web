@@ -2128,8 +2128,11 @@ function renderNewOrderItems(){
       ? '<input class="form-input" type="text" value="'+esc(it.product_name||'')+'" readonly style="background:#f8fafc;color:#475569;font-size:12px;padding:4px 8px;margin-top:.3rem;">'
       : '<input class="form-input" type="text" value="'+esc(it.product_name||'')+'" placeholder="Item name" oninput="updateNewOrderItem('+idx+',\'product_name\',this.value)" style="font-size:12px;padding:4px 8px;margin-top:.3rem;">';
 
-    html+='<tr draggable="true" ondragstart="noDragStart(event,'+idx+')" ondragover="noDragOver(event)" ondrop="noDrop(event,'+idx+')" ondragend="noDragEnd(event)" data-no-idx="'+idx+'" style="cursor:grab;">'+
-      '<td style="text-align:center;color:#94a3b8;user-select:none;" title="Drag to reorder">⋮⋮</td>'+
+    // Drag is restricted to the handle cell so the rest of the row remains
+    // freely interactive (text selection, focus, etc. inside the inputs).
+    // The row is just the drop target.
+    html+='<tr ondragover="noDragOver(event)" ondrop="noDrop(event,'+idx+')" data-no-idx="'+idx+'">'+
+      '<td draggable="true" ondragstart="noDragStart(event,'+idx+')" ondragend="noDragEnd(event)" style="text-align:center;color:#94a3b8;user-select:none;cursor:grab;width:24px;" title="Drag to reorder">⋮⋮</td>'+
       '<td><select class="form-input" onchange="onNewOrderProductSelect('+idx+',this.value)" style="font-size:12px;padding:4px 8px;">'+opts+'</select>'+nameInput+'</td>'+
       '<td style="text-align:right;"><input class="form-input" type="number" min="0" step="1" value="'+(it.quantity||0)+'" oninput="updateNewOrderItem('+idx+',\'quantity\',this.value)" style="text-align:right;font-size:12px;padding:4px 8px;"></td>'+
       '<td style="text-align:right;"><input class="form-input" type="number" min="0" step="0.01" value="'+(it.unit_price||0)+'" oninput="updateNewOrderItem('+idx+',\'unit_price\',this.value)" style="text-align:right;font-size:12px;padding:4px 8px;"></td>'+

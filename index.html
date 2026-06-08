@@ -5572,6 +5572,24 @@ document.querySelectorAll('.portal-modal-overlay').forEach(function(m){
 
 // Splash dismiss lives in its own <script> block right after the splash
 // HTML so it cannot be killed by failures elsewhere in this script.
+
+// ── Channel detection ──────────────────────────────────────────────────
+// Sticky tag for the session. Detect Google or WhatsApp from either
+// ?utm_source=… on the landing URL or the referrer. Defaults to
+// 'online_store'. Read by payment.html when the order is inserted.
+(function(){
+  try{
+    var existing = sessionStorage.getItem('mjm_channel');
+    if(existing) return; // first-touch wins for the session
+    var params = new URLSearchParams(window.location.search || '');
+    var src = (params.get('utm_source') || '').toLowerCase();
+    var ref = (document.referrer || '').toLowerCase();
+    var ch = 'online_store';
+    if(src.indexOf('google')>=0 || /google\.[a-z.]+/.test(ref)) ch = 'google';
+    else if(src.indexOf('whatsapp')>=0 || /(?:wa\.me|whatsapp\.com)/.test(ref)) ch = 'whatsapp';
+    sessionStorage.setItem('mjm_channel', ch);
+  }catch(e){ /* private mode etc. — fall back to default in payment.html */ }
+})();
 </script>
 </body>
 </html>

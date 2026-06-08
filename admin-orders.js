@@ -202,6 +202,7 @@ async function loadOrders(){
     orders = orders.filter(function(o){
       var ok = false;
       if(sideStatuses.indexOf('Open') !== -1 && o.status!=='Cancelled' && o.status!=='Refunded' && o.status!=='Completed' && !o.archived_at && !o.deleted_at) ok = true;
+      if(sideStatuses.indexOf('Pending Payment') !== -1 && o.status==='Pending Payment' && !o.deleted_at && !o.archived_at) ok = true;
       if(sideStatuses.indexOf('Cancelled') !== -1 && o.status==='Cancelled' && !o.deleted_at && !o.archived_at) ok = true;
       if(sideStatuses.indexOf('Ready for Collection') !== -1 && o.status==='Ready for Collection' && !o.deleted_at && !o.archived_at) ok = true;
       if(sideStatuses.indexOf('Completed') !== -1 && o.status==='Completed' && !o.deleted_at && !o.archived_at) ok = true;

@@ -966,8 +966,8 @@ input,select,textarea,button{font-family:inherit;}
   <div class="modal-foot"><button class="btn btn-outline" onclick="closeModal('modal-invoice-upload')">Cancel</button><button class="btn btn-primary" id="miu-submit" onclick="submitInvoiceUpload()">Upload &amp; Issue Invoice</button></div>
 </div></div>
 
-<!-- CANCEL STOCK RESTORE MODAL -->
-<div class="modal-overlay" id="modal-cancel-stock"><div class="modal" style="max-width:600px;"><div class="modal-head" style="background:#fef2f2;"><h2 style="font-size:1.1rem;color:#dc2626;">Cancel Order — Restore Stock</h2><button class="modal-close" onclick="closeModal('modal-cancel-stock')">&#x2715;</button></div><div class="modal-body" id="cancel-stock-body" style="max-height:65vh;overflow-y:auto;"></div><div class="modal-foot" id="cancel-stock-foot"></div></div></div>
+<!-- CANCEL STOCK RESTORE MODAL — opened on top of modal-order (z=250) -->
+<div class="modal-overlay" id="modal-cancel-stock" style="z-index:270;"><div class="modal" style="max-width:600px;"><div class="modal-head" style="background:#fef2f2;"><h2 style="font-size:1.1rem;color:#dc2626;">Cancel Order — Restore Stock</h2><button class="modal-close" onclick="closeModal('modal-cancel-stock')">&#x2715;</button></div><div class="modal-body" id="cancel-stock-body" style="max-height:65vh;overflow-y:auto;"></div><div class="modal-foot" id="cancel-stock-foot"></div></div></div>
 
 <!-- PAYMENT DETAIL MODAL — populated by openPaymentDetail() in admin-payments.js -->
 <div class="modal-overlay" id="modal-payment" style="z-index:255;"><div class="modal" style="max-width:760px;"><div class="modal-head"><h2>Payment Review</h2><button class="modal-close" onclick="closeModal('modal-payment')">&#x2715;</button></div><div class="modal-body" id="payment-detail-body" style="max-height:78vh;overflow-y:auto;"></div></div></div>

@@ -566,11 +566,18 @@ async function viewOrder(id){
   html+='<div style="background:var(--bg);border-radius:10px;padding:.8rem 1rem;margin-bottom:1rem;">';
   html+='<div style="font-size:13px;font-weight:600;margin-bottom:.5rem;">Adjustments</div>';
 
-  // Show currently-applied discount with a delete affordance.
+  // Show currently-applied discount with a delete affordance. The optional
+  // remarks (discount_note) sit on a second line so the reason for the
+  // adjustment is visible at a glance.
   if(Number(order.discount_amount||0) > 0){
-    html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem .6rem;background:#fff;border:1px solid var(--border);border-radius:6px;margin-bottom:.4rem;font-size:12px;">';
-    html+='<span><strong>Discount applied:</strong> -RM '+fmtMYR(order.discount_amount)+'</span>';
-    html+='<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 8px;color:var(--red);border-color:var(--red);" onclick="removeDiscount(\''+id+'\')">✕ Remove</button>';
+    html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;padding:.4rem .6rem;background:#fff;border:1px solid var(--border);border-radius:6px;margin-bottom:.4rem;font-size:12px;">';
+    html+='<div style="min-width:0;flex:1;">';
+    html+='<div><strong>Discount applied:</strong> -RM '+fmtMYR(order.discount_amount)+'</div>';
+    if(order.discount_note){
+      html+='<div style="margin-top:.2rem;color:var(--ink3);font-size:11px;"><em>Remarks: '+esc(order.discount_note)+'</em></div>';
+    }
+    html+='</div>';
+    html+='<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 8px;color:var(--red);border-color:var(--red);flex:none;" onclick="removeDiscount(\''+id+'\')">✕ Remove</button>';
     html+='</div>';
   }
   if(order.coupon_code){
@@ -587,12 +594,14 @@ async function viewOrder(id){
 
   // Discount panel — RM/% toggle determines how the typed value is
   // interpreted before being saved as a flat RM amount on the order.
+  // The remarks field below is the human reason the discount was given.
   html+='<div id="mo-discount-panel" style="display:none;gap:.5rem;align-items:center;margin-top:.5rem;flex-wrap:wrap;">';
   html+='<input class="form-input" id="mo-discount" type="number" step="0.01" min="0" value="'+(order.discount_amount||0)+'" style="width:110px;font-size:12px;padding:6px 10px;" placeholder="Value">';
   html+='<div role="group" style="display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;">';
   html+='<button id="mo-discount-mode-rm" type="button" class="btn btn-sm" data-mode="rm" onclick="setDiscountMode(\'rm\')" style="font-size:11px;padding:5px 10px;border:0;background:var(--ink2);color:#fff;">RM</button>';
   html+='<button id="mo-discount-mode-pct" type="button" class="btn btn-sm" data-mode="pct" onclick="setDiscountMode(\'pct\')" style="font-size:11px;padding:5px 10px;border:0;background:transparent;color:var(--ink2);">%</button>';
   html+='</div>';
+  html+='<input class="form-input" id="mo-discount-note" type="text" value="'+esc(order.discount_note||'')+'" style="flex:1;min-width:180px;font-size:12px;padding:6px 10px;" placeholder="Remarks (e.g. damaged item, loyalty top-up)" maxlength="200">';
   html+='<button class="btn btn-primary btn-sm" onclick="addDiscount(\''+id+'\','+subtotal+')">Apply Discount</button>';
   html+='</div>';
 
@@ -1054,6 +1063,8 @@ function setDiscountMode(mode){
 async function addDiscount(orderId, subtotalHint){
   var raw = parseFloat(document.getElementById('mo-discount').value) || 0;
   if(raw < 0){ toast('Discount must be ≥ 0','error'); return; }
+  var noteEl = document.getElementById('mo-discount-note');
+  var note = noteEl ? (noteEl.value || '').trim().slice(0,200) : '';
   // % is converted to a flat RM amount at the point of saving so all
   // downstream consumers (totals breakdown, customer portal, proforma email)
   // continue to read a single source of truth from discount_amount.
@@ -1067,7 +1078,13 @@ async function addDiscount(orderId, subtotalHint){
     }
     amt = Math.round(subtotal * raw) / 100;
   }
-  await sb.from('salesweb_customer_orders').update({discount_amount:amt,updated_at:new Date().toISOString()}).eq('id',orderId);
+  // Persist the note alongside the amount; degrade gracefully if the
+  // discount_note column hasn't been added yet on this Supabase.
+  var upd = {discount_amount:amt, discount_note: note || null, updated_at:new Date().toISOString()};
+  var r = await sb.from('salesweb_customer_orders').update(upd).eq('id',orderId);
+  if(r && r.error && /discount_note/i.test(r.error.message||'')){
+    await sb.from('salesweb_customer_orders').update({discount_amount:amt,updated_at:new Date().toISOString()}).eq('id',orderId);
+  }
   // Recalc total
   var{data:items2}=await sb.from('salesweb_order_items').select('subtotal').eq('order_id',orderId);
   var{data:order}=await sb.from('salesweb_customer_orders').select('coupon_discount').eq('id',orderId).single();
@@ -1082,7 +1099,12 @@ async function addDiscount(orderId, subtotalHint){
 // also applied. Keeps the coupon untouched and recomputes the total.
 async function removeDiscount(orderId){
   if(!confirm('Remove the discount from this order?')) return;
-  await sb.from('salesweb_customer_orders').update({discount_amount:0,updated_at:new Date().toISOString()}).eq('id',orderId);
+  // Clear both the amount and the remarks; fall back to amount-only on a
+  // schema that hasn't been migrated yet.
+  var r = await sb.from('salesweb_customer_orders').update({discount_amount:0, discount_note:null, updated_at:new Date().toISOString()}).eq('id',orderId);
+  if(r && r.error && /discount_note/i.test(r.error.message||'')){
+    await sb.from('salesweb_customer_orders').update({discount_amount:0,updated_at:new Date().toISOString()}).eq('id',orderId);
+  }
   var{data:items}=await sb.from('salesweb_order_items').select('subtotal').eq('order_id',orderId);
   var{data:order}=await sb.from('salesweb_customer_orders').select('coupon_discount').eq('id',orderId).single();
   var subtotal=(items||[]).reduce(function(s,i){return s+(i.subtotal||0);},0);

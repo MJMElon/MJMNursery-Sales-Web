@@ -515,11 +515,23 @@ input,select,textarea,button{font-family:inherit;}
       <div class="main-header"><div class="main-title">Manage Customers</div><button class="btn btn-primary" onclick="openAddCustomer()">+ Add Customer</button></div>
       <div style="display:flex;gap:.4rem;margin-bottom:1rem;">
         <button class="btn btn-primary btn-sm" id="cust-subtab-list" onclick="showCustSubTab('list')" style="font-size:11px;">Customer List</button>
+        <button class="btn btn-outline btn-sm" id="cust-subtab-groups" onclick="showCustSubTab('groups')" style="font-size:11px;">Groups</button>
         <button class="btn btn-outline btn-sm" id="cust-subtab-points" onclick="showCustSubTab('points')" style="font-size:11px;">Points &amp; Membership</button>
       </div>
       <div id="cust-panel-list">
         <div class="stats-grid" id="cust-stats"></div>
         <div class="card"><div class="filter-bar"><input class="filter-input" id="cust-search" placeholder="Search name or email..." oninput="loadCustomers()"><button class="btn-filter" id="cust-filter-btn" onclick="openCustomerFilterDrawer()" title="Filter customers"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filter <span class="filter-count" id="cust-filter-count" style="display:none;">0</span></button></div><div id="customers-table"><div class="loading">Loading customers...</div></div></div>
+      </div>
+
+      <div id="cust-panel-groups" style="display:none;">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem;">
+            <h3 style="margin:0;font-size:1rem;font-weight:700;">Customer Groups</h3>
+            <button class="btn btn-primary btn-sm" onclick="openCreateGroup()">+ New Group</button>
+          </div>
+          <p style="font-size:11px;color:var(--ink4);margin-bottom:.8rem;">Group customers (e.g. <em>Loyalty VIP</em>, <em>Wholesale</em>, <em>Trade Show 2026</em>) so coupons / promotions can target a specific cohort. Eligibility for a coupon's <strong>Selected customer group(s)</strong> rule reads from these groups.</p>
+          <div id="groups-table"><div class="loading">Loading groups…</div></div>
+        </div>
       </div>
       <div id="cust-panel-points" style="display:none;">
         <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap;">
@@ -1215,6 +1227,47 @@ input,select,textarea,button{font-family:inherit;}
   </div>
 </div></div>
 
+<!-- CUSTOMER GROUP EDIT MODAL -->
+<div class="modal-overlay" id="modal-group-edit" style="z-index:255;"><div class="modal" style="max-width:480px;">
+  <div class="modal-head"><h2 id="mg-title">New Group</h2><button class="modal-close" onclick="closeModal('modal-group-edit')">&#x2715;</button></div>
+  <div class="modal-body" style="padding:1.2rem;">
+    <input type="hidden" id="mg-id">
+    <div style="display:grid;grid-template-columns:1fr;gap:.7rem;">
+      <div>
+        <label style="font-size:11px;color:var(--ink3);">Group name <span style="color:var(--red);">*</span></label>
+        <input class="form-input" id="mg-name" placeholder="e.g. Loyalty VIP" style="font-size:13px;padding:8px 12px;">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--ink3);">Description</label>
+        <textarea class="form-input" id="mg-desc" rows="2" style="font-size:13px;padding:8px 12px;resize:vertical;"></textarea>
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--ink3);">Badge colour</label>
+        <input class="form-input" id="mg-color" type="color" value="#7c5cbf" style="height:36px;padding:2px 6px;">
+      </div>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn btn-outline" onclick="closeModal('modal-group-edit')">Cancel</button>
+    <button class="btn btn-primary" id="mg-submit" onclick="saveGroup()">Save Group</button>
+  </div>
+</div></div>
+
+<!-- MANAGE GROUP MEMBERS MODAL -->
+<div class="modal-overlay" id="modal-group-members" style="z-index:255;"><div class="modal" style="max-width:600px;">
+  <div class="modal-head"><h2 id="mm-title">Group Members</h2><button class="modal-close" onclick="closeModal('modal-group-members')">&#x2715;</button></div>
+  <div class="modal-body" style="padding:1.2rem;">
+    <input type="hidden" id="mm-group-id">
+    <input class="form-input" id="mm-search" placeholder="Search customers…" oninput="renderGroupMembersList()" style="font-size:13px;padding:8px 12px;margin-bottom:.6rem;">
+    <div style="font-size:11px;color:var(--ink4);margin-bottom:.4rem;">Tick to add to the group · untick to remove.</div>
+    <div id="mm-list" style="max-height:50vh;overflow:auto;border:1px solid var(--border);border-radius:8px;"></div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn btn-outline" onclick="closeModal('modal-group-members')">Cancel</button>
+    <button class="btn btn-primary" id="mm-submit" onclick="saveGroupMembers()">Save Members</button>
+  </div>
+</div></div>
+
 <!-- PUBLISH PRODUCT MODAL -->
 <div class="modal-overlay" id="modal-publish"><div class="modal" style="max-width:560px;">
   <div class="modal-head" style="background:var(--bg);"><h2 id="mpb-title" style="font-size:1.05rem;">Publish to Sales Web</h2><button class="modal-close" onclick="closeModal('modal-publish')">&#x2715;</button></div>
@@ -1624,12 +1677,12 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 
 <script src="admin-orders.js?v=2026-05-28-multi-upload"></script>
-<script src="admin-customers.js?v=2026-05-27-cust-edit"></script>
+<script src="admin-customers.js?v=2026-05-28-customer-groups"></script>
 <script src="admin-products.js?v=2026-05-18-points-ledger"></script>
 <script src="admin-payments.js?v=2026-05-20-payment-verification"></script>
 <script src="admin-users.js?v=2026-05-21-tab-access-table"></script>
 <script src="admin-promotions.js?v=2026-05-18-points-ledger"></script>
-<script src="admin-coupons.js?v=2026-05-28-coupon-eligibility"></script>
+<script src="admin-coupons.js?v=2026-05-28-coupon-groups"></script>
 <script src="admin-web-design.js?v=2026-05-20-port-from-umbrella"></script>
 
 </body>

@@ -148,10 +148,62 @@ function randomizeCouponCode(){
   document.getElementById('mc-code').value=c;
 }
 
+// Cached list of customers + configured membership tiers so the
+// eligibility pickers don't re-query on every modal open.
+var _couponCustCache=null, _couponTiersCache=null;
+async function loadCouponCustomersCache(){
+  if(_couponCustCache) return _couponCustCache;
+  var{data}=await sb.from('shared_profiles').select('id, full_name, email').or('user_type.eq.customer,role.eq.customer').order('full_name',{ascending:true});
+  _couponCustCache = data || [];
+  return _couponCustCache;
+}
+async function loadCouponTiersCache(){
+  if(_couponTiersCache) return _couponTiersCache;
+  var tiers=[{name:'Basic Member'}];
+  try{
+    var{data}=await sb.from('salesweb_app_settings').select('value').eq('key','member_tiers').maybeSingle();
+    if(data && data.value){ var parsed=typeof data.value==='string'?JSON.parse(data.value):data.value; if(parsed && parsed.length) tiers=parsed; }
+  }catch(e){}
+  _couponTiersCache = tiers;
+  return tiers;
+}
+
+function onCouponEligChange(){
+  var t=document.getElementById('mc-elig-type').value;
+  document.getElementById('mc-elig-customers-wrap').style.display = (t==='customers')?'':'none';
+  document.getElementById('mc-elig-tiers-wrap').style.display     = (t==='tiers')?'':'none';
+  document.getElementById('mc-elig-groups-wrap').style.display    = (t==='groups')?'':'none';
+}
+
 async function openCouponForm(c){
   var prods=await loadCouponProductsCache();
   var sel=document.getElementById('mc-prods');
   sel.innerHTML=prods.map(function(p){return '<option value="'+p.id+'">'+esc(p.name)+'</option>';}).join('');
+
+  // Populate the customer + tier pickers for the Discount usage section.
+  var custs = await loadCouponCustomersCache();
+  var custSel=document.getElementById('mc-elig-customers');
+  custSel.innerHTML=custs.map(function(u){
+    var label=(u.full_name||u.email||'—');
+    if(u.email && /@admin\.mjmnursery\.local$/i.test(u.email)) label += ' (walk-in)';
+    else if(u.email) label += ' · '+u.email;
+    return '<option value="'+esc(u.id)+'">'+esc(label)+'</option>';
+  }).join('');
+  var tiers = await loadCouponTiersCache();
+  var existingTiers = (c && c.eligibility && Array.isArray(c.eligibility.tier_names)) ? c.eligibility.tier_names : [];
+  document.getElementById('mc-elig-tiers').innerHTML = tiers.map(function(t){
+    var checked = existingTiers.indexOf(t.name) !== -1 ? ' checked' : '';
+    return '<label class="form-toggle" style="font-size:12px;background:var(--white);border:1px solid var(--border);padding:.35rem .6rem;border-radius:6px;"><input type="checkbox" class="mc-elig-tier" value="'+esc(t.name)+'"'+checked+'><span>'+esc(t.name)+'</span></label>';
+  }).join('');
+
+  var elig = (c && c.eligibility) || {type:'all_members'};
+  document.getElementById('mc-elig-type').value = elig.type || 'all_members';
+  if(elig.type==='customers' && Array.isArray(elig.customer_ids)){
+    Array.from(custSel.options).forEach(function(o){ o.selected = elig.customer_ids.indexOf(o.value) >= 0; });
+  } else {
+    Array.from(custSel.options).forEach(function(o){ o.selected = false; });
+  }
+  onCouponEligChange();
 
   document.getElementById('mc-title').textContent=c?'Edit Coupon':'New Coupon';
   document.getElementById('mc-id').value=c?c.id:'';
@@ -204,6 +256,18 @@ async function saveCoupon(){
   var scopeIds=Array.from(sel.selectedOptions).map(function(o){return o.value;});
   var cats=(document.getElementById('mc-cats').value||'').split(',').map(function(s){return s.trim();}).filter(Boolean);
 
+  // Build the eligibility object (Discount usage section).
+  var eligType=document.getElementById('mc-elig-type').value;
+  var eligibility={type:eligType};
+  if(eligType==='customers'){
+    var custSel=document.getElementById('mc-elig-customers');
+    eligibility.customer_ids=Array.from(custSel.selectedOptions).map(function(o){return o.value;});
+  } else if(eligType==='tiers'){
+    eligibility.tier_names=[];
+    document.querySelectorAll('.mc-elig-tier:checked').forEach(function(cb){ eligibility.tier_names.push(cb.value); });
+  }
+  // For 'public' / 'all_members' / 'groups' we keep just the type.
+
   var row={
     code:document.getElementById('mc-code').value.trim().toUpperCase(),
     name:document.getElementById('mc-name').value.trim()||null,
@@ -222,7 +286,8 @@ async function saveCoupon(){
     is_active:document.getElementById('mc-active').checked,
     first_order_only:document.getElementById('mc-firstorder').checked,
     stackable_with_promo:document.getElementById('mc-stack').checked,
-    auto_apply:document.getElementById('mc-autoapply').checked
+    auto_apply:document.getElementById('mc-autoapply').checked,
+    eligibility:eligibility
   };
   if(!row.code){toast('Coupon code required','error');return;}
 

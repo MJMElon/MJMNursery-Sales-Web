@@ -770,9 +770,10 @@ async function viewOrder(id){
   // the customer sees when they tap an attachment chip in their portal.
   html+='<div style="margin-bottom:1rem;"><div style="font-size:13px;font-weight:600;margin-bottom:.4rem;">Documents</div>';
   html+='<div id="mo-attachments"><div style="font-size:12px;color:var(--ink4);">Loading...</div></div>';
-  html+='<div style="margin-top:.5rem;display:flex;gap:.5rem;align-items:center;">';
-  html+='<input type="file" id="mo-att-file" style="font-size:12px;">';
-  html+='<button class="btn btn-outline btn-sm" onclick="uploadOrderAttachment(\''+id+'\')">Upload</button></div></div>';
+  html+='<div style="margin-top:.5rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">';
+  html+='<input type="file" id="mo-att-file" multiple style="font-size:12px;">';
+  html+='<button class="btn btn-outline btn-sm" onclick="uploadOrderAttachment(\''+id+'\')">Upload</button></div>';
+  html+='<div style="font-size:10.5px;color:var(--ink4);margin-top:.3rem;">Hold Ctrl/⌘ or Shift to pick multiple files.</div></div>';
 
   // ── Timeline ──
   html+='<div><div style="font-size:13px;font-weight:600;margin-bottom:.5rem;">Order Timeline</div>';
@@ -1351,20 +1352,33 @@ function printAttachment(){
 
 async function uploadOrderAttachment(orderId){
   var input=document.getElementById('mo-att-file');
-  if(!input.files||!input.files[0]){toast('Select a file','error');return;}
-  var file=input.files[0];
-  var fileName='order_'+orderId.substring(0,8)+'_'+Date.now()+'.'+file.name.split('.').pop();
-
-  var{error}=await sb.storage.from('order-attachments').upload(fileName,file,{contentType:file.type,upsert:true});
-  if(error){toast('Upload failed','error');return;}
-  var{data:urlData}=sb.storage.from('order-attachments').getPublicUrl(fileName);
-  var url=urlData?.publicUrl||'';
-
+  if(!input.files||!input.files.length){toast('Select at least one file','error');return;}
+  var files=Array.prototype.slice.call(input.files);
   var session=await sb.auth.getSession();
   var user=session?.data?.session?.user?.email||'admin';
-  await sb.from('salesweb_order_attachments').insert([{order_id:orderId,file_name:file.name,file_url:url,file_type:file.type,uploaded_by:user}]);
+  var ok=0, failed=[];
+  var rows=[];
+  for(var i=0;i<files.length;i++){
+    var file=files[i];
+    // Suffix the index + a 3-char random tag to avoid collisions when several
+    // files arrive in the same millisecond.
+    var ext=(file.name.split('.').pop()||'bin').toLowerCase();
+    var tag=Math.random().toString(36).slice(2,5);
+    var fileName='order_'+orderId.substring(0,8)+'_'+Date.now()+'_'+i+'_'+tag+'.'+ext;
+    var up=await sb.storage.from('order-attachments').upload(fileName,file,{contentType:file.type,upsert:true});
+    if(up.error){ failed.push(file.name); continue; }
+    var{data:urlData}=sb.storage.from('order-attachments').getPublicUrl(fileName);
+    rows.push({order_id:orderId, file_name:file.name, file_url:(urlData&&urlData.publicUrl)||'', file_type:file.type, uploaded_by:user});
+    ok++;
+  }
+  if(rows.length){
+    var ins=await sb.from('salesweb_order_attachments').insert(rows);
+    if(ins.error){ toast('DB insert failed: '+ins.error.message,'error'); return; }
+  }
   input.value='';
-  toast('File uploaded');
+  if(ok && !failed.length) toast(ok===1 ? 'File uploaded' : ok+' files uploaded');
+  else if(ok && failed.length) toast(ok+' uploaded · '+failed.length+' failed','error');
+  else toast('Upload failed','error');
   loadAttachments(orderId);
 }
 

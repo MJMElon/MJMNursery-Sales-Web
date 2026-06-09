@@ -1100,6 +1100,33 @@ input,select,textarea,button{font-family:inherit;}
 </div>
 <div class="form-group" id="mc-scope-cats" style="display:none;"><label class="form-label">Categories (comma-separated)</label><input class="form-input" id="mc-cats" placeholder="Seedling, Merchandise"></div>
 <div class="form-group" id="mc-scope-prods" style="display:none;"><label class="form-label">Products</label><select class="form-input" id="mc-prods" multiple size="4" style="height:auto;"></select></div>
+
+<!-- Discount usage — customer eligibility -->
+<div class="form-group" style="margin-top:1rem;">
+  <div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:.4rem;">Discount usage</div>
+  <label class="form-label" for="mc-elig-type">Customer eligibility</label>
+  <select class="form-input" id="mc-elig-type" onchange="onCouponEligChange()">
+    <option value="public">Open to public</option>
+    <option value="all_members" selected>All logged-in members</option>
+    <option value="groups">Selected customer group(s)</option>
+    <option value="customers">Selected customer(s)</option>
+    <option value="tiers">Selected membership tier(s)</option>
+  </select>
+</div>
+<div class="form-group" id="mc-elig-customers-wrap" style="display:none;">
+  <label class="form-label">Selected customer(s)</label>
+  <select class="form-input" id="mc-elig-customers" multiple size="5" style="height:auto;"></select>
+  <div style="font-size:10.5px;color:var(--ink4);margin-top:.2rem;">Ctrl/⌘ + click to pick multiple customers.</div>
+</div>
+<div class="form-group" id="mc-elig-tiers-wrap" style="display:none;">
+  <label class="form-label">Selected membership tier(s)</label>
+  <div id="mc-elig-tiers" style="display:flex;flex-wrap:wrap;gap:.5rem;font-size:12px;"></div>
+</div>
+<div class="form-group" id="mc-elig-groups-wrap" style="display:none;">
+  <label class="form-label">Selected customer group(s)</label>
+  <div style="font-size:11px;color:var(--ink4);padding:.4rem .6rem;background:var(--bg);border-radius:6px;">No customer groups configured yet — saving this option will store the choice but it won't filter until a groups feature is added.</div>
+</div>
+
 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;background:var(--bg);padding:.7rem;border-radius:8px;">
   <label class="form-toggle" style="font-size:12px;"><input type="checkbox" id="mc-active" checked><span>Active</span></label>
   <label class="form-toggle" style="font-size:12px;"><input type="checkbox" id="mc-firstorder"><span>First-order only</span></label>
@@ -1602,7 +1629,7 @@ document.addEventListener('DOMContentLoaded',function(){
 <script src="admin-payments.js?v=2026-05-20-payment-verification"></script>
 <script src="admin-users.js?v=2026-05-21-tab-access-table"></script>
 <script src="admin-promotions.js?v=2026-05-18-points-ledger"></script>
-<script src="admin-coupons.js?v=2026-05-18-points-ledger"></script>
+<script src="admin-coupons.js?v=2026-05-28-coupon-eligibility"></script>
 <script src="admin-web-design.js?v=2026-05-20-port-from-umbrella"></script>
 
 </body>

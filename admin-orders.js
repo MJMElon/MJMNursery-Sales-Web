@@ -541,7 +541,11 @@ async function viewOrder(id){
   // Totals breakdown stays in the same card
   html+='<div style="margin-top:.8rem;padding-top:.8rem;border-top:1px solid var(--border);">';
   html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;"><span>Subtotal</span><span>RM '+fmtMYR(subtotal)+'</span></div>';
-  if(order.discount_amount>0)html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;color:var(--red);"><span>Discount</span><span>-RM '+fmtMYR(order.discount_amount)+'</span></div>';
+  if(order.discount_amount>0){
+    var discLabel = 'Discount';
+    if(order.discount_note) discLabel += ' <span style="color:var(--ink3);font-weight:400;font-style:italic;">('+esc(order.discount_note)+')</span>';
+    html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;color:var(--red);gap:.5rem;"><span style="min-width:0;">'+discLabel+'</span><span style="white-space:nowrap;">-RM '+fmtMYR(order.discount_amount)+'</span></div>';
+  }
   if(order.coupon_code)html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;color:var(--red);"><span>Coupon ('+esc(order.coupon_code)+')</span><span>-RM '+fmtMYR(order.coupon_discount)+'</span></div>';
   html+='<div style="display:flex;justify-content:space-between;padding:.4rem 0;border-top:1.5px solid var(--border);margin-top:.3rem;font-size:15px;font-weight:700;"><span>Total</span><span>RM '+fmtMYR(order.total)+'</span></div>';
   html+='</div>';

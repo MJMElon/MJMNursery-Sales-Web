@@ -444,13 +444,152 @@ async function submitEditCustomer(){
 //  SUB-TAB SWITCHING
 // ═══════════════════════════════════════
 function showCustSubTab(tab){
-  document.getElementById('cust-panel-list').style.display=tab==='list'?'':'none';
-  document.getElementById('cust-panel-points').style.display=tab==='points'?'':'none';
-  document.getElementById('cust-subtab-list').className='btn btn-'+(tab==='list'?'primary':'outline')+' btn-sm';
-  document.getElementById('cust-subtab-list').style.fontSize='11px';
-  document.getElementById('cust-subtab-points').className='btn btn-'+(tab==='points'?'primary':'outline')+' btn-sm';
-  document.getElementById('cust-subtab-points').style.fontSize='11px';
+  ['list','groups','points'].forEach(function(t){
+    var panel=document.getElementById('cust-panel-'+t);
+    var btn=document.getElementById('cust-subtab-'+t);
+    if(panel) panel.style.display = (t===tab)?'':'none';
+    if(btn){ btn.className='btn btn-'+(t===tab?'primary':'outline')+' btn-sm'; btn.style.fontSize='11px'; }
+  });
   if(tab==='points')loadPointsSettings();
+  if(tab==='groups')loadCustomerGroups();
+}
+
+// ═══════════════════════════════════════
+//  CUSTOMER GROUPS
+//  Tables: salesweb_customer_groups + salesweb_customer_group_members
+//  (see supabase/migrations/customer_groups.sql)
+// ═══════════════════════════════════════
+async function loadCustomerGroups(){
+  var el=document.getElementById('groups-table'); if(!el) return;
+  el.innerHTML='<div class="loading">Loading groups…</div>';
+  var{data:groups,error}=await sb.from('salesweb_customer_groups').select('*').order('name',{ascending:true});
+  if(error){ el.innerHTML='<div class="loading" style="color:var(--red);">'+esc(error.message)+'</div>'; return; }
+  if(!groups || !groups.length){ el.innerHTML='<div class="loading">No groups yet. Click <strong>+ New Group</strong> to create one.</div>'; return; }
+  // Get member counts in one round-trip.
+  var{data:mems}=await sb.from('salesweb_customer_group_members').select('group_id');
+  var countByGroup={};
+  (mems||[]).forEach(function(r){ countByGroup[r.group_id]=(countByGroup[r.group_id]||0)+1; });
+  var html='<table class="data-table"><thead><tr><th>Group</th><th>Description</th><th style="text-align:right;">Members</th><th>Created</th><th>Action</th></tr></thead><tbody>';
+  groups.forEach(function(g){
+    var color=g.color||'#7c5cbf';
+    html+='<tr>'+
+      '<td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:'+esc(color)+';margin-right:.4rem;vertical-align:middle;"></span><strong>'+esc(g.name)+'</strong></td>'+
+      '<td style="font-size:12px;color:var(--ink3);">'+esc(g.description||'—')+'</td>'+
+      '<td style="text-align:right;font-weight:600;">'+(countByGroup[g.id]||0)+'</td>'+
+      '<td style="font-size:12px;">'+fmtDate(g.created_at)+'</td>'+
+      '<td style="white-space:nowrap;">'+
+        '<button class="btn btn-outline btn-sm" onclick="openManageGroupMembers(\''+esc(g.id)+'\',\''+esc(g.name).replace(/\'/g,'&#39;')+'\')">Manage Members</button> '+
+        '<button class="btn btn-outline btn-sm" onclick="openEditGroup(\''+esc(g.id)+'\')">Edit</button> '+
+        '<button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red);" onclick="deleteGroup(\''+esc(g.id)+'\')">Delete</button>'+
+      '</td>'+
+    '</tr>';
+  });
+  html+='</tbody></table>';
+  el.innerHTML=html;
+}
+
+function openCreateGroup(){
+  document.getElementById('mg-title').textContent='New Group';
+  document.getElementById('mg-id').value='';
+  document.getElementById('mg-name').value='';
+  document.getElementById('mg-desc').value='';
+  document.getElementById('mg-color').value='#7c5cbf';
+  openModal('modal-group-edit');
+}
+async function openEditGroup(id){
+  var{data:g}=await sb.from('salesweb_customer_groups').select('*').eq('id',id).maybeSingle();
+  if(!g){ toast('Group not found','error'); return; }
+  document.getElementById('mg-title').textContent='Edit Group';
+  document.getElementById('mg-id').value=g.id;
+  document.getElementById('mg-name').value=g.name||'';
+  document.getElementById('mg-desc').value=g.description||'';
+  document.getElementById('mg-color').value=g.color||'#7c5cbf';
+  openModal('modal-group-edit');
+}
+async function saveGroup(){
+  var id=document.getElementById('mg-id').value;
+  var name=document.getElementById('mg-name').value.trim();
+  var desc=document.getElementById('mg-desc').value.trim();
+  var color=document.getElementById('mg-color').value;
+  if(!name){ toast('Group name is required','error'); return; }
+  var row={name:name, description:desc||null, color:color||null, updated_at:new Date().toISOString()};
+  var{error}= id
+    ? await sb.from('salesweb_customer_groups').update(row).eq('id',id)
+    : await sb.from('salesweb_customer_groups').insert([row]);
+  if(error){ toast('Error: '+error.message,'error'); return; }
+  toast(id?'Group updated':'Group created');
+  closeModal('modal-group-edit');
+  loadCustomerGroups();
+}
+async function deleteGroup(id){
+  if(!confirm('Delete this group? Memberships are removed too.'))return;
+  var{error}=await sb.from('salesweb_customer_groups').delete().eq('id',id);
+  if(error){ toast('Error: '+error.message,'error'); return; }
+  toast('Group deleted');
+  loadCustomerGroups();
+}
+
+// Membership editor — checkbox list of all customers; ticked = in group.
+var _mmAllCustomers=[], _mmCurrentMembers={};
+async function openManageGroupMembers(groupId, groupName){
+  document.getElementById('mm-title').textContent='Members of "'+groupName+'"';
+  document.getElementById('mm-group-id').value=groupId;
+  document.getElementById('mm-search').value='';
+  document.getElementById('mm-list').innerHTML='<div class="loading">Loading…</div>';
+  openModal('modal-group-members');
+  // Customers + current group memberships.
+  if(!_mmAllCustomers.length){
+    var{data:custs}=await sb.from('shared_profiles').select('id, full_name, email').or('user_type.eq.customer,role.eq.customer').order('full_name',{ascending:true});
+    _mmAllCustomers = custs || [];
+  }
+  var{data:mems}=await sb.from('salesweb_customer_group_members').select('customer_id').eq('group_id', groupId);
+  _mmCurrentMembers = {};
+  (mems||[]).forEach(function(r){ _mmCurrentMembers[r.customer_id]=true; });
+  renderGroupMembersList();
+}
+function renderGroupMembersList(){
+  var q=(document.getElementById('mm-search').value||'').toLowerCase();
+  var rows=_mmAllCustomers.filter(function(c){
+    if(!q) return true;
+    return (c.full_name||'').toLowerCase().indexOf(q)>=0 || (c.email||'').toLowerCase().indexOf(q)>=0;
+  });
+  if(!rows.length){ document.getElementById('mm-list').innerHTML='<div style="padding:1rem;font-size:12px;color:var(--ink4);">No customers match.</div>'; return; }
+  var html='';
+  rows.forEach(function(c){
+    var checked = _mmCurrentMembers[c.id] ? ' checked' : '';
+    var label = (c.full_name||'—');
+    if(c.email && /@admin\.mjmnursery\.local$/i.test(c.email)) label += ' (walk-in)';
+    else if(c.email) label += ' · '+c.email;
+    html+='<label style="display:flex;align-items:center;gap:.5rem;padding:.45rem .7rem;border-bottom:1px solid var(--border);font-size:13px;cursor:pointer;">'
+        +'<input type="checkbox" class="mm-row" data-id="'+esc(c.id)+'"'+checked+' onchange="_mmCurrentMembers[this.dataset.id]=this.checked;">'
+        +'<span>'+esc(label)+'</span></label>';
+  });
+  document.getElementById('mm-list').innerHTML=html;
+}
+async function saveGroupMembers(){
+  var groupId=document.getElementById('mm-group-id').value;
+  if(!groupId) return;
+  // Diff current vs desired and apply only the changes.
+  var{data:before}=await sb.from('salesweb_customer_group_members').select('customer_id').eq('group_id', groupId);
+  var beforeSet={}; (before||[]).forEach(function(r){ beforeSet[r.customer_id]=true; });
+  var toAdd=[], toRemove=[];
+  Object.keys(_mmCurrentMembers).forEach(function(cid){
+    if(_mmCurrentMembers[cid] && !beforeSet[cid]) toAdd.push({group_id:groupId, customer_id:cid});
+  });
+  Object.keys(beforeSet).forEach(function(cid){
+    if(!_mmCurrentMembers[cid]) toRemove.push(cid);
+  });
+  if(toAdd.length){
+    var ins=await sb.from('salesweb_customer_group_members').insert(toAdd);
+    if(ins.error){ toast('Error adding members: '+ins.error.message,'error'); return; }
+  }
+  if(toRemove.length){
+    var del=await sb.from('salesweb_customer_group_members').delete().eq('group_id', groupId).in('customer_id', toRemove);
+    if(del.error){ toast('Error removing members: '+del.error.message,'error'); return; }
+  }
+  toast('Members updated · +'+toAdd.length+' / −'+toRemove.length);
+  closeModal('modal-group-members');
+  loadCustomerGroups();
 }
 
 // ═══════════════════════════════════════

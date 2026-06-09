@@ -167,6 +167,15 @@ async function loadCouponTiersCache(){
   _couponTiersCache = tiers;
   return tiers;
 }
+var _couponGroupsCache=null;
+async function loadCouponGroupsCache(){
+  if(_couponGroupsCache) return _couponGroupsCache;
+  try{
+    var{data}=await sb.from('salesweb_customer_groups').select('id, name, color').order('name',{ascending:true});
+    _couponGroupsCache = data || [];
+  }catch(e){ _couponGroupsCache = []; }
+  return _couponGroupsCache;
+}
 
 function onCouponEligChange(){
   var t=document.getElementById('mc-elig-type').value;
@@ -195,6 +204,24 @@ async function openCouponForm(c){
     var checked = existingTiers.indexOf(t.name) !== -1 ? ' checked' : '';
     return '<label class="form-toggle" style="font-size:12px;background:var(--white);border:1px solid var(--border);padding:.35rem .6rem;border-radius:6px;"><input type="checkbox" class="mc-elig-tier" value="'+esc(t.name)+'"'+checked+'><span>'+esc(t.name)+'</span></label>';
   }).join('');
+
+  // Customer group picker — render the configured groups (or a hint if none).
+  var groups = await loadCouponGroupsCache();
+  var existingGroups = (c && c.eligibility && Array.isArray(c.eligibility.group_ids)) ? c.eligibility.group_ids : [];
+  var groupsWrap = document.getElementById('mc-elig-groups-wrap');
+  if(!groups.length){
+    groupsWrap.innerHTML = '<label class="form-label">Selected customer group(s)</label>'
+      + '<div style="font-size:11px;color:var(--ink4);padding:.4rem .6rem;background:var(--bg);border-radius:6px;">No groups yet — create one under <strong>Customers → Groups</strong>.</div>';
+  } else {
+    groupsWrap.innerHTML = '<label class="form-label">Selected customer group(s)</label>'
+      + '<div id="mc-elig-groups" style="display:flex;flex-wrap:wrap;gap:.5rem;font-size:12px;">'
+      + groups.map(function(g){
+          var checked = existingGroups.indexOf(g.id) !== -1 ? ' checked' : '';
+          var dot = g.color ? '<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+esc(g.color)+';margin-right:.35rem;"></span>' : '';
+          return '<label class="form-toggle" style="font-size:12px;background:var(--white);border:1px solid var(--border);padding:.35rem .6rem;border-radius:6px;"><input type="checkbox" class="mc-elig-group" value="'+esc(g.id)+'"'+checked+'>'+dot+'<span>'+esc(g.name)+'</span></label>';
+        }).join('')
+      + '</div>';
+  }
 
   var elig = (c && c.eligibility) || {type:'all_members'};
   document.getElementById('mc-elig-type').value = elig.type || 'all_members';
@@ -265,8 +292,11 @@ async function saveCoupon(){
   } else if(eligType==='tiers'){
     eligibility.tier_names=[];
     document.querySelectorAll('.mc-elig-tier:checked').forEach(function(cb){ eligibility.tier_names.push(cb.value); });
+  } else if(eligType==='groups'){
+    eligibility.group_ids=[];
+    document.querySelectorAll('.mc-elig-group:checked').forEach(function(cb){ eligibility.group_ids.push(cb.value); });
   }
-  // For 'public' / 'all_members' / 'groups' we keep just the type.
+  // For 'public' / 'all_members' we keep just the type.
 
   var row={
     code:document.getElementById('mc-code').value.trim().toUpperCase(),

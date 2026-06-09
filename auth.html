@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<!-- BUILD: 2026-06-09 · salesweb-auth · fix login stuck on Signing in (auth-lock deadlock) -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MJM Nursery | Login</title>
@@ -423,8 +424,14 @@ async function updatePassword(){
 }
 
 // ── Post Login ──
+// Guarded against double-run: both the direct login calls
+// (loginWithPassword / verifyOTP) and the onAuthStateChange SIGNED_IN
+// handler invoke this. First one in wins; the rest no-op.
+var _postLoginRan=false;
 async function handlePostLogin(session){
   if(!session){showStatus('Login failed.','error');return;}
+  if(_postLoginRan){return;}
+  _postLoginRan=true;
   showStatus('Welcome! Redirecting...','success');
   sessionStorage.setItem('mjm_user_email',session.user.email||'');
   sessionStorage.setItem('mjm_user_name',session.user.user_metadata?.full_name||session.user.email||session.user.phone||'');
@@ -448,7 +455,13 @@ async function handlePostLogin(session){
 var pageLoaded=false;
 setTimeout(function(){pageLoaded=true;},300); // ignore auth events for first 300ms only
 
-_supabase.auth.onAuthStateChange(async function(event,session){
+// IMPORTANT: keep this callback synchronous and do NOT await supabase
+// calls inside it. The callback runs while supabase-js holds its auth
+// lock; handlePostLogin's shared_profiles .from() query needs that same
+// lock to attach the access token — awaiting it here deadlocks and the
+// page hangs on "Signing in...". Defer with setTimeout(0) so the callback
+// returns and releases the lock first. (Same fix as the mobile app.)
+_supabase.auth.onAuthStateChange(function(event,session){
   if(event==='PASSWORD_RECOVERY'){
     isRecovery=true;
     document.getElementById('form-main').style.display='none';
@@ -456,7 +469,7 @@ _supabase.auth.onAuthStateChange(async function(event,session){
     return;
   }
   // Only redirect on fresh login, not on page load existing session
-  if(event==='SIGNED_IN'&&session&&!isRecovery&&pageLoaded){await handlePostLogin(session);}
+  if(event==='SIGNED_IN'&&session&&!isRecovery&&pageLoaded){setTimeout(function(){handlePostLogin(session);},0);}
 });
 
 // Don't auto-redirect on page load — let user see the login page

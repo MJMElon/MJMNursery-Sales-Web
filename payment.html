@@ -1075,6 +1075,13 @@ async function placeOrder(){
       // payment step and land as Paid immediately.
       status:(Number(finalTotal)||0)<=0 ? 'Paid' : 'Pending Payment',
       total:finalTotal,
+      // Persist voucher + flat-discount fields on the row so any later
+      // recompute (Edit Items, Apply/Remove Discount, Apply/Remove Coupon)
+      // re-derives total without losing the customer's checkout discount.
+      // Without these, total would silently snap back to subtotal.
+      coupon_code:voucherCode||null,
+      coupon_discount:Number(voucherDiscount)||0,
+      discount_amount:0,
       // Sticky channel from the landing URL (utm_source / referrer) — see
       // detection block at the end of index.html. Defaults to online_store.
       channel:(function(){ try{ return sessionStorage.getItem('mjm_channel')||'online_store'; }catch(e){ return 'online_store'; } })(),

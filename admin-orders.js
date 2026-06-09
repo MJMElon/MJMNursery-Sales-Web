@@ -1089,11 +1089,12 @@ async function addDiscount(orderId, subtotalHint){
   if(r && r.error && /discount_note/i.test(r.error.message||'')){
     await sb.from('salesweb_customer_orders').update({discount_amount:amt,updated_at:new Date().toISOString()}).eq('id',orderId);
   }
-  // Recalc total
+  // Recalc total — preserve coupon_discount and points_discount_rm so a
+  // checkout-time voucher / points redemption isn't silently wiped.
   var{data:items2}=await sb.from('salesweb_order_items').select('subtotal').eq('order_id',orderId);
-  var{data:order}=await sb.from('salesweb_customer_orders').select('coupon_discount').eq('id',orderId).single();
+  var{data:order}=await sb.from('salesweb_customer_orders').select('coupon_discount,points_discount_rm').eq('id',orderId).single();
   var sub2=(items2||[]).reduce(function(s,i){return s+(i.subtotal||0);},0);
-  var total=Math.max(0, sub2 - amt - (order && order.coupon_discount || 0));
+  var total=Math.max(0, sub2 - amt - (order && order.coupon_discount || 0) - (order && order.points_discount_rm || 0));
   await sb.from('salesweb_customer_orders').update({total:total}).eq('id',orderId);
   toast('Discount applied: RM '+fmtMYR(amt) + (_moDiscountMode==='pct' ? ' ('+raw+'%)' : ''));
   viewOrder(orderId);
@@ -1110,9 +1111,9 @@ async function removeDiscount(orderId){
     await sb.from('salesweb_customer_orders').update({discount_amount:0,updated_at:new Date().toISOString()}).eq('id',orderId);
   }
   var{data:items}=await sb.from('salesweb_order_items').select('subtotal').eq('order_id',orderId);
-  var{data:order}=await sb.from('salesweb_customer_orders').select('coupon_discount').eq('id',orderId).single();
+  var{data:order}=await sb.from('salesweb_customer_orders').select('coupon_discount,points_discount_rm').eq('id',orderId).single();
   var subtotal=(items||[]).reduce(function(s,i){return s+(i.subtotal||0);},0);
-  var total=Math.max(0, subtotal - (order && order.coupon_discount || 0));
+  var total=Math.max(0, subtotal - (order && order.coupon_discount || 0) - (order && order.points_discount_rm || 0));
   await sb.from('salesweb_customer_orders').update({total:total}).eq('id',orderId);
   toast('Discount removed');
   viewOrder(orderId);
@@ -1126,9 +1127,9 @@ async function removeCoupon(orderId){
     .update({coupon_code:null, coupon_discount:0, updated_at:new Date().toISOString()})
     .eq('id',orderId);
   var{data:items}=await sb.from('salesweb_order_items').select('subtotal').eq('order_id',orderId);
-  var{data:order}=await sb.from('salesweb_customer_orders').select('discount_amount').eq('id',orderId).single();
+  var{data:order}=await sb.from('salesweb_customer_orders').select('discount_amount,points_discount_rm').eq('id',orderId).single();
   var subtotal=(items||[]).reduce(function(s,i){return s+(i.subtotal||0);},0);
-  var total=Math.max(0, subtotal - (order && order.discount_amount || 0));
+  var total=Math.max(0, subtotal - (order && order.discount_amount || 0) - (order && order.points_discount_rm || 0));
   await sb.from('salesweb_customer_orders').update({total:total}).eq('id',orderId);
   toast('Coupon removed');
   viewOrder(orderId);
@@ -1140,7 +1141,7 @@ async function applyCoupon(orderId){
 
   // Pull order + items + product categories so the RPC can evaluate scope.
   var{data:items}=await sb.from('salesweb_order_items').select('product_id,quantity,unit_price,subtotal').eq('order_id',orderId);
-  var{data:order}=await sb.from('salesweb_customer_orders').select('customer_id,customer_email,discount_amount').eq('id',orderId).single();
+  var{data:order}=await sb.from('salesweb_customer_orders').select('customer_id,customer_email,discount_amount,points_discount_rm').eq('id',orderId).single();
   var subtotal=(items||[]).reduce(function(s,i){return s+(i.subtotal||0);},0);
 
   var prodIds=(items||[]).map(function(i){return i.product_id;}).filter(Boolean);
@@ -1168,7 +1169,7 @@ async function applyCoupon(orderId){
   if(!res||res.ok===false){toast(res&&res.reason?res.reason:'Coupon rejected','error');return;}
 
   var discount=Number(res.discount||0);
-  var total=Math.max(0,subtotal-(order&&order.discount_amount||0)-discount);
+  var total=Math.max(0,subtotal-(order&&order.discount_amount||0)-discount-(order&&order.points_discount_rm||0));
   await sb.from('salesweb_customer_orders').update({coupon_code:code,coupon_discount:discount,total:total,updated_at:new Date().toISOString()}).eq('id',orderId);
   toast('Coupon applied: -RM '+fmtMYR(discount));
   viewOrder(orderId);
@@ -1796,11 +1797,13 @@ async function saveOrderItems(orderId){
       if(uErr){toast('Update failed: '+uErr.message,'error');return;}
     }
   }
-  // Recalculate total — preserve existing discount + coupon
+  // Recalculate total — preserve existing discount + coupon + points
+  // redemption so editing items doesn't silently wipe a checkout-time
+  // discount.
   var{data:freshItems}=await sb.from('salesweb_order_items').select('subtotal').eq('order_id',orderId);
   var subtotal=(freshItems||[]).reduce(function(s,r){return s+(Number(r.subtotal)||0);},0);
-  var{data:order}=await sb.from('salesweb_customer_orders').select('discount_amount,coupon_discount,status').eq('id',orderId).single();
-  var total=Math.max(0,subtotal-(order?.discount_amount||0)-(order?.coupon_discount||0));
+  var{data:order}=await sb.from('salesweb_customer_orders').select('discount_amount,coupon_discount,points_discount_rm,status').eq('id',orderId).single();
+  var total=Math.max(0,subtotal-(order?.discount_amount||0)-(order?.coupon_discount||0)-(order?.points_discount_rm||0));
   total=Math.round(total*100)/100;
   await sb.from('salesweb_customer_orders').update({total:total,updated_at:new Date().toISOString()}).eq('id',orderId);
   // Log to timeline

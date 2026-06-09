@@ -343,6 +343,13 @@ async function viewOrder(id){
   if(!order){toast('Order not found','error');return;}
   var{data:items}=await sb.from('salesweb_order_items').select('*').eq('order_id',id);
   items=items||[];
+  // Stacked admin-added discounts / coupons. Graceful empty array if the
+  // migration hasn't been applied yet so the modal still renders.
+  var adjustments=[];
+  try{
+    var{data:adjs}=await sb.from('salesweb_order_adjustments').select('*').eq('order_id',id).order('created_at',{ascending:true});
+    adjustments=adjs||[];
+  }catch(e){ adjustments=[]; }
 
   // Parse the structured pieces out of customer_remark so they can be shown
   // in the right place — billing fields in the Billing/E-Invoice card, the
@@ -570,9 +577,10 @@ async function viewOrder(id){
   html+='<div style="background:var(--bg);border-radius:10px;padding:.8rem 1rem;margin-bottom:1rem;">';
   html+='<div style="font-size:13px;font-weight:600;margin-bottom:.5rem;">Adjustments</div>';
 
-  // Show currently-applied discount with a delete affordance. The optional
-  // remarks (discount_note) sit on a second line so the reason for the
-  // adjustment is visible at a glance.
+  // Stack each adjustment as its own row. The single discount_amount /
+  // coupon_code columns on the order row capture the FIRST discount /
+  // coupon (set by checkout or the legacy single-slot admin flow); every
+  // additional one the admin stacks goes into salesweb_order_adjustments.
   if(Number(order.discount_amount||0) > 0){
     html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;padding:.4rem .6rem;background:#fff;border:1px solid var(--border);border-radius:6px;margin-bottom:.4rem;font-size:12px;">';
     html+='<div style="min-width:0;flex:1;">';
@@ -590,10 +598,29 @@ async function viewOrder(id){
     html+='<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 8px;color:var(--red);border-color:var(--red);" onclick="removeCoupon(\''+id+'\')">✕ Remove</button>';
     html+='</div>';
   }
+  adjustments.forEach(function(adj){
+    var aid=String(adj.id||'').replace(/[\\'"<>]/g,'');
+    if(adj.kind==='discount'){
+      html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;padding:.4rem .6rem;background:#fff;border:1px solid var(--border);border-radius:6px;margin-bottom:.4rem;font-size:12px;">';
+      html+='<div style="min-width:0;flex:1;">';
+      html+='<div><strong>Discount applied:</strong> -RM '+fmtMYR(adj.amount)+'</div>';
+      if(adj.note){
+        html+='<div style="margin-top:.2rem;color:var(--ink3);font-size:11px;"><em>Remarks: '+esc(adj.note)+'</em></div>';
+      }
+      html+='</div>';
+      html+='<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 8px;color:var(--red);border-color:var(--red);flex:none;" onclick="removeAdjustment(\''+aid+'\',\''+id+'\')">✕ Remove</button>';
+      html+='</div>';
+    } else if(adj.kind==='coupon'){
+      html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem .6rem;background:#fff;border:1px solid var(--border);border-radius:6px;margin-bottom:.4rem;font-size:12px;">';
+      html+='<span><strong>Coupon '+esc(adj.coupon_code||'')+':</strong> -RM '+fmtMYR(adj.amount)+'</span>';
+      html+='<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 8px;color:var(--red);border-color:var(--red);" onclick="removeAdjustment(\''+aid+'\',\''+id+'\')">✕ Remove</button>';
+      html+='</div>';
+    }
+  });
 
   html+='<div style="display:flex;gap:.5rem;flex-wrap:wrap;">';
-  html+='<button class="btn btn-outline btn-sm" onclick="var el=document.getElementById(\'mo-discount-panel\');el.style.display=el.style.display===\'none\'?\'flex\':\'none\';" style="font-size:11px;">Set Discount</button>';
-  html+='<button class="btn btn-outline btn-sm" onclick="var el=document.getElementById(\'mo-coupon-panel\');el.style.display=el.style.display===\'none\'?\'flex\':\'none\';" style="font-size:11px;">Apply Coupon</button>';
+  html+='<button class="btn btn-outline btn-sm" onclick="var el=document.getElementById(\'mo-discount-panel\');el.style.display=el.style.display===\'none\'?\'flex\':\'none\';" style="font-size:11px;">+ Add Discount</button>';
+  html+='<button class="btn btn-outline btn-sm" onclick="var el=document.getElementById(\'mo-coupon-panel\');el.style.display=el.style.display===\'none\'?\'flex\':\'none\';" style="font-size:11px;">+ Add Coupon</button>';
   html+='</div>';
 
   // Discount panel — RM/% toggle determines how the typed value is
@@ -1064,14 +1091,37 @@ function setDiscountMode(mode){
   if(inp){ inp.placeholder = (_moDiscountMode === 'pct') ? '% off subtotal' : 'Amount (RM)'; }
 }
 
+// Single source of truth for "what is this order's total?". Reads items
+// subtotal + every known discount source (single discount_amount, single
+// coupon_discount, stacked salesweb_order_adjustments rows, points
+// redemption) and persists the result back to salesweb_customer_orders.
+async function _recomputeOrderTotal(orderId){
+  var{data:items}=await sb.from('salesweb_order_items').select('subtotal').eq('order_id',orderId);
+  var subtotal=(items||[]).reduce(function(s,i){return s+(Number(i.subtotal)||0);},0);
+  var{data:order}=await sb.from('salesweb_customer_orders').select('discount_amount,coupon_discount,points_discount_rm').eq('id',orderId).single();
+  var stacked=0;
+  try{
+    var{data:adjs}=await sb.from('salesweb_order_adjustments').select('amount').eq('order_id',orderId);
+    stacked=(adjs||[]).reduce(function(s,a){return s+(Number(a.amount)||0);},0);
+  }catch(e){ /* migration not applied yet → treat as no stacked adjustments */ }
+  var total=Math.max(0, subtotal
+    - (order&&order.discount_amount||0)
+    - (order&&order.coupon_discount||0)
+    - stacked
+    - (order&&order.points_discount_rm||0));
+  total=Math.round(total*100)/100;
+  await sb.from('salesweb_customer_orders').update({total:total,updated_at:new Date().toISOString()}).eq('id',orderId);
+  return total;
+}
+
 async function addDiscount(orderId, subtotalHint){
   var raw = parseFloat(document.getElementById('mo-discount').value) || 0;
   if(raw < 0){ toast('Discount must be ≥ 0','error'); return; }
   var noteEl = document.getElementById('mo-discount-note');
   var note = noteEl ? (noteEl.value || '').trim().slice(0,200) : '';
-  // % is converted to a flat RM amount at the point of saving so all
-  // downstream consumers (totals breakdown, customer portal, proforma email)
-  // continue to read a single source of truth from discount_amount.
+  // % is interpreted against the items subtotal and saved as a flat RM
+  // amount so all downstream consumers (totals breakdown, customer portal,
+  // proforma email) keep reading a single source of truth.
   var amt = raw;
   if(_moDiscountMode === 'pct'){
     if(raw > 100){ toast('Percentage must be ≤ 100','error'); return; }
@@ -1082,20 +1132,30 @@ async function addDiscount(orderId, subtotalHint){
     }
     amt = Math.round(subtotal * raw) / 100;
   }
-  // Persist the note alongside the amount; degrade gracefully if the
-  // discount_note column hasn't been added yet on this Supabase.
-  var upd = {discount_amount:amt, discount_note: note || null, updated_at:new Date().toISOString()};
-  var r = await sb.from('salesweb_customer_orders').update(upd).eq('id',orderId);
-  if(r && r.error && /discount_note/i.test(r.error.message||'')){
-    await sb.from('salesweb_customer_orders').update({discount_amount:amt,updated_at:new Date().toISOString()}).eq('id',orderId);
+  if(amt <= 0){ toast('Discount must be > 0','error'); return; }
+  // First discount fills the single discount_amount/discount_note slot on
+  // the order row (back-compat with the legacy single-slot UI). Every
+  // additional one stacks into salesweb_order_adjustments.
+  var{data:cur}=await sb.from('salesweb_customer_orders').select('discount_amount').eq('id',orderId).maybeSingle();
+  var hasFirst = Number(cur&&cur.discount_amount||0) > 0;
+  if(!hasFirst){
+    var upd = {discount_amount:amt, discount_note: note || null, updated_at:new Date().toISOString()};
+    var r = await sb.from('salesweb_customer_orders').update(upd).eq('id',orderId);
+    if(r && r.error && /discount_note/i.test(r.error.message||'')){
+      await sb.from('salesweb_customer_orders').update({discount_amount:amt,updated_at:new Date().toISOString()}).eq('id',orderId);
+    }
+  } else {
+    var{error:insErr}=await sb.from('salesweb_order_adjustments').insert([{order_id:orderId, kind:'discount', amount:amt, note: note || null}]);
+    if(insErr){
+      if(/relation .* does not exist|salesweb_order_adjustments/i.test(insErr.message||'')){
+        toast('Run the order_adjustments.sql migration to stack more discounts','error');
+      } else {
+        toast('Failed to add discount: '+insErr.message,'error');
+      }
+      return;
+    }
   }
-  // Recalc total — preserve coupon_discount and points_discount_rm so a
-  // checkout-time voucher / points redemption isn't silently wiped.
-  var{data:items2}=await sb.from('salesweb_order_items').select('subtotal').eq('order_id',orderId);
-  var{data:order}=await sb.from('salesweb_customer_orders').select('coupon_discount,points_discount_rm').eq('id',orderId).single();
-  var sub2=(items2||[]).reduce(function(s,i){return s+(i.subtotal||0);},0);
-  var total=Math.max(0, sub2 - amt - (order && order.coupon_discount || 0) - (order && order.points_discount_rm || 0));
-  await sb.from('salesweb_customer_orders').update({total:total}).eq('id',orderId);
+  await _recomputeOrderTotal(orderId);
   toast('Discount applied: RM '+fmtMYR(amt) + (_moDiscountMode==='pct' ? ' ('+raw+'%)' : ''));
   viewOrder(orderId);
 }
@@ -1104,34 +1164,35 @@ async function addDiscount(orderId, subtotalHint){
 // also applied. Keeps the coupon untouched and recomputes the total.
 async function removeDiscount(orderId){
   if(!confirm('Remove the discount from this order?')) return;
-  // Clear both the amount and the remarks; fall back to amount-only on a
-  // schema that hasn't been migrated yet.
   var r = await sb.from('salesweb_customer_orders').update({discount_amount:0, discount_note:null, updated_at:new Date().toISOString()}).eq('id',orderId);
   if(r && r.error && /discount_note/i.test(r.error.message||'')){
     await sb.from('salesweb_customer_orders').update({discount_amount:0,updated_at:new Date().toISOString()}).eq('id',orderId);
   }
-  var{data:items}=await sb.from('salesweb_order_items').select('subtotal').eq('order_id',orderId);
-  var{data:order}=await sb.from('salesweb_customer_orders').select('coupon_discount,points_discount_rm').eq('id',orderId).single();
-  var subtotal=(items||[]).reduce(function(s,i){return s+(i.subtotal||0);},0);
-  var total=Math.max(0, subtotal - (order && order.coupon_discount || 0) - (order && order.points_discount_rm || 0));
-  await sb.from('salesweb_customer_orders').update({total:total}).eq('id',orderId);
+  await _recomputeOrderTotal(orderId);
   toast('Discount removed');
   viewOrder(orderId);
 }
 
 // Removes an applied coupon, clearing both the code and the recorded
-// coupon_discount. Recomputes total against whatever flat discount remains.
+// coupon_discount. Recomputes total against whatever else remains.
 async function removeCoupon(orderId){
   if(!confirm('Remove the coupon from this order?')) return;
   await sb.from('salesweb_customer_orders')
     .update({coupon_code:null, coupon_discount:0, updated_at:new Date().toISOString()})
     .eq('id',orderId);
-  var{data:items}=await sb.from('salesweb_order_items').select('subtotal').eq('order_id',orderId);
-  var{data:order}=await sb.from('salesweb_customer_orders').select('discount_amount,points_discount_rm').eq('id',orderId).single();
-  var subtotal=(items||[]).reduce(function(s,i){return s+(i.subtotal||0);},0);
-  var total=Math.max(0, subtotal - (order && order.discount_amount || 0) - (order && order.points_discount_rm || 0));
-  await sb.from('salesweb_customer_orders').update({total:total}).eq('id',orderId);
+  await _recomputeOrderTotal(orderId);
   toast('Coupon removed');
+  viewOrder(orderId);
+}
+
+// Removes a stacked adjustment row (additional discount/coupon).
+async function removeAdjustment(adjId, orderId){
+  if(!adjId) return;
+  if(!confirm('Remove this adjustment from the order?')) return;
+  var{error}=await sb.from('salesweb_order_adjustments').delete().eq('id',adjId);
+  if(error){ toast('Remove failed: '+error.message,'error'); return; }
+  await _recomputeOrderTotal(orderId);
+  toast('Adjustment removed');
   viewOrder(orderId);
 }
 
@@ -1169,8 +1230,25 @@ async function applyCoupon(orderId){
   if(!res||res.ok===false){toast(res&&res.reason?res.reason:'Coupon rejected','error');return;}
 
   var discount=Number(res.discount||0);
-  var total=Math.max(0,subtotal-(order&&order.discount_amount||0)-discount-(order&&order.points_discount_rm||0));
-  await sb.from('salesweb_customer_orders').update({coupon_code:code,coupon_discount:discount,total:total,updated_at:new Date().toISOString()}).eq('id',orderId);
+  // First coupon fills the single coupon_code/coupon_discount slot on the
+  // order row (back-compat with the legacy single-slot UI). Every
+  // additional one stacks into salesweb_order_adjustments.
+  var{data:cur}=await sb.from('salesweb_customer_orders').select('coupon_code').eq('id',orderId).maybeSingle();
+  var hasFirst = !!(cur && cur.coupon_code);
+  if(!hasFirst){
+    await sb.from('salesweb_customer_orders').update({coupon_code:code,coupon_discount:discount,updated_at:new Date().toISOString()}).eq('id',orderId);
+  } else {
+    var{error:insErr}=await sb.from('salesweb_order_adjustments').insert([{order_id:orderId, kind:'coupon', amount:discount, coupon_code:code}]);
+    if(insErr){
+      if(/relation .* does not exist|salesweb_order_adjustments/i.test(insErr.message||'')){
+        toast('Run the order_adjustments.sql migration to stack more coupons','error');
+      } else {
+        toast('Failed to add coupon: '+insErr.message,'error');
+      }
+      return;
+    }
+  }
+  await _recomputeOrderTotal(orderId);
   toast('Coupon applied: -RM '+fmtMYR(discount));
   viewOrder(orderId);
 }
@@ -1797,15 +1875,14 @@ async function saveOrderItems(orderId){
       if(uErr){toast('Update failed: '+uErr.message,'error');return;}
     }
   }
-  // Recalculate total — preserve existing discount + coupon + points
-  // redemption so editing items doesn't silently wipe a checkout-time
-  // discount.
+  // Recalculate total via the shared helper — preserves the single
+  // discount_amount / coupon_discount slots, every stacked adjustment, and
+  // points_discount_rm in one place so editing items can never silently
+  // wipe a discount.
   var{data:freshItems}=await sb.from('salesweb_order_items').select('subtotal').eq('order_id',orderId);
   var subtotal=(freshItems||[]).reduce(function(s,r){return s+(Number(r.subtotal)||0);},0);
-  var{data:order}=await sb.from('salesweb_customer_orders').select('discount_amount,coupon_discount,points_discount_rm,status').eq('id',orderId).single();
-  var total=Math.max(0,subtotal-(order?.discount_amount||0)-(order?.coupon_discount||0)-(order?.points_discount_rm||0));
-  total=Math.round(total*100)/100;
-  await sb.from('salesweb_customer_orders').update({total:total,updated_at:new Date().toISOString()}).eq('id',orderId);
+  var{data:order}=await sb.from('salesweb_customer_orders').select('status').eq('id',orderId).single();
+  var total=await _recomputeOrderTotal(orderId);
   // Log to timeline
   var session=await sb.auth.getSession();
   var user=session?.data?.session?.user?.email||'admin';

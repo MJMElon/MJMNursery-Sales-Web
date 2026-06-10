@@ -160,12 +160,21 @@ async function bulkDeleteOrders(){
   var{error}=await sb.from('salesweb_customer_orders').update({status:'Cancelled'}).in('id',ids);
   if(error){toast('Error: '+error.message,'error');return;}
   // Audit trail per order — best-effort, doesn't block the toast.
+  var who='admin';
   try{
     var sess=await sb.auth.getSession();
-    var who=(sess&&sess.data&&sess.data.session&&sess.data.session.user&&sess.data.session.user.email)||'admin';
+    who=(sess&&sess.data&&sess.data.session&&sess.data.session.user&&sess.data.session.user.email)||'admin';
     var rows=ids.map(function(id){ return {order_id:id, status:'Cancelled', note:'Bulk cancel via admin Orders', changed_by:who}; });
     await sb.from('salesweb_order_timeline').insert(rows);
   }catch(e){ /* timeline insert is best-effort */ }
+
+  // Sync each cancelled order to its linked AL (cancel-AL when nothing
+  // collected, or stamp the uncollected qty when there's partial collection).
+  // Best-effort per order — one failure doesn't block the rest.
+  for(var k=0;k<ids.length;k++){
+    try{ await _propagateOrderCancelToAL(ids[k], who); }
+    catch(propErr){ console.warn('AL-link propagation failed for', ids[k], propErr); }
+  }
   toast(ids.length+' order'+(ids.length>1?'s':'')+' cancelled');
   clearOrderSelection();
   loadOrders();
@@ -1076,7 +1085,67 @@ async function confirmCancelWithRestore(orderId,oldStatus,itemCount){
 
   closeModal('modal-cancel-stock');
   toast('Order cancelled'+(restoreNotes.length?' — stock restored':''));
+
+  // Sync the cancellation to the linked AL in the AI system. Full cancel
+  // (nothing collected yet) → cancel the AL too. Partial collection →
+  // leave the AL alone but stamp the order with the uncollected qty.
+  // Best-effort: any failure here is logged but doesn't break the cancel.
+  try { await _propagateOrderCancelToAL(orderId, user); }
+  catch(propErr) { console.warn('AL-link propagation failed:', propErr); }
+
   viewOrder(orderId);
+}
+
+// Shared helper: when a sales-web order is cancelled, sync to its linked
+// AL in the AI system. Looks up the AL by al_number = order_number.
+//   - If nothing has been collected against the AL yet (qty_ordered === balance)
+//     → cancel the AL too so the AI system / Mobile flows hide it.
+//   - If there's already been partial collection → leave the AL active
+//     (the customer may still come back for what they did collect) but
+//     stamp the order with "Cancelled order uncollected seedlings : N" so
+//     the uncollected qty is on the record for traceability.
+async function _propagateOrderCancelToAL(orderId, user){
+  var{data:orderRow}=await sb.from('salesweb_customer_orders')
+    .select('order_number, customer_remark')
+    .eq('id', orderId).maybeSingle();
+  if(!orderRow || !orderRow.order_number) return;
+
+  var{data:alRow}=await sb.from('shared_al_orders')
+    .select('id, al_number, quantity_ordered, balance_quantity, status, remark')
+    .eq('al_number', orderRow.order_number).maybeSingle();
+  if(!alRow || alRow.status === 'Cancelled') return;
+
+  var qtyOrd  = Number(alRow.quantity_ordered) || 0;
+  var balance = Number(alRow.balance_quantity) || 0;
+  var collected = Math.max(0, qtyOrd - balance);
+  var nowIso = new Date().toISOString();
+
+  if(collected === 0){
+    await sb.from('shared_al_orders').update({
+      status: 'Cancelled',
+      remark: '[CANCELLED] Auto-cancelled when Sales Web Order ' + orderRow.order_number + ' was cancelled'
+    }).eq('id', alRow.id);
+    try {
+      await sb.from('salesweb_order_timeline').insert([{
+        order_id: orderId, status: 'Cancelled',
+        note: 'Linked AL ' + alRow.al_number + ' also auto-cancelled (no collections recorded).',
+        changed_by: user
+      }]);
+    } catch(e){}
+  } else {
+    var stamp = 'Cancelled order uncollected seedlings : ' + balance.toLocaleString();
+    var newRemark = (orderRow.customer_remark ? orderRow.customer_remark + ' | ' : '') + stamp;
+    await sb.from('salesweb_customer_orders').update({
+      customer_remark: newRemark, updated_at: nowIso
+    }).eq('id', orderId);
+    try {
+      await sb.from('salesweb_order_timeline').insert([{
+        order_id: orderId, status: 'Cancelled',
+        note: stamp + ' (AL ' + alRow.al_number + ' kept active — ' + collected.toLocaleString() + ' already collected, ' + balance.toLocaleString() + ' uncollected at cancel time).',
+        changed_by: user
+      }]);
+    } catch(e){}
+  }
 }
 
 // ═══════════════════════════════════════

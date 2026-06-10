@@ -2700,9 +2700,9 @@ function renderQuotation(){
   var rows = cartItems.map(function(c, i){
     var line = (c.price || 0) * (c.qty || 0);
     subtotal += line;
-    // c.name is canonical ("Name — Month Year"); legacy cart items may still need the suffix.
+    // c.name is canonical ("Name - Month Year"); legacy cart items may still need the suffix.
     var hasMonth = c.month && c.name && c.name.indexOf(c.month) !== -1;
-    var label = (c.name || '—') + (c.month && !hasMonth ? ' — ' + c.month : '');
+    var label = (c.name || '—') + (c.month && !hasMonth ? ' - ' + c.month : '');
     var shade = (i % 2 === 1) ? 'background:#faf9f4;' : '';
     return '<tr style="'+shade+'">'+
       '<td style="'+bcell+'text-align:center;color:var(--text-mid);">'+(i+1)+'</td>'+
@@ -2718,7 +2718,7 @@ function renderQuotation(){
     '<div class="quote-doc" id="quote-doc">'+
       '<div class="quote-doc-head">'+
         '<div>'+
-          '<div class="qd-brand">MJM <em>Nursery</em></div>'+
+          '<div class="qd-brand"><img src="https://cdn.store-assets.com/s/1408881/f/16655641.png" alt="MJM Nursery" style="height:64px;width:auto;display:block;"></div>'+
           '<div style="font-size:11px;color:var(--text-light);margin-top:.4rem;line-height:1.6;">MEGA JUTAMAS SDN BHD (663951-U)<br>2ND Floor (B), Lot 1180, Bangunan BEI, Lorong Dua, Krokop,<br>P.O. Box 163, 98007 Miri, Sarawak.<br>Tel: 085-419907 · Fax: 085-413264</div>'+
         '</div>'+
         '<div class="qd-meta">'+

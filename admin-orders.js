@@ -297,11 +297,19 @@ async function loadOrders(){
     var totalRM = Number(o.total||0);
     var paidRM = Number(o.amount_paid||0);
     var balRM = Math.max(0, totalRM - paidRM);
-    var totalCell = 'RM ' + fmtMYR(totalRM);
-    if(orderFullyPaid(o)){
-      if(totalRM > 0) totalCell += '<div style="font-size:10px;color:var(--green);font-weight:600;margin-top:2px;">Paid in full</div>';
-    } else if(paidRM > 0 && paidRM < totalRM){
-      totalCell += '<div style="font-size:10px;color:#a16207;font-weight:600;margin-top:2px;">Paid RM '+fmtMYR(paidRM)+' · Bal RM '+fmtMYR(balRM)+'</div>';
+    // Cancelled orders carry a red, struck-through total so the row reads
+    // as voided at a glance — matching the red status badge.
+    var isCancelled = (o.status === 'Cancelled');
+    var totalCell;
+    if(isCancelled){
+      totalCell = '<span style="color:var(--red);text-decoration:line-through;">RM '+fmtMYR(totalRM)+'</span>';
+    } else {
+      totalCell = 'RM ' + fmtMYR(totalRM);
+      if(orderFullyPaid(o)){
+        if(totalRM > 0) totalCell += '<div style="font-size:10px;color:var(--green);font-weight:600;margin-top:2px;">Paid in full</div>';
+      } else if(paidRM > 0 && paidRM < totalRM){
+        totalCell += '<div style="font-size:10px;color:#a16207;font-weight:600;margin-top:2px;">Paid RM '+fmtMYR(paidRM)+' · Bal RM '+fmtMYR(balRM)+'</div>';
+      }
     }
     var custIdJs=String(o.customer_id||'').replace(/[\\'"<>]/g,'');
     // Customer name links to the profile modal when the order is tied to a
@@ -316,9 +324,10 @@ async function loadOrders(){
     if(o.billing_name && o.billing_name !== o.customer_name){
       billingLine = '<div style="font-size:11px;color:var(--ink4);">'+esc(o.billing_name)+'</div>';
     }
+    var orderIdStyle = 'font-weight:600;white-space:nowrap;' + (isCancelled ? 'color:var(--red);' : '');
     html+='<tr onclick="viewOrder(\''+idJs+'\')" style="cursor:pointer;">'+
       '<td style="text-align:center;" onclick="event.stopPropagation();"><input type="checkbox" class="order-select" value="'+idJs+'" onclick="event.stopPropagation();onOrderSelectChange();"></td>'+
-      '<td style="font-weight:600;white-space:nowrap;">'+channelIcon(o.channel)+'#'+esc(shortId)+'</td>'+
+      '<td style="'+orderIdStyle+'">'+channelIcon(o.channel)+'#'+esc(shortId)+'</td>'+
       '<td style="font-size:12px;">'+fmtDate(o.created_at)+'</td>'+
       '<td>'+custNameCell+billingLine+'</td>'+
       '<td>'+termsBadge+'</td>'+

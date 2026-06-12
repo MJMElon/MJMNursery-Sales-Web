@@ -1957,14 +1957,51 @@ async function saveOrderItems(orderId){
   // discount_amount / coupon_discount slots, every stacked adjustment, and
   // points_discount_rm in one place so editing items can never silently
   // wipe a discount.
-  var{data:freshItems}=await sb.from('salesweb_order_items').select('subtotal').eq('order_id',orderId);
+  var{data:freshItems}=await sb.from('salesweb_order_items').select('quantity,subtotal,product_name').eq('order_id',orderId);
   var subtotal=(freshItems||[]).reduce(function(s,r){return s+(Number(r.subtotal)||0);},0);
-  var{data:order}=await sb.from('salesweb_customer_orders').select('status').eq('id',orderId).single();
+  var newQty   =(freshItems||[]).reduce(function(s,r){return s+(Number(r.quantity)||0);},0);
+  var{data:order}=await sb.from('salesweb_customer_orders').select('status,order_number').eq('id',orderId).single();
   var total=await _recomputeOrderTotal(orderId);
+
+  // Sync the AL row in the nursery ledger so its ORDER QTY / BALANCE stay
+  // in lockstep with the order. Preserve already-collected quantity by
+  // computing balance = new_qty − collected (collected = old_qty − old_bal).
+  // Best-effort: failures here are surfaced in the timeline but don't
+  // block the items save itself.
+  var alSyncNote = null;
+  if(order && order.order_number){
+    try{
+      var{data:alRow}=await sb.from('shared_al_orders')
+        .select('id,quantity_ordered,balance_quantity,product_name')
+        .eq('al_number', order.order_number).maybeSingle();
+      if(alRow){
+        var oldQty  = Number(alRow.quantity_ordered)||0;
+        var oldBal  = Number(alRow.balance_quantity)||0;
+        var collected = Math.max(0, oldQty - oldBal);
+        var newBal  = Math.max(0, newQty - collected);
+        var newProductNames = (freshItems||[]).map(function(r){return r.product_name;}).filter(Boolean).join(', ') || alRow.product_name;
+        var newUnit = newQty>0 ? Math.round((total/newQty)*100)/100 : 0;
+        var{error:alUpdErr}=await sb.from('shared_al_orders').update({
+          quantity_ordered: newQty,
+          balance_quantity: newBal,
+          product_name:     newProductNames,
+          price_per_unit:   newUnit
+        }).eq('id', alRow.id);
+        if(alUpdErr){
+          alSyncNote = 'AL ledger sync failed: ' + alUpdErr.message;
+        } else {
+          alSyncNote = 'AL ledger synced — new ORDER QTY ' + newQty.toLocaleString() + ', balance ' + newBal.toLocaleString() + ' (collected ' + collected.toLocaleString() + ' preserved)';
+        }
+      }
+    }catch(e){ alSyncNote = 'AL ledger sync threw: ' + (e&&e.message||e); }
+  }
+
   // Log to timeline
   var session=await sb.auth.getSession();
   var user=session?.data?.session?.user?.email||'admin';
-  await sb.from('salesweb_order_timeline').insert([{order_id:orderId,status:order?.status||'Updated',note:'Order items edited — new subtotal RM '+subtotal.toFixed(2)+', new total RM '+total.toFixed(2),changed_by:user}]);
+  var tlNote = 'Order items edited — new subtotal RM '+subtotal.toFixed(2)+', new total RM '+total.toFixed(2)+', new qty '+newQty.toLocaleString();
+  if(alSyncNote) tlNote += ' · ' + alSyncNote;
+  await sb.from('salesweb_order_timeline').insert([{order_id:orderId,status:order?.status||'Updated',note:tlNote,changed_by:user}]);
   window._editItems=null;
   toast('Items saved');
   viewOrder(orderId);

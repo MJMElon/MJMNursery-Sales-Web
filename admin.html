@@ -312,6 +312,10 @@ input,select,textarea,button{font-family:inherit;}
         <span class="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span>
         <span>Orders</span>
       </div>
+      <div class="sb-item" id="sb-reports-item" onclick="switchTab('reports',this)">
+        <span class="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="13" width="3" height="5"/><rect x="12" y="9" width="3" height="9"/><rect x="17" y="5" width="3" height="13"/></svg></span>
+        <span>Reports</span>
+      </div>
       <div class="sb-item" id="sb-customers-parent" onclick="toggleSbSub('customers')">
         <span class="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
         <span>Customers</span>
@@ -509,6 +513,29 @@ input,select,textarea,button{font-family:inherit;}
         <button class="btn btn-primary" onclick="applyCustomerFilters()">Apply</button>
       </div>
     </aside>
+
+    <!-- REPORTS -->
+    <div class="tab-content" id="tab-reports">
+      <div class="main-header"><div class="main-title">Reports</div></div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:.9rem 1rem;margin-bottom:1rem;">
+        <div style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;">
+          <span style="font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-right:.3rem;">Date Range</span>
+          <button class="btn btn-sm" id="rpt-preset-today"      onclick="applyReportPreset('today')"      style="font-size:11px;padding:5px 10px;border:1px solid var(--border);">Today</button>
+          <button class="btn btn-sm" id="rpt-preset-last_7"     onclick="applyReportPreset('last_7')"     style="font-size:11px;padding:5px 10px;border:1px solid var(--border);">Last 7 Days</button>
+          <button class="btn btn-sm" id="rpt-preset-last_30"    onclick="applyReportPreset('last_30')"    style="font-size:11px;padding:5px 10px;border:1px solid var(--border);">Last 30 Days</button>
+          <button class="btn btn-sm" id="rpt-preset-this_month" onclick="applyReportPreset('this_month')" style="font-size:11px;padding:5px 10px;border:1px solid var(--border);">This Month</button>
+          <button class="btn btn-sm" id="rpt-preset-last_month" onclick="applyReportPreset('last_month')" style="font-size:11px;padding:5px 10px;border:1px solid var(--border);">Last Month</button>
+          <button class="btn btn-sm" id="rpt-preset-this_year"  onclick="applyReportPreset('this_year')"  style="font-size:11px;padding:5px 10px;border:1px solid var(--border);">This Year</button>
+          <button class="btn btn-sm" id="rpt-preset-all_time"   onclick="applyReportPreset('all_time')"   style="font-size:11px;padding:5px 10px;border:1px solid var(--border);">All Time</button>
+          <span style="margin-left:.6rem;font-size:11px;color:var(--ink4);">Custom:</span>
+          <input id="rpt-from" type="date" class="form-input" style="font-size:12px;padding:5px 8px;width:140px;">
+          <span style="font-size:11px;color:var(--ink4);">→</span>
+          <input id="rpt-to"   type="date" class="form-input" style="font-size:12px;padding:5px 8px;width:140px;">
+          <button class="btn btn-primary btn-sm" onclick="applyReportRange()" style="font-size:11px;">Apply</button>
+        </div>
+      </div>
+      <div id="reports-body"><div class="loading">Pick a date range above.</div></div>
+    </div>
 
     <!-- CUSTOMERS -->
     <div class="tab-content" id="tab-customers">
@@ -1354,7 +1381,7 @@ async function checkAdmin(){
 
 // Set of tabs that exist in the salesweb admin. Update both sides if you
 // add a new tab — the sidebar id pattern is sb-<key>-item.
-var SALESWEB_TAB_KEYS = ['orders','customers','products','payments','promos','coupons','webdesign','settings','users'];
+var SALESWEB_TAB_KEYS = ['orders','reports','customers','products','payments','promos','coupons','webdesign','settings','users'];
 
 function canSeeTab(key){
   if (key === 'users') return !!window.__SW_IS_ADMIN__;     // User Access is admin-locked
@@ -1405,6 +1432,7 @@ function switchTab(tab,el){
   document.getElementById('tab-'+tab).classList.add('active');
   if(el)el.classList.add('active');
   if(tab==='orders')loadOrders();
+  if(tab==='reports')loadReports();
   if(tab==='customers')loadCustomers();
   if(tab==='products')loadProducts();
   if(tab==='payments')loadPayments();
@@ -1677,6 +1705,7 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 
 <script src="admin-orders.js?v=2026-06-09-cancelled-style"></script>
+<script src="admin-reports.js?v=2026-06-12-reports"></script>
 <script src="admin-customers.js?v=2026-05-28-customer-groups"></script>
 <script src="admin-products.js?v=2026-05-18-points-ledger"></script>
 <script src="admin-payments.js?v=2026-05-20-payment-verification"></script>

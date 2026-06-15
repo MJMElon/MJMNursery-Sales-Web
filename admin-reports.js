@@ -6,20 +6,18 @@
 // range (defaults: this month). Cancelled orders are excluded from every
 // money/quantity total — they reflect orders the business didn't fulfil.
 //
-// Sections, matching the EasyStore-style report:
-//   • Headline tiles (Gross/Net sales, Orders, Avg Order Value, Units,
+// Layout:
+//   • Headline tiles (Gross/Net sales, Discounts, Orders, AOV, Units,
 //     Unique Customers, Avg Selling Price)
-//   • Sales by Channel
-//   • Sales by Payment Terms
-//   • Sales by Payment Status
-//   • New vs Repeat Customer split
-//   • Top Products by Revenue / by Units Sold
-//   • Top Customers
-//   • Monthly Breakdown — orders / revenue / units / Avg Selling Price
+//   • Time-series LINE CHARTS for Gross Sales, Net Sales, Orders, AOV
+//   • Horizontal BAR CHARTS for Sales by Channel / Payment Terms /
+//     Payment Status / Customer Type
+//   • Tables for Top Products (revenue + units), Top Customers,
+//     Monthly Breakdown (with Avg Selling Price per month + Export CSV)
 //
-// The date-range filter has presets (Today, 7d, 30d, This Month, This
-// Year, All time) and From/To inputs. Export CSV writes the monthly
-// breakdown to a downloadable CSV.
+// Each chart card carries a "View more" button → opens a modal with the
+// underlying detail rows (daily breakdown for line charts, per-order
+// detail for the categorical bars).
 
 var _rpt = {
   from: null,
@@ -27,8 +25,7 @@ var _rpt = {
   preset: 'this_month',
   orders: [],
   items: [],
-  productsById: {},
-  customerLifetime: {}   // customer_id → earliest paid order date
+  customerLifetime: {}
 };
 
 function _rptFmtMYR(n){
@@ -36,6 +33,12 @@ function _rptFmtMYR(n){
 }
 function _rptFmtInt(n){
   return (Number(n)||0).toLocaleString('en-MY');
+}
+function _rptShortNum(n){
+  n = Number(n)||0;
+  if(n >= 1e6) return (n/1e6).toFixed(1).replace(/\.0$/,'')+'M';
+  if(n >= 1e3) return (n/1e3).toFixed(1).replace(/\.0$/,'')+'k';
+  return n.toFixed(0);
 }
 function _rptYmd(d){
   if(!d) return '';
@@ -49,43 +52,26 @@ function _rptParseYmd(s){
   return new Date(Number(m[1]), Number(m[2])-1, Number(m[3]), 0, 0, 0, 0);
 }
 
-// Compute the From/To pair for a preset key. End-of-day for `to` so the
-// filter is inclusive of orders placed late on the chosen day.
 function _rptPresetRange(key){
   var now = new Date();
   var startOfDay = function(d){ d.setHours(0,0,0,0); return d; };
   var endOfDay   = function(d){ d.setHours(23,59,59,999); return d; };
   var from, to = endOfDay(new Date(now));
   switch(key){
-    case 'today':
-      from = startOfDay(new Date(now));
-      break;
-    case 'last_7':
-      from = startOfDay(new Date(now.getTime() - 6*86400000));
-      break;
-    case 'last_30':
-      from = startOfDay(new Date(now.getTime() - 29*86400000));
-      break;
-    case 'this_month':
-      from = startOfDay(new Date(now.getFullYear(), now.getMonth(), 1));
-      break;
+    case 'today':       from = startOfDay(new Date(now)); break;
+    case 'last_7':      from = startOfDay(new Date(now.getTime() - 6*86400000)); break;
+    case 'last_30':     from = startOfDay(new Date(now.getTime() - 29*86400000)); break;
+    case 'this_month':  from = startOfDay(new Date(now.getFullYear(), now.getMonth(), 1)); break;
     case 'last_month':
       from = startOfDay(new Date(now.getFullYear(), now.getMonth()-1, 1));
-      to   = endOfDay(new Date(now.getFullYear(), now.getMonth(), 0));
-      break;
-    case 'this_year':
-      from = startOfDay(new Date(now.getFullYear(), 0, 1));
-      break;
-    case 'all_time':
-      from = new Date(2020, 0, 1);
-      break;
-    default:
-      from = startOfDay(new Date(now.getFullYear(), now.getMonth(), 1));
+      to   = endOfDay(new Date(now.getFullYear(), now.getMonth(), 0)); break;
+    case 'this_year':   from = startOfDay(new Date(now.getFullYear(), 0, 1)); break;
+    case 'all_time':    from = new Date(2020, 0, 1); break;
+    default:            from = startOfDay(new Date(now.getFullYear(), now.getMonth(), 1));
   }
   return {from:from, to:to};
 }
 
-// Entry point — wires the preset to the date inputs and loads data.
 async function loadReports(){
   if(!_rpt.from){
     var r = _rptPresetRange(_rpt.preset);
@@ -117,7 +103,6 @@ function applyReportPreset(key){
   loadReports();
 }
 
-// Custom From/To handler — clicks "Apply" after typing custom dates.
 function applyReportRange(){
   var f = _rptParseYmd(document.getElementById('rpt-from').value);
   var t = _rptParseYmd(document.getElementById('rpt-to').value);
@@ -136,8 +121,6 @@ async function _rptFetchData(){
   var fromIso = _rpt.from.toISOString();
   var toIso   = _rpt.to.toISOString();
 
-  // Orders in range — exclude cancelled at query time (the SQL is small,
-  // the JS aggregation stays linear).
   var{data:orders, error:oErr} = await sb.from('salesweb_customer_orders')
     .select('id,order_number,customer_id,customer_name,customer_email,total,channel,payment_terms,status,discount_amount,coupon_discount,coupon_code,points_discount_rm,amount_paid,created_at')
     .gte('created_at', fromIso)
@@ -147,7 +130,6 @@ async function _rptFetchData(){
   orders = (orders||[]).filter(function(o){ return o.status !== 'Cancelled'; });
   _rpt.orders = orders;
 
-  // Items belonging to those orders.
   var ids = orders.map(function(o){return o.id;});
   var items = [];
   if(ids.length){
@@ -162,10 +144,6 @@ async function _rptFetchData(){
   }
   _rpt.items = items;
 
-  // New vs Repeat customer split — look at each customer's earliest
-  // non-cancelled order ever; if that earliest order falls inside the
-  // range, this is a "new" customer; otherwise repeat. Guest orders
-  // (no customer_id) bucket into "new".
   var custIds = Array.from(new Set(orders.map(function(o){return o.customer_id;}).filter(Boolean)));
   _rpt.customerLifetime = {};
   if(custIds.length){
@@ -185,6 +163,187 @@ async function _rptFetchData(){
   }
 }
 
+// ─── SVG CHART HELPERS ─────────────────────────────────────────────
+
+// Compact line chart. `daily` is [{label, value}] already pre-aggregated.
+function _rptSvgLineChart(daily, opts){
+  opts = opts || {};
+  var w = 460, h = 130;
+  var pad = {l: 40, r: 10, t: 10, b: 22};
+  if(!daily || !daily.length){
+    return '<div style="color:var(--ink4);font-size:12px;text-align:center;padding:1.5rem 0;">No data in this range.</div>';
+  }
+  var n = daily.length;
+  var maxV = Math.max.apply(null, daily.map(function(d){return Number(d.value)||0;}));
+  if(maxV <= 0) maxV = 1;
+  var pts = daily.map(function(d, i){
+    var x = pad.l + (n>1 ? (w - pad.l - pad.r) * i / (n-1) : (w - pad.l - pad.r)/2);
+    var y = pad.t + (h - pad.t - pad.b) * (1 - (Number(d.value)||0)/maxV);
+    return [x, y];
+  });
+  var linePath = 'M ' + pts.map(function(p){return p[0].toFixed(1)+','+p[1].toFixed(1);}).join(' L ');
+  var areaPath = 'M '+pts[0][0]+','+(h-pad.b)+' L '+pts.map(function(p){return p[0].toFixed(1)+','+p[1].toFixed(1);}).join(' L ')+' L '+pts[n-1][0]+','+(h-pad.b)+' Z';
+  var ticks = '';
+  for(var k=0;k<=3;k++){
+    var v = maxV * k / 3;
+    var y = pad.t + (h - pad.t - pad.b) * (1 - k/3);
+    ticks += '<line x1="'+pad.l+'" x2="'+(w-pad.r)+'" y1="'+y.toFixed(1)+'" y2="'+y.toFixed(1)+'" stroke="#eef2f7" stroke-width="1"/>';
+    ticks += '<text x="'+(pad.l-6)+'" y="'+(y+3).toFixed(1)+'" text-anchor="end" font-size="9" fill="#94a3b8">'+_rptShortNum(v)+'</text>';
+  }
+  var xlabels = '';
+  var labelIdxs = n<=4 ? Array.from({length:n}, function(_,i){return i;}) : [0, Math.floor(n/3), Math.floor(2*n/3), n-1];
+  labelIdxs.forEach(function(ii){
+    var p = pts[ii]; if(!p) return;
+    xlabels += '<text x="'+p[0]+'" y="'+(h-6)+'" text-anchor="middle" font-size="9" fill="#94a3b8">'+esc(daily[ii].label||'')+'</text>';
+  });
+  var color = opts.color || '#2563eb';
+  return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="xMidYMid meet" style="width:100%;height:'+h+'px;display:block;">'+
+    ticks +
+    '<path d="'+areaPath+'" fill="'+color+'" fill-opacity="0.08"/>'+
+    '<path d="'+linePath+'" fill="none" stroke="'+color+'" stroke-width="2" stroke-linejoin="round"/>'+
+    xlabels +
+    '</svg>';
+}
+
+// Horizontal bar chart — better than a pie when labels are long.
+function _rptBarChart(rows, opts){
+  opts = opts || {};
+  if(!rows || !rows.length){
+    return '<div style="color:var(--ink4);font-size:12px;text-align:center;padding:1rem 0;">No data in this range.</div>';
+  }
+  var maxV = Math.max.apply(null, rows.map(function(r){return Number(r.value)||0;}));
+  if(maxV <= 0) maxV = 1;
+  var total = rows.reduce(function(s,r){return s+(Number(r.value)||0);},0);
+  var color = opts.color || '#2563eb';
+  var fmt = opts.formatter || function(v){ return _rptFmtMYR(v); };
+  var prefix = opts.prefix || '';
+  var html = '<div style="display:flex;flex-direction:column;gap:.55rem;padding:.3rem 0 .1rem;">';
+  rows.forEach(function(r){
+    var pctBar = (Number(r.value)||0) / maxV * 100;
+    var pctTot = total>0 ? ((Number(r.value)||0) / total * 100).toFixed(2) : '0.00';
+    html += '<div>';
+    html += '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;gap:.5rem;">';
+    html += '<span style="color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(r.label)+'</span>';
+    html += '<span style="color:var(--ink3);font-variant-numeric:tabular-nums;white-space:nowrap;">'+prefix+fmt(r.value)+' · '+pctTot+'%</span>';
+    html += '</div>';
+    html += '<div style="background:#f1f5f9;border-radius:3px;height:8px;overflow:hidden;">';
+    html += '<div style="background:'+color+';width:'+pctBar.toFixed(2)+'%;height:100%;"></div>';
+    html += '</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+// Bucket orders into daily series across [from, to]. Days with no orders
+// get a zero value so the line chart shows the flat stretches honestly.
+function _rptDailySeries(valueFn){
+  var byDay = {};
+  _rpt.orders.forEach(function(o){
+    var d = new Date(o.created_at);
+    var key = d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
+    if(!byDay[key]) byDay[key] = { orders:0, revenue:0 };
+    byDay[key].orders++;
+    byDay[key].revenue += Number(o.total)||0;
+  });
+  var out = [];
+  var cur = new Date(_rpt.from.getFullYear(), _rpt.from.getMonth(), _rpt.from.getDate());
+  var end = new Date(_rpt.to.getFullYear(),   _rpt.to.getMonth(),   _rpt.to.getDate());
+  while(cur <= end){
+    var k = cur.getFullYear()+'-'+('0'+(cur.getMonth()+1)).slice(-2)+'-'+('0'+cur.getDate()).slice(-2);
+    var slot = byDay[k] || { orders:0, revenue:0 };
+    var label = cur.toLocaleDateString('en-GB',{day:'2-digit',month:'short'});
+    out.push({ key:k, label:label, orders:slot.orders, revenue:slot.revenue, value:valueFn(slot) });
+    cur.setDate(cur.getDate()+1);
+  }
+  return out;
+}
+
+// ─── VIEW-MORE MODAL ───────────────────────────────────────────────
+
+function _rptOpenViewMore(title, headers, rows, footerHtml){
+  var html = '<table class="data-table" style="font-size:12px;"><thead><tr>';
+  headers.forEach(function(h){
+    html += '<th'+(h.align?' style="text-align:'+h.align+';"':'')+'>'+esc(h.label)+'</th>';
+  });
+  html += '</tr></thead><tbody>';
+  if(!rows.length) html += '<tr><td colspan="'+headers.length+'" style="color:var(--ink4);text-align:center;padding:.6rem;">No data in this range</td></tr>';
+  rows.forEach(function(r){
+    html += '<tr>';
+    r.forEach(function(cell, i){
+      var h = headers[i] || {};
+      html += '<td'+(h.align?' style="text-align:'+h.align+';"':'')+'>'+cell+'</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  if(footerHtml) html += '<div style="margin-top:.6rem;font-size:11px;color:var(--ink3);">'+footerHtml+'</div>';
+  document.getElementById('rpt-vm-title').textContent = title;
+  document.getElementById('rpt-vm-body').innerHTML = html;
+  openModal('modal-report-view-more');
+}
+
+// View-more handlers — bound to chart "View more" buttons.
+
+function rptViewMoreDaily(metric){
+  // metric: 'revenue' | 'orders' | 'aov'
+  var daily = _rptDailySeries(function(s){
+    if(metric==='orders')  return s.orders;
+    if(metric==='aov')     return s.orders ? s.revenue/s.orders : 0;
+    return s.revenue;
+  });
+  var title = metric==='orders' ? 'Total Orders — Daily Breakdown'
+            : metric==='aov'    ? 'Average Order Value — Daily Breakdown'
+            :                     'Sales — Daily Breakdown';
+  var headers = [
+    {label:'Date'},
+    {label:'Orders', align:'right'},
+    {label:'Revenue (RM)', align:'right'},
+    {label:'Avg Order Value (RM)', align:'right'}
+  ];
+  var rows = daily.map(function(d){
+    var aov = d.orders ? (d.revenue/d.orders) : 0;
+    return [esc(d.label), _rptFmtInt(d.orders), 'RM '+_rptFmtMYR(d.revenue), 'RM '+_rptFmtMYR(aov)];
+  });
+  _rptOpenViewMore(title, headers, rows);
+}
+
+function rptViewMoreCategory(kind){
+  // kind: 'channel' | 'terms' | 'status' | 'customer_type'
+  var titleMap = {channel:'Sales by Channel — Order Detail',
+                  terms:  'Sales by Payment Terms — Order Detail',
+                  status: 'Sales by Payment Status — Order Detail',
+                  customer_type:'Customer Type — Order Detail'};
+  var headers = [
+    {label:'Bucket'}, {label:'Order #'}, {label:'Date'}, {label:'Customer'}, {label:'Total (RM)', align:'right'}
+  ];
+  var bucketFn = {
+    channel:        function(o){ return _rptChannelLabel(o.channel); },
+    terms:          function(o){ return o.payment_terms==='credit' ? 'Credit' : 'Cash'; },
+    status:         function(o){ return o.status || '—'; },
+    customer_type:  function(o){
+      if(!o.customer_id) return 'Guest';
+      var earliest = _rpt.customerLifetime[o.customer_id];
+      return (earliest && new Date(earliest) >= _rpt.from) ? 'New customer' : 'Repeat customer';
+    }
+  }[kind];
+  var rows = _rpt.orders.map(function(o){
+    var d = new Date(o.created_at);
+    return [
+      esc(bucketFn(o)),
+      esc(o.order_number || (o.id||'').substring(0,8).toUpperCase()),
+      d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}),
+      esc(o.customer_name || '—'),
+      'RM '+_rptFmtMYR(o.total)
+    ];
+  });
+  // Sort by bucket then date desc
+  rows.sort(function(a,b){ return a[0]<b[0]?-1:(a[0]>b[0]?1:0); });
+  _rptOpenViewMore(titleMap[kind] || 'Detail', headers, rows);
+}
+
+// ─── MAIN RENDER ───────────────────────────────────────────────────
+
 function _rptRender(){
   var box = document.getElementById('reports-body');
   if(!box) return;
@@ -194,14 +353,12 @@ function _rptRender(){
   var totalDiscounts = orders.reduce(function(s,o){
     return s+(Number(o.discount_amount)||0)+(Number(o.coupon_discount)||0)+(Number(o.points_discount_rm)||0);
   },0);
-  var itemsRevenue = items.reduce(function(s,i){return s+(Number(i.subtotal)||0);},0);
   var unitsSold = items.reduce(function(s,i){return s+(Number(i.quantity)||0);},0);
   var orderCount = orders.length;
   var aov = orderCount ? (gross/orderCount) : 0;
   var avgSell = unitsSold ? (gross/unitsSold) : 0;
   var uniqueCustomers = new Set(orders.map(function(o){return o.customer_id||('guest:'+o.customer_email||o.id);})).size;
 
-  // Tile row
   var tile = function(label, val, sub){
     return '<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:.9rem 1rem;">'+
              '<div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink4);font-weight:700;">'+label+'</div>'+
@@ -211,52 +368,74 @@ function _rptRender(){
   };
 
   var html = '';
+
+  // ── Headline tiles ──
   html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:.7rem;margin-bottom:1rem;">';
-  html += tile('Gross Sales',  'RM '+_rptFmtMYR(gross), 'Cancelled orders excluded');
-  html += tile('Net Sales',    'RM '+_rptFmtMYR(gross), 'Same as Gross — orders sold at displayed total');
+  html += tile('Gross Sales',  'RM '+_rptFmtMYR(gross), 'Cancelled excluded');
+  html += tile('Net Sales',    'RM '+_rptFmtMYR(gross), 'Same as Gross');
   html += tile('Total Discounts','RM '+_rptFmtMYR(totalDiscounts), 'Manual + coupon + points');
   html += tile('Total Orders', _rptFmtInt(orderCount));
   html += tile('Avg Order Value', 'RM '+_rptFmtMYR(aov));
   html += tile('Units Sold', _rptFmtInt(unitsSold)+' palms');
   html += tile('Unique Customers', _rptFmtInt(uniqueCustomers));
-  html += tile('Avg Selling Price', 'RM '+_rptFmtMYR(avgSell), 'Gross Sales ÷ Units Sold');
+  html += tile('Avg Selling Price', 'RM '+_rptFmtMYR(avgSell), 'Gross ÷ Units');
   html += '</div>';
 
-  // Sales by Channel
-  html += _rptBreakdownTable('Sales by Channel', _rptGroupBy(orders, function(o){
-    return _rptChannelLabel(o.channel);
-  }, function(o){return Number(o.total)||0;}), 'Channel');
+  // ── Time-series line charts (2-col) ──
+  var grossDaily = _rptDailySeries(function(s){return s.revenue;});
+  var ordersDaily = _rptDailySeries(function(s){return s.orders;});
+  var aovDaily = _rptDailySeries(function(s){return s.orders ? s.revenue/s.orders : 0;});
+  var chartCard = function(title, headlineVal, subtitle, svg, viewMoreFn){
+    return '<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:.9rem 1rem;">'+
+           '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;margin-bottom:.4rem;">'+
+             '<div style="min-width:0;">'+
+               '<div style="font-size:11px;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;font-weight:700;border-bottom:1px dashed var(--border);padding-bottom:1px;display:inline-block;">'+title+'</div>'+
+               '<div style="font-size:17px;font-weight:800;margin-top:.25rem;">'+headlineVal+'</div>'+
+               (subtitle?'<div style="font-size:11px;color:var(--ink3);">'+subtitle+'</div>':'')+
+             '</div>'+
+             '<a onclick="'+viewMoreFn+'" style="cursor:pointer;font-size:12px;color:#2563eb;font-weight:600;white-space:nowrap;">View more →</a>'+
+           '</div>'+ svg +
+         '</div>';
+  };
 
-  // Sales by Payment Terms
-  html += _rptBreakdownTable('Sales by Payment Terms', _rptGroupBy(orders, function(o){
-    return o.payment_terms==='credit' ? 'Credit' : 'Cash';
-  }, function(o){return Number(o.total)||0;}), 'Term');
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:.7rem;margin-bottom:1rem;">';
+  html += chartCard('Gross Sales', 'RM '+_rptFmtMYR(gross), null,
+                    _rptSvgLineChart(grossDaily, {color:'#2563eb'}),
+                    "rptViewMoreDaily('revenue')");
+  html += chartCard('Net Sales', 'RM '+_rptFmtMYR(gross), 'Gross minus refunds (none tracked yet)',
+                    _rptSvgLineChart(grossDaily, {color:'#16a34a'}),
+                    "rptViewMoreDaily('revenue')");
+  html += chartCard('Total Orders', _rptFmtInt(orderCount), null,
+                    _rptSvgLineChart(ordersDaily, {color:'#7c3aed'}),
+                    "rptViewMoreDaily('orders')");
+  html += chartCard('Average Order Value', 'RM '+_rptFmtMYR(aov), null,
+                    _rptSvgLineChart(aovDaily, {color:'#ea580c'}),
+                    "rptViewMoreDaily('aov')");
+  html += '</div>';
 
-  // Sales by Payment Status (Paid / Pending / Partially Paid / etc.)
-  html += _rptBreakdownTable('Sales by Payment Status', _rptGroupBy(orders, function(o){
-    return o.status || '—';
-  }, function(o){return Number(o.total)||0;}), 'Status');
+  // ── Categorical bar charts (2-col) ──
+  var barCard = function(title, barHtml, viewMoreFn){
+    return '<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:.9rem 1rem;">'+
+           '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">'+
+             '<div style="font-size:13px;font-weight:700;">'+title+'</div>'+
+             '<a onclick="'+viewMoreFn+'" style="cursor:pointer;font-size:12px;color:#2563eb;font-weight:600;">View more →</a>'+
+           '</div>'+ barHtml +
+         '</div>';
+  };
 
-  // New vs Repeat customer
-  var newRevenue=0, repeatRevenue=0, guestRevenue=0, newOrders=0, repeatOrders=0, guestOrders=0;
-  orders.forEach(function(o){
-    var v = Number(o.total)||0;
-    if(!o.customer_id){ guestRevenue += v; guestOrders++; return; }
-    var earliest = _rpt.customerLifetime[o.customer_id];
-    if(earliest && new Date(earliest) >= _rpt.from){ newRevenue += v; newOrders++; }
-    else { repeatRevenue += v; repeatOrders++; }
-  });
-  var totalRev = newRevenue+repeatRevenue+guestRevenue;
-  var pct = function(v){ return totalRev>0 ? ((v/totalRev)*100).toFixed(2)+'%' : '0.00%'; };
-  html += '<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:.8rem 1rem;margin-bottom:1rem;">';
-  html += '<div style="font-weight:700;margin-bottom:.5rem;">Customer Type</div>';
-  html += '<table class="data-table" style="font-size:12px;"><thead><tr><th>Customer type</th><th style="text-align:right;">Orders</th><th style="text-align:right;">Total sales</th><th style="text-align:right;">Percentage</th></tr></thead><tbody>';
-  html += '<tr><td>Repeat customer</td><td style="text-align:right;">'+_rptFmtInt(repeatOrders)+'</td><td style="text-align:right;">RM '+_rptFmtMYR(repeatRevenue)+'</td><td style="text-align:right;">'+pct(repeatRevenue)+'</td></tr>';
-  html += '<tr><td>New customer</td><td style="text-align:right;">'+_rptFmtInt(newOrders)+'</td><td style="text-align:right;">RM '+_rptFmtMYR(newRevenue)+'</td><td style="text-align:right;">'+pct(newRevenue)+'</td></tr>';
-  html += '<tr><td>Guest</td><td style="text-align:right;">'+_rptFmtInt(guestOrders)+'</td><td style="text-align:right;">RM '+_rptFmtMYR(guestRevenue)+'</td><td style="text-align:right;">'+pct(guestRevenue)+'</td></tr>';
-  html += '</tbody></table></div>';
+  var channelRows = _rptCategoryRows(orders, function(o){return _rptChannelLabel(o.channel);});
+  var termsRows   = _rptCategoryRows(orders, function(o){return o.payment_terms==='credit' ? 'Credit' : 'Cash';});
+  var statusRows  = _rptCategoryRows(orders, function(o){return o.status || '—';});
+  var custTypeRows = _rptCustomerTypeRows(orders);
 
-  // Top Products by Revenue
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:.7rem;margin-bottom:1rem;">';
+  html += barCard('Sales by Channel',         _rptBarChart(channelRows, {color:'#2563eb',prefix:'RM '}), "rptViewMoreCategory('channel')");
+  html += barCard('Sales by Payment Terms',   _rptBarChart(termsRows,   {color:'#0891b2',prefix:'RM '}), "rptViewMoreCategory('terms')");
+  html += barCard('Sales by Payment Status',  _rptBarChart(statusRows,  {color:'#7c3aed',prefix:'RM '}), "rptViewMoreCategory('status')");
+  html += barCard('Customer Type',            _rptBarChart(custTypeRows,{color:'#16a34a',prefix:'RM '}), "rptViewMoreCategory('customer_type')");
+  html += '</div>';
+
+  // ── Top Products tables (kept text-heavy, twin columns) ──
   var byProduct = {};
   items.forEach(function(it){
     var key = it.product_name || '—';
@@ -289,7 +468,7 @@ function _rptRender(){
   html += '</tbody></table></div>';
   html += '</div>';
 
-  // Top Customers
+  // ── Top Customers ──
   var byCust = {};
   orders.forEach(function(o){
     var key = o.customer_id || ('guest:'+(o.customer_email||o.order_number));
@@ -308,7 +487,7 @@ function _rptRender(){
   });
   html += '</tbody></table></div>';
 
-  // Monthly Breakdown — Orders / Revenue / Units / Avg Selling Price
+  // ── Monthly Breakdown with Avg Selling Price ──
   html += _rptMonthlyBreakdown(orders, items);
 
   box.innerHTML = html;
@@ -323,38 +502,36 @@ function _rptChannelLabel(c){
   })[c] || (c || 'Online Store');
 }
 
-// Group orders by `keyFn`, total via `valFn`, return sorted descending.
-function _rptGroupBy(orders, keyFn, valFn){
+function _rptCategoryRows(orders, keyFn){
   var by = {};
   orders.forEach(function(o){
     var k = keyFn(o);
-    var b = by[k] || {key:k, total:0, count:0};
-    b.total += valFn(o);
-    b.count++;
-    by[k] = b;
+    if(!by[k]) by[k] = {label:k, value:0, count:0};
+    by[k].value += Number(o.total)||0;
+    by[k].count++;
   });
-  return Object.values(by).sort(function(a,b){return b.total-a.total;});
+  return Object.values(by).sort(function(a,b){return b.value-a.value;});
 }
 
-function _rptBreakdownTable(title, rows, keyHeader){
-  var sumAll = rows.reduce(function(s,r){return s+r.total;},0);
-  var pct = function(v){ return sumAll>0 ? ((v/sumAll)*100).toFixed(2)+'%' : '0.00%'; };
-  var html = '<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:.8rem 1rem;margin-bottom:1rem;">';
-  html += '<div style="font-weight:700;margin-bottom:.5rem;">'+title+'</div>';
-  html += '<table class="data-table" style="font-size:12px;"><thead><tr><th>'+keyHeader+'</th><th style="text-align:right;">Orders</th><th style="text-align:right;">Total sales</th><th style="text-align:right;">Percentage</th></tr></thead><tbody>';
-  if(!rows.length) html += '<tr><td colspan="4" style="color:var(--ink4);text-align:center;padding:.6rem;">No data in this range</td></tr>';
-  rows.forEach(function(r){
-    html += '<tr><td>'+esc(r.key)+'</td><td style="text-align:right;">'+_rptFmtInt(r.count)+'</td><td style="text-align:right;font-weight:600;">RM '+_rptFmtMYR(r.total)+'</td><td style="text-align:right;">'+pct(r.total)+'</td></tr>';
+function _rptCustomerTypeRows(orders){
+  var newR=0, rep=0, guest=0;
+  orders.forEach(function(o){
+    var v = Number(o.total)||0;
+    if(!o.customer_id){ guest += v; return; }
+    var earliest = _rpt.customerLifetime[o.customer_id];
+    if(earliest && new Date(earliest) >= _rpt.from) newR += v;
+    else rep += v;
   });
-  html += '</tbody></table></div>';
-  return html;
+  return [
+    {label:'Repeat customer', value:rep},
+    {label:'New customer',    value:newR},
+    {label:'Guest',           value:guest}
+  ].filter(function(r){return r.value>0;});
 }
 
 function _rptMonthlyBreakdown(orders, items){
   var byMonth = {};
-  var key = function(d){
-    return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2);
-  };
+  var key = function(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2); };
   orders.forEach(function(o){
     var d = new Date(o.created_at);
     var k = key(d);
@@ -363,11 +540,8 @@ function _rptMonthlyBreakdown(orders, items){
     b.revenue += Number(o.total)||0;
     byMonth[k] = b;
   });
-  // Items contribute units to whichever month the parent order belongs in.
   var orderMonth = {};
-  orders.forEach(function(o){
-    orderMonth[o.id] = key(new Date(o.created_at));
-  });
+  orders.forEach(function(o){ orderMonth[o.id] = key(new Date(o.created_at)); });
   items.forEach(function(it){
     var k = orderMonth[it.order_id]; if(!k) return;
     var b = byMonth[k]; if(!b) return;
@@ -395,8 +569,6 @@ function _rptMonthlyBreakdown(orders, items){
   return html;
 }
 
-// Spit the monthly breakdown out as a CSV download — easy lift into a
-// spreadsheet for the user to share with shareholders / book-keeping.
 function exportReportCSV(){
   var orders = _rpt.orders, items = _rpt.items;
   var byMonth = {};

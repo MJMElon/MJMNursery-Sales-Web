@@ -373,7 +373,7 @@ async function viewOrder(id){
   // in the right place — billing fields in the Billing/E-Invoice card, the
   // user's actual free-text remark in the Customer Remark section, and the
   // bookkeeping prefixes (Phone, Payment, Voucher, Points) hidden.
-  var _parsed={ billAddr:'', billIc:'', billReg:'', billMpob:'', userRemark:'' };
+  var _parsed={ billAddr:'', billIc:'', billReg:'', billMpob:'', phone:'', userRemark:'' };
   if(order.customer_remark){
     String(order.customer_remark).split(' | ').forEach(function(p){
       p = p.trim();
@@ -382,12 +382,20 @@ async function viewOrder(id){
       else if (p.indexOf('IC: ')===0)            _parsed.billIc   = p.substring(4);
       else if (p.indexOf('Reg: ')===0)           _parsed.billReg  = p.substring(5);
       else if (p.indexOf('MPOB: ')===0)          _parsed.billMpob = p.substring(6);
-      else if (p.indexOf('Phone: ')===0)         { /* hidden — shown in Customer card */ }
+      else if (p.indexOf('Phone: ')===0)         { _parsed.phone  = p.substring(7); }
       else if (p.indexOf('Payment: ')===0)       { /* hidden — internal bookkeeping */ }
       else if (p.indexOf('Voucher: ')===0)       { /* hidden — recorded in totals */ }
       else if (p.indexOf('Points: ')===0)        { /* hidden — recorded as redemption */ }
       else if (p !== 'Admin-created order')      { _parsed.userRemark = (_parsed.userRemark ? _parsed.userRemark+' | ' : '') + p; }
     });
+  }
+  // For registered customers, fall back to their shared_profiles phone when
+  // the remark didn't carry one (e.g. older orders predating the field).
+  if(!_parsed.phone && order.customer_id){
+    try{
+      var{data:prof}=await sb.from('shared_profiles').select('phone').eq('id',order.customer_id).maybeSingle();
+      if(prof && prof.phone) _parsed.phone = prof.phone;
+    }catch(e){ /* non-fatal */ }
   }
 
   // Billplz payment outcome — read the most recent payment-related timeline
@@ -510,6 +518,7 @@ async function viewOrder(id){
   html+='<div id="mo-customer-view">';
   html+='<div style="font-size:13px;"><strong>'+esc(order.customer_name||'—')+'</strong></div>';
   html+='<div style="font-size:12px;color:var(--ink3);">'+esc(order.customer_email||'—')+'</div>';
+  if(_parsed.phone) html+='<div style="font-size:12px;color:var(--ink3);">📞 '+esc(_parsed.phone)+'</div>';
   if(order.shipping_address)html+='<div style="font-size:12px;color:var(--ink3);margin-top:.3rem;white-space:pre-wrap;">'+esc(order.shipping_address)+'</div>';
   html+='</div>';
   html+='<div id="mo-customer-edit" style="display:none;">';

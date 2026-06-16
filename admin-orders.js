@@ -519,7 +519,11 @@ async function viewOrder(id){
   html+='<div style="font-size:13px;"><strong>'+esc(order.customer_name||'—')+'</strong></div>';
   html+='<div style="font-size:12px;color:var(--ink3);">'+esc(order.customer_email||'—')+'</div>';
   if(_parsed.phone) html+='<div style="font-size:12px;color:var(--ink3);">📞 '+esc(_parsed.phone)+'</div>';
-  if(order.shipping_address)html+='<div style="font-size:12px;color:var(--ink3);margin-top:.3rem;white-space:pre-wrap;">'+esc(order.shipping_address)+'</div>';
+  // Show the customer's billing address here. The shipping address is
+  // almost always the boilerplate "Self Collection — MJM Nursery Office"
+  // line, so surfacing the real billing address gives the admin something
+  // useful. If no billing address was captured, the line is omitted.
+  if(_parsed.billAddr) html+='<div style="font-size:12px;color:var(--ink3);margin-top:.3rem;white-space:pre-wrap;">'+esc(_parsed.billAddr)+'</div>';
   html+='</div>';
   html+='<div id="mo-customer-edit" style="display:none;">';
   html+='<input class="form-input" id="mo-cust-name" placeholder="Customer name" value="'+esc(order.customer_name||'')+'" style="font-size:12px;padding:6px 10px;margin-bottom:.3rem;">';

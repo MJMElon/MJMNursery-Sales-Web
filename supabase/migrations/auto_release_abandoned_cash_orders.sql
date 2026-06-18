@@ -22,7 +22,8 @@ BEGIN
   FOR r IN
     SELECT id
     FROM salesweb_customer_orders
-    WHERE status = 'Pending Payment'
+    WHERE payment_status = 'Pending Payment'
+      AND order_status IS NULL                          -- still Active
       AND COALESCE(payment_terms, 'cash') <> 'credit'   -- cash / null only
       AND created_at < now() - interval '48 hours'
       AND deleted_at IS NULL
@@ -40,8 +41,9 @@ BEGIN
     WHERE p.id = oi.product_id;
 
     -- Cancel the order so it can't be paid after its stock was released.
+    -- Only order_status changes; payment_status stays 'Pending Payment'.
     UPDATE salesweb_customer_orders
-    SET status = 'Cancelled', updated_at = now()
+    SET order_status = 'Cancelled', updated_at = now()
     WHERE id = r.id;
 
     -- Audit trail on the order timeline.

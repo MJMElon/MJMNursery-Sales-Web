@@ -212,7 +212,8 @@ BEGIN
     SELECT EXISTS(
       SELECT 1 FROM salesweb_customer_orders
        WHERE customer_id = p_customer_id
-         AND status NOT IN ('Cancelled','Refunded')
+         AND COALESCE(order_status, '') <> 'Cancelled'
+         AND payment_status <> 'Refunded'
     ) INTO v_first_order;
     IF v_first_order THEN
       RETURN QUERY SELECT FALSE, 'This voucher is for first-time customers only', 0::NUMERIC, 0::NUMERIC, v_coupon.id, v_coupon.name;

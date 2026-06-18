@@ -48,7 +48,8 @@ BEGIN
   FOR r IN
     SELECT id
     FROM salesweb_customer_orders
-    WHERE status = 'Pending Payment'
+    WHERE payment_status = 'Pending Payment'
+      AND order_status IS NULL                          -- still Active
       AND COALESCE(payment_terms, 'cash') <> 'credit'   -- cash / null only
       AND created_at < now() - (v_hours * interval '1 hour')
       AND deleted_at IS NULL
@@ -64,8 +65,11 @@ BEGIN
     ) oi
     WHERE p.id = oi.product_id;
 
+    -- Only the order_status changes. payment_status stays at
+    -- 'Pending Payment' so the timeline / accounting reflects what
+    -- actually happened (the customer never paid).
     UPDATE salesweb_customer_orders
-    SET status = 'Cancelled', updated_at = now()
+    SET order_status = 'Cancelled', updated_at = now()
     WHERE id = r.id;
 
     INSERT INTO salesweb_order_timeline (order_id, status, note, changed_by)

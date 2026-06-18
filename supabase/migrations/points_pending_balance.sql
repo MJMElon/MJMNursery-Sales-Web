@@ -45,7 +45,8 @@ pending_redemptions AS (
   SELECT customer_id                                AS user_id,
          COALESCE(SUM(points_redeemed), 0)::INTEGER AS pending_redeemed
   FROM salesweb_customer_orders
-  WHERE status = 'Pending Payment'
+  WHERE payment_status = 'Pending Payment'
+    AND COALESCE(order_status, '') <> 'Cancelled'
     AND points_redeemed > 0
     AND customer_id IS NOT NULL
   GROUP BY customer_id

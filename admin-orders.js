@@ -202,7 +202,7 @@ async function loadOrders(){
   var{data,error}=await query;
   if(error){toast('Error: '+error.message,'error');return;}
   var orders=data||[];
-  if(q)orders=orders.filter(function(o){return(o.order_number||'').toLowerCase().includes(q)||(o.id||'').toLowerCase().includes(q)||(o.customer_name||'').toLowerCase().includes(q)||(o.customer_email||'').toLowerCase().includes(q);});
+  if(q)orders=orders.filter(function(o){return(o.order_number||'').toLowerCase().includes(q)||(o.id||'').toLowerCase().includes(q)||(o.customer_name||'').toLowerCase().includes(q)||(o.billing_name||'').toLowerCase().includes(q)||(o.customer_email||'').toLowerCase().includes(q);});
 
   // Visibility of soft-flagged rows: hide deleted & archived orders unless the
   // sidebar Status filter explicitly ticks "Deleted" (no Archived option now).

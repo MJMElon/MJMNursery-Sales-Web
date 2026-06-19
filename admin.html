@@ -367,7 +367,7 @@ input,select,textarea,button{font-family:inherit;}
       <div class="stats-grid" id="order-stats"></div>
       <div class="card">
         <div class="filter-bar">
-          <input class="filter-input" id="order-search" placeholder="Search order ID or customer..." oninput="loadOrders()">
+          <input class="filter-input" id="order-search" placeholder="Search order ID, customer, billing name or email..." oninput="loadOrders()">
           <select class="filter-select" id="order-filter" onchange="loadOrders()">
             <option value="">All Status</option>
             <option>Pending Payment</option>
@@ -1707,7 +1707,7 @@ document.addEventListener('DOMContentLoaded',function(){
 });
 </script>
 
-<script src="admin-orders.js?v=2026-06-15-cust-billing"></script>
+<script src="admin-orders.js?v=2026-06-15-search-billing"></script>
 <script src="admin-reports.js?v=2026-06-15-charts"></script>
 <script src="admin-customers.js?v=2026-05-28-customer-groups"></script>
 <script src="admin-products.js?v=2026-05-18-points-ledger"></script>

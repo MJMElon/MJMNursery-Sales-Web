@@ -5360,7 +5360,12 @@ async function clVerifyOTP(pane) {
 async function clForgotPassword() {
   var identity = document.getElementById('cl-identity').value.trim();
   if (!identity || clInputType === 'phone') { clShowStatus('Enter your email address first.', 'error'); return; }
-  var { error } = await _sb.auth.resetPasswordForEmail(identity);
+  // Send the customer back to this app's recovery page (auth.html). Without an
+  // explicit redirectTo, Supabase uses the shared project Site URL and the
+  // reset link opens a different MJM app's login page instead.
+  var { error } = await _sb.auth.resetPasswordForEmail(identity, {
+    redirectTo: window.location.origin + '/auth.html'
+  });
   if (error) { clShowStatus(error.message, 'error'); return; }
   clShowStatus('Reset link sent! Check your inbox.', 'success');
 }

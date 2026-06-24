@@ -1006,7 +1006,11 @@ function viewOrderFromProfile(orderId){
 
 async function resetCustomerPassword(email){
   if(!confirm('Send password reset email to '+email+'?'))return;
-  var{error}=await sb.auth.resetPasswordForEmail(email);
+  // Explicit redirectTo so the customer's reset link opens THIS app's recovery
+  // page rather than the shared-project Site URL (a different MJM app).
+  var{error}=await sb.auth.resetPasswordForEmail(email,{
+    redirectTo:window.location.origin+'/auth.html'
+  });
   if(error){toast('Error: '+error.message,'error');return;}
   toast('Password reset email sent to '+email);
 }

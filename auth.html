@@ -409,7 +409,12 @@ async function verifyOTP(){
 async function forgotPassword(){
   var identity=document.getElementById('identity-input').value.trim();
   if(!identity||inputType==='phone'){showStatus('Enter your email address first.','error');return;}
-  var{error}=await _supabase.auth.resetPasswordForEmail(identity);
+  // Pin the reset link to THIS app's recovery page. Without an explicit
+  // redirectTo, Supabase falls back to the project-wide Site URL (which points
+  // at a different MJM app), so customers land on the wrong login screen.
+  var{error}=await _supabase.auth.resetPasswordForEmail(identity,{
+    redirectTo:window.location.origin+'/auth.html'
+  });
   if(error){showStatus(error.message,'error');return;}
   showStatus('Reset link sent! Check your inbox.','success');
 }

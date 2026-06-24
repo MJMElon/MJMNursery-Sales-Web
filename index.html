@@ -5131,6 +5131,26 @@ function openLoginModal(context) {
     var inp = document.getElementById('cl-phone');
     if (inp) inp.focus();
   }, 100);
+
+  // If a code was already sent and is still inside its 1-hour window, restore
+  // the code-entry state so the user can finish logging in with that code
+  // rather than having to request a new one.
+  try {
+    var pend = JSON.parse(sessionStorage.getItem('mjm_pending_otp') || 'null');
+    if (pend && pend.identity && (Date.now() - pend.ts) < 3600000) {
+      clSwitchMode(pend.isPhone ? 'phone' : 'email');
+      var idEl = document.getElementById(pend.isPhone ? 'cl-phone' : 'cl-identity');
+      if (idEl) idEl.value = pend.identity;
+      var rowEl = document.getElementById(pend.isPhone ? 'cl-otp-row-phone' : 'cl-otp-row');
+      if (rowEl) rowEl.classList.add('show');
+      var codeEl = document.getElementById(pend.isPhone ? 'cl-otp-code-phone' : 'cl-otp-code');
+      if (codeEl) { codeEl.value = ''; setTimeout(function(){ codeEl.focus(); }, 120); }
+      clShowStatus('Enter the code we sent to ' + pend.identity + ', or resend a new one.', 'success');
+    } else if (pend) {
+      // Expired — drop it so we don't show a stale prompt.
+      sessionStorage.removeItem('mjm_pending_otp');
+    }
+  } catch (e) {}
 }
 
 function closeLoginModal() {
@@ -5311,6 +5331,15 @@ async function clSendOTP(channel) {
   document.getElementById(otpRowId).classList.add('show');
   document.getElementById(otpInputId).focus();
 
+  // Remember that a code is pending so the user can close the login modal and
+  // re-open it within the code's 1-hour validity to finish keying it in,
+  // instead of being forced to request a brand-new code.
+  try {
+    sessionStorage.setItem('mjm_pending_otp', JSON.stringify({
+      identity: identity, channel: channel, isPhone: isPhone, ts: Date.now()
+    }));
+  } catch (e) {}
+
   // Cooldown only on the clicked button; sibling stays usable for fallback channel
   if (clickedBtn) clickedBtn.textContent = 'Sent';
   var cd = 30;
@@ -5342,6 +5371,8 @@ async function clVerifyOTP(pane) {
     : { email: identity, token: otp, type: 'email' };
   var { data, error } = await _sb.auth.verifyOtp(opts);
   if (error) { clShowStatus(error.message, 'error'); return; }
+  // Code consumed — forget the pending-OTP marker.
+  try { sessionStorage.removeItem('mjm_pending_otp'); } catch (e) {}
   // For first-time phone signups, ensure profile row exists with full_name
   if (isPhone && data && data.user) {
     var fullName = data.user.user_metadata?.full_name || '';

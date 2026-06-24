@@ -2223,7 +2223,7 @@
           <button class="cl-otp-btn" id="cl-btn-otp" onclick="clSendOTP('email')">Send Email OTP Code</button>
 
           <div class="cl-otp-row" id="cl-otp-row">
-            <input type="text" id="cl-otp-code" class="cl-input" placeholder="Enter 6-digit code" maxlength="6" inputmode="numeric">
+            <input type="text" id="cl-otp-code" class="cl-input" placeholder="Enter 8-digit code" maxlength="8" inputmode="numeric">
             <button class="cl-otp-verify" onclick="clVerifyOTP('email')">Verify</button>
           </div>
         </div>
@@ -5330,7 +5330,7 @@ async function clVerifyOTP(pane) {
   var otp = (isPhone
     ? document.getElementById('cl-otp-code-phone').value
     : document.getElementById('cl-otp-code').value).trim();
-  if (!identity || !otp) { clShowStatus('Please enter the 6-digit code.', 'error'); return; }
+  if (!identity || !otp) { clShowStatus('Please enter the 8-digit code.', 'error'); return; }
   clShowStatus('Verifying...', 'success');
   // For Supabase verifyOtp, the type is 'sms' for both SMS and WhatsApp channels.
   var opts = isPhone

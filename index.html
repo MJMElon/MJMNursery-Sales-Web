@@ -2224,7 +2224,7 @@
 
           <div class="cl-otp-row" id="cl-otp-row">
             <input type="text" id="cl-otp-code" class="cl-input" placeholder="Enter 8-digit code" maxlength="8" inputmode="numeric">
-            <button class="cl-otp-verify" onclick="clVerifyOTP('email')">Verify</button>
+            <button class="cl-otp-verify" onclick="clVerifyOTP('email')">Login with OTP</button>
           </div>
         </div>
 
@@ -5111,6 +5111,10 @@ function openLoginModal(context) {
   ['cl-otp-row','cl-otp-row-phone'].forEach(function(id){
     var el = document.getElementById(id); if (el) el.classList.remove('show');
   });
+  // Clear any stale OTP code left in the inputs from a previous session
+  ['cl-otp-code','cl-otp-code-phone'].forEach(function(id){
+    var el = document.getElementById(id); if (el) el.value = '';
+  });
   // Default to phone tab
   clSwitchMode('email');
   // Update subtitle
@@ -5374,6 +5378,10 @@ document.addEventListener('keydown', function(e) {
 async function portalSignOut(){
   Object.keys(localStorage).forEach(function(k){if(k.startsWith('sb-'))localStorage.removeItem(k);});
   sessionStorage.clear();
+  // Wipe any OTP code still sitting in the login inputs
+  ['cl-otp-code','cl-otp-code-phone'].forEach(function(id){
+    var el = document.getElementById(id); if (el) el.value = '';
+  });
   try{await _sb.auth.signOut({scope:'local'});}catch(e){}
   setLoggedOutUi();
   showPage('home');

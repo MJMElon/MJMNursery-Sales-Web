@@ -2674,6 +2674,16 @@ async function submitNewOrder(){
     }catch(e){ console.warn('[Add Order] paid-at-creation side effects failed:', e); }
   }
 
+  // Belt-and-braces: the SECURITY DEFINER RPC `ensure_al_for_order` runs
+  // server-side, bypasses RLS, and is idempotent. If the JS createAL calls
+  // above succeeded the RPC is a no-op; if they silently failed (RLS hiccup,
+  // network blip, browser cache running stale code) the RPC still creates
+  // the AL so the admin's "+ Add Order" flow truly guarantees AL creation
+  // for Paid / settled / credit orders.
+  try {
+    await sb.rpc('ensure_al_for_order', { _order_id: order.id });
+  } catch(e) { console.warn('[Add Order] ensure_al_for_order RPC failed:', e); }
+
   closeModal('modal-new-order');
   toast('Order #'+orderNum+' created'+(terms==='credit'?' · AL issued for credit collection':''));
   loadOrders();

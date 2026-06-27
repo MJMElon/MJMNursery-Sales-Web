@@ -2224,11 +2224,10 @@ function onNewOrderCustNameInput(){
 }
 
 function onNewOrderCustFieldEdit(){
-  // Touching the phone/email fields after picking a customer breaks
-  // the link — the admin is likely typing new details.
-  if(_newOrderSelectedCustomerId){
-    _newOrderSelectedCustomerId=null;
-  }
+  // Editing phone or email AFTER picking a customer no longer breaks the
+  // link — the admin is updating the existing profile, not searching for
+  // a different one. Submit-time logic patches shared_profiles with the
+  // edited values when a customer is linked.
   updateNewOrderCustStatus();
 }
 
@@ -2519,6 +2518,20 @@ async function submitNewOrder(){
 
   var btn=document.getElementById('no-submit');
   btn.disabled=true; btn.textContent='Creating…';
+
+  // Customer is already linked → patch the profile with any phone/email/
+  // name the admin edited in the modal so the change persists on the
+  // customer record (without creating a new profile).
+  if(custId){
+    var patchExisting = {};
+    if(name)  patchExisting.full_name = name;
+    if(phone) patchExisting.phone     = phone;
+    if(email) patchExisting.email     = email;
+    if(Object.keys(patchExisting).length){
+      try{ await sb.from('shared_profiles').update(patchExisting).eq('id',custId); }
+      catch(e){ console.warn('[Add Order] profile update failed:', e); }
+    }
+  }
 
   // If no existing customer is linked, try to find one by email; if none
   // exists yet, create a new customer profile via auth.signUp so the

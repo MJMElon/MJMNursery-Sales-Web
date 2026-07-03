@@ -515,6 +515,7 @@ var _publishCtx=null;
 async function openPublishModal(productId){
   document.getElementById('mpb-product-id').value=productId;
   document.getElementById('mpb-loading').style.display='block';
+  document.getElementById('mpb-loading').textContent='Computing quantities…';
   document.getElementById('mpb-content').style.display='none';
   document.getElementById('mpb-warnings').innerHTML='';
   document.getElementById('mpb-confirm').disabled=true;
@@ -523,17 +524,31 @@ async function openPublishModal(productId){
   radios.forEach(function(r){r.checked=(r.value==='maturity_plus_suitable_minus_estimate');});
   openModal('modal-publish');
   try{
-    var{data:p}=await sb.from('salesweb_products').select('*').eq('id',productId).single();
-    if(!p){toast('Product not found','error');closeModal('modal-publish');return;}
+    var{data:p,error:pErr}=await sb.from('salesweb_products').select('*').eq('id',productId).single();
+    if(pErr||!p){toast('Product not found','error');closeModal('modal-publish');return;}
     document.getElementById('mpb-product-name').textContent=p.name+' · '+(p.sell_month||'(no month)')+' '+(p.sell_year||'');
     var sellMonth=p.sell_month||'';var sellYear=p.sell_year||0;
-    var[stockData,alloc,suitable,estimate]=await Promise.all([
-      computeProductStock(productId,sellMonth,sellYear),
-      computeCustomerAllocation(sellMonth,sellYear),
-      computeSuitableForSales(sellMonth,sellYear,productId),
-      fetchEstimateCollection(sellMonth,sellYear)
+
+    // Race each compute against a 10-second timeout. Slow / failing queries
+    // fall back to 0 instead of leaving the whole modal stuck on
+    // "Computing quantities…". Admin can still pick Manual qty and
+    // publish even if the auto-computes fail.
+    var wrap=function(promise, label){
+      var timeout=new Promise(function(_,rej){setTimeout(function(){rej(new Error(label+' timed out'));},10000);});
+      return Promise.race([promise, timeout])
+        .catch(function(e){ console.warn('[publish modal] '+label+':', e && e.message || e); return null; });
+    };
+    var results=await Promise.all([
+      wrap(computeProductStock(productId,sellMonth,sellYear),  'stock'),
+      wrap(computeCustomerAllocation(sellMonth,sellYear),      'allocation'),
+      wrap(computeSuitableForSales(sellMonth,sellYear,productId),'suitable'),
+      wrap(fetchEstimateCollection(sellMonth,sellYear),        'estimate')
     ]);
-    var raw=stockData.sources.reduce(function(s,x){return s+x.originalStock;},0);
+    var stockData = results[0] || {sources:[]};
+    var alloc     = Number(results[1])||0;
+    var suitable  = Number(results[2])||0;
+    var estimate  = Number(results[3])||0;
+    var raw=(stockData.sources||[]).reduce(function(s,x){return s+(Number(x.originalStock)||0);},0);
     _publishCtx={product:p,raw:raw,alloc:alloc,suitable:suitable,estimate:estimate,stockData:stockData};
     document.getElementById('mpb-raw').textContent=raw.toLocaleString();
     document.getElementById('mpb-alloc').textContent='− '+alloc.toLocaleString();
@@ -545,6 +560,17 @@ async function openPublishModal(productId){
     document.getElementById('mpb-loading').style.display='none';
     document.getElementById('mpb-content').style.display='block';
     document.getElementById('mpb-confirm').disabled=false;
+    // Surface a compact warning if any compute failed so the admin knows
+    // Manual qty is the safest option.
+    var failed=[];
+    if(results[0]===null) failed.push('stock');
+    if(results[1]===null) failed.push('allocation');
+    if(results[2]===null) failed.push('suitable');
+    if(results[3]===null) failed.push('estimate');
+    if(failed.length){
+      var w=document.getElementById('mpb-warnings');
+      if(w) w.innerHTML='<div style="font-size:11px;color:#b45309;background:#fef3c7;border:1px solid #fde68a;border-radius:6px;padding:.4rem .6rem;">Some computations timed out or failed ('+failed.join(', ')+'). Consider Manual qty. See console for details.</div>';
+    }
     updatePublishPreview();
   }catch(e){
     console.error('publish modal error:',e);

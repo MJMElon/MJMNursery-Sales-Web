@@ -486,7 +486,22 @@ async function deleteProduct(id){if(!confirm('Delete this product?'))return;awai
 
 async function togglePublish(id,pub){
   if(!pub){
-    await sb.from('salesweb_products').update({is_published:false,is_active:false,updated_at:new Date().toISOString()}).eq('id',id);
+    // Unpublish + auto-sink to the bottom of the list so the sidebar-like
+    // grid keeps published seedlings on top. We push its sort_order to
+    // (max + 1) across the whole product table. Best-effort: if the
+    // sort_order column isn't present the toggle still succeeds.
+    var patch={is_published:false,is_active:false,updated_at:new Date().toISOString()};
+    try{
+      var{data:maxRow}=await sb.from('salesweb_products').select('sort_order').order('sort_order',{ascending:false,nullsFirst:false}).limit(1);
+      var nextOrder=(maxRow && maxRow.length && Number.isFinite(Number(maxRow[0].sort_order))) ? Number(maxRow[0].sort_order)+1 : 1;
+      patch.sort_order=nextOrder;
+    }catch(e){ /* sort_order column missing → fall through with base patch */ }
+    var{error}=await sb.from('salesweb_products').update(patch).eq('id',id);
+    if(error && /sort_order/i.test(error.message||'')){
+      // Column truly missing — retry without the sort_order write.
+      delete patch.sort_order;
+      await sb.from('salesweb_products').update(patch).eq('id',id);
+    }
     toast('Unpublished');loadProducts();return;
   }
   openPublishModal(id);

@@ -2179,6 +2179,11 @@ async function openNewOrder(){
   document.getElementById('no-cust-phone').value='';
   document.getElementById('no-cust-email').value='';
   document.getElementById('no-cust-addr').value='Self Collection — MJM Nursery Office, Niah Land District, Miri, 98000, Sarawak';
+  // Default order date to "right now" in the local zone. datetime-local
+  // wants "YYYY-MM-DDTHH:MM" (no seconds, no zone).
+  var _nowLocal = new Date(Date.now() - new Date().getTimezoneOffset()*60000).toISOString().slice(0,16);
+  var _odInp = document.getElementById('no-order-date');
+  if(_odInp) _odInp.value = _nowLocal;
   document.getElementById('no-status').value='Pending Payment';
   document.getElementById('no-terms').value='cash';
   document.getElementById('no-internal-note').value='';
@@ -2475,6 +2480,22 @@ async function submitNewOrder(){
   var internalNote=document.getElementById('no-internal-note').value.trim();
   var discount=parseFloat(document.getElementById('no-discount').value)||0;
 
+  // Backdate / postdate — the datetime-local input gives "YYYY-MM-DDTHH:MM"
+  // in the admin's LOCAL timezone. Convert to UTC ISO so the DB stores the
+  // exact wall-clock moment the admin picked. If the admin left it as
+  // "now" (within 60s), skip so DB default now() writes the true insert
+  // clock.
+  var orderDateIso = null;
+  var _odRaw = (document.getElementById('no-order-date')||{}).value || '';
+  if(_odRaw){
+    var _picked = new Date(_odRaw);
+    if(!isNaN(_picked.getTime())){
+      if(Math.abs(_picked.getTime() - Date.now()) > 60*1000){
+        orderDateIso = _picked.toISOString();
+      }
+    }
+  }
+
   // Validation
   if(!name){toast('Customer name is required','error');return;}
   var validItems=_newOrderItems.filter(function(it){
@@ -2625,6 +2646,10 @@ async function submitNewOrder(){
       points_redeemed:0,
       points_discount_rm:0,
     };
+    // Backdated / postdated order date — parsed once outside the retry loop
+    // via `orderDateIso`. If the admin left it as "now" (within a second),
+    // we omit it so the DB default `now()` writes the true clock timestamp.
+    if(orderDateIso) payload.created_at = orderDateIso;
     if(internalNote) payload.internal_notes=internalNote;
     var r=await sb.from('salesweb_customer_orders').insert([payload]).select().single();
     order=r.data; orderErr=r.error;

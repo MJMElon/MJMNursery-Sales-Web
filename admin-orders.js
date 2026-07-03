@@ -1467,10 +1467,11 @@ async function loadAttachments(orderId){
   var{data}=await sb.from('salesweb_order_attachments').select('*').eq('order_id',orderId).order('created_at',{ascending:false});
   var el=document.getElementById('mo-attachments');
   if(!data||!data.length){el.innerHTML='<div style="font-size:12px;color:var(--ink4);padding:.3rem 0;">No documents uploaded yet.</div>';return;}
-  // Card-style row matches customer-portal .att-file: type tag, filename +
-  // meta line, then a "View" button that opens the file inside a floating
-  // preview modal (PDF/image inline iframe) instead of jumping the admin
-  // away to a new tab, followed by the destructive delete affordance.
+  // Card-style row matches customer-portal .att-file. The row itself is
+  // clickable — one click opens the file inside the floating preview modal
+  // (PDF/image inline iframe) instead of jumping the admin away to a new
+  // tab. The destructive delete affordance stops propagation so clicking
+  // the ✕ never opens the preview.
   el.innerHTML=data.map(function(a){
     var dt=fmtDate(a.created_at);
     var meta=[a.file_type||'File',fmtFileSize(a.file_size),dt,a.uploaded_by].filter(Boolean).join(' · ');
@@ -1478,11 +1479,13 @@ async function loadAttachments(orderId){
     var urlJs=String(a.file_url||'').replace(/'/g,'%27');
     var nameJs=String(a.file_name||'').replace(/'/g,'\\\'');
     var typeJs=String(a.file_type||'').replace(/'/g,'\\\'');
-    return '<div class="mo-att-row">'+
+    return '<div class="mo-att-row" role="button" tabindex="0" style="cursor:pointer;" '+
+             'onclick="openAttachmentPreview(\''+urlJs+'\',\''+nameJs+'\',\''+typeJs+'\')" '+
+             'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openAttachmentPreview(\''+urlJs+'\',\''+nameJs+'\',\''+typeJs+'\');}" '+
+             'title="Click to open this document">'+
       '<div class="mo-att-icon">'+attIcon(a.file_type,a.file_name)+'</div>'+
       '<div class="mo-att-info"><strong>'+esc(a.file_name||'Untitled document')+'</strong><span>'+esc(meta)+'</span></div>'+
-      '<button class="btn btn-outline btn-sm mo-att-view" onclick="openAttachmentPreview(\''+urlJs+'\',\''+nameJs+'\',\''+typeJs+'\')">View</button>'+
-      '<button class="btn btn-outline btn-sm mo-att-del" onclick="deleteAttachment(\''+idJs+'\',\''+orderId+'\')">✕</button>'+
+      '<button class="btn btn-outline btn-sm mo-att-del" onclick="event.stopPropagation();deleteAttachment(\''+idJs+'\',\''+orderId+'\')">✕</button>'+
     '</div>';
   }).join('');
 }

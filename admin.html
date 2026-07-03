@@ -908,6 +908,10 @@ input,select,textarea,button{font-family:inherit;}
         <div><label style="font-size:11px;color:var(--ink3);">Phone</label><input class="form-input" id="no-cust-phone" oninput="onNewOrderCustFieldEdit()" style="font-size:12px;padding:6px 10px;"></div>
         <div><label style="font-size:11px;color:var(--ink3);">Email</label><input class="form-input" id="no-cust-email" type="email" oninput="onNewOrderCustFieldEdit()" style="font-size:12px;padding:6px 10px;"></div>
         <div style="grid-column:1 / -1;"><label style="font-size:11px;color:var(--ink3);">Shipping address</label><input class="form-input" id="no-cust-addr" value="Self Collection — MJM Nursery Office, Niah Land District, Miri, 98000, Sarawak" style="font-size:12px;padding:6px 10px;"></div>
+        <div>
+          <label style="font-size:11px;color:var(--ink3);">Order date <span style="color:var(--ink4);font-weight:400;">(backdate if placed offline)</span></label>
+          <input class="form-input" id="no-order-date" type="datetime-local" style="font-size:12px;padding:6px 10px;">
+        </div>
       </div>
     </div>
 
@@ -1710,7 +1714,7 @@ document.addEventListener('DOMContentLoaded',function(){
 });
 </script>
 
-<script src="admin-orders.js?v=2026-06-15-keep-cust-link"></script>
+<script src="admin-orders.js?v=2026-06-15-backdate-order"></script>
 <script src="admin-reports.js?v=2026-06-15-charts"></script>
 <script src="admin-customers.js?v=2026-05-28-customer-groups"></script>
 <script src="admin-products.js?v=2026-05-18-points-ledger"></script>

@@ -48,6 +48,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-d
 .billing-required-note{font-size:11px;color:var(--text-light);margin-bottom:1rem;font-style:italic;}
 .field input,.field select,.field textarea{width:100%;background:var(--cream);border:1.5px solid var(--green-pale);border-radius:10px;padding:10px 14px;font-size:13px;font-weight:500;color:var(--text-dark);outline:none;font-family:'DM Sans',sans-serif;transition:border-color .2s;}
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--green-mid);}
+/* Billing information fields render + save uppercase so e-invoice records
+   read consistently (matches the government TIN/MyKad casing conventions). */
+#billing-personal input,#billing-company input{text-transform:uppercase;}
 .field-row{display:grid;grid-template-columns:1fr 1fr;gap:1rem;}
 @media(max-width:500px){.field-row{grid-template-columns:1fr;}}
 
@@ -862,33 +865,37 @@ async function saveNewBilling(){
   var origLabel=btn.textContent;
   btn.disabled=true;btn.textContent=editingBillingId?'Updating...':'Saving...';
 
+  // Belt-and-braces uppercase — the delegated listener already uppercases
+  // as the customer types, this catches anything an autofill / browser
+  // extension slipped past.
+  var _v=function(id){ return (document.getElementById(id).value||'').trim().toUpperCase(); };
   var row={};
   if(billingType==='personal'){
     row.type='personal';
-    row.name=document.getElementById('ck-name').value.trim();
-    row.ic_number=document.getElementById('ck-ic').value.trim();
-    row.tin=document.getElementById('ck-tin').value.trim();
-    row.mpob_license=document.getElementById('ck-mpob').value.trim()||null;
-    row.billing_address=document.getElementById('ck-addr').value.trim();
-    row.country=document.getElementById('ck-country').value.trim();
-    row.state=document.getElementById('ck-state').value.trim();
-    row.city=document.getElementById('ck-city').value.trim();
-    row.postcode=document.getElementById('ck-postcode').value.trim();
+    row.name          = _v('ck-name');
+    row.ic_number     = _v('ck-ic');
+    row.tin           = _v('ck-tin');
+    row.mpob_license  = _v('ck-mpob') || null;
+    row.billing_address = _v('ck-addr');
+    row.country       = _v('ck-country');
+    row.state         = _v('ck-state');
+    row.city          = _v('ck-city');
+    row.postcode      = _v('ck-postcode');
     // Personal entries leave company_reg empty so a personal→personal
     // edit doesn't carry over stale company-reg data, and a
     // company→personal edit clears it.
     row.company_reg=null;
   } else {
     row.type='company';
-    row.name=document.getElementById('ck-coname').value.trim();
-    row.company_reg=document.getElementById('ck-coreg').value.trim();
-    row.tin=document.getElementById('ck-cotin').value.trim();
-    row.mpob_license=document.getElementById('ck-co-mpob').value.trim()||null;
-    row.billing_address=document.getElementById('ck-co-addr').value.trim();
-    row.country=document.getElementById('ck-co-country').value.trim();
-    row.state=document.getElementById('ck-co-state').value.trim();
-    row.city=document.getElementById('ck-co-city').value.trim();
-    row.postcode=document.getElementById('ck-co-postcode').value.trim();
+    row.name          = _v('ck-coname');
+    row.company_reg   = _v('ck-coreg');
+    row.tin           = _v('ck-cotin');
+    row.mpob_license  = _v('ck-co-mpob') || null;
+    row.billing_address = _v('ck-co-addr');
+    row.country       = _v('ck-co-country');
+    row.state         = _v('ck-co-state');
+    row.city          = _v('ck-co-city');
+    row.postcode      = _v('ck-co-postcode');
     row.ic_number=null;
   }
 
@@ -921,6 +928,25 @@ async function saveNewBilling(){
 }
 
 loadSavedBilling();
+
+// Uppercase every keystroke in the billing form. The CSS above renders
+// each character in caps; this makes the STORED value match what the
+// customer sees so proforma invoices / e-invoice records ship uppercase
+// too. Delegated once, covers both Personal and Company panels.
+['billing-personal','billing-company'].forEach(function(id){
+  var host=document.getElementById(id);
+  if(!host) return;
+  host.addEventListener('input', function(e){
+    var t=e.target;
+    if(!t || t.tagName!=='INPUT') return;
+    var up=(t.value||'').toUpperCase();
+    if(t.value!==up){
+      var caret=t.selectionStart; // preserve caret position
+      t.value=up;
+      try{ t.setSelectionRange(caret, caret); }catch(_){/* number inputs can throw */}
+    }
+  });
+});
 
 // ── Validate billing fields ──
 // All fields are required because the saved billing entry now persists

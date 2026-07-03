@@ -543,14 +543,13 @@ async function viewOrder(id){
   if(_parsed.billIc)   html+='<div style="font-size:12px;color:var(--ink3);">I/C: '+esc(_parsed.billIc)+'</div>';
   html+='<div style="font-size:12px;color:var(--ink3);">Tax ID (TIN): '+esc(order.billing_tax_id||'—')+'</div>';
   if(_parsed.billMpob) html+='<div style="font-size:12px;color:var(--ink3);">MPOB License: '+esc(_parsed.billMpob)+'</div>';
-  // Always show a Billing Address row. The storefront only persists the
-  // billing address inside customer_remark ("Billing Addr: …"), so when
-  // that's missing — typical for self-collection orders without e-Invoice
-  // details — fall back to the shipping address.
-  var billAddrShown = _parsed.billAddr || order.shipping_address || '';
-  var billAddrLabel = _parsed.billAddr ? 'Billing Address' : (order.shipping_address ? 'Address (Shipping)' : 'Billing Address');
-  html+='<div style="font-size:12px;color:var(--ink3);margin-top:.3rem;">'+billAddrLabel+':</div>';
-  html+='<div style="font-size:12px;color:var(--ink3);white-space:pre-wrap;">'+(billAddrShown?esc(billAddrShown):'<span style="color:var(--ink4);">—</span>')+'</div>';
+  // Billing address only — no shipping fallback. The storefront persists
+  // it inside customer_remark ("Billing Addr: …"); if no billing address
+  // was captured (self-collection order without e-Invoice details), show
+  // an em-dash so the row still exists but doesn't mislead the admin
+  // into thinking the shipping address is the e-Invoice billing address.
+  html+='<div style="font-size:12px;color:var(--ink3);margin-top:.3rem;">Billing Address:</div>';
+  html+='<div style="font-size:12px;color:var(--ink3);white-space:pre-wrap;">'+(_parsed.billAddr?esc(_parsed.billAddr):'<span style="color:var(--ink4);">—</span>')+'</div>';
   html+='<div style="font-size:12px;color:var(--ink3);margin-top:.3rem;">Points issued: '+(order.points_issued||0)+'</div>';
   html+='</div>';
   html+='<div id="mo-billing-edit" style="display:none;">';

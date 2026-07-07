@@ -2924,16 +2924,30 @@ async function savePaymentEntry(){
   var session = await sb.auth.getSession();
   var user = session && session.data && session.data.session && session.data.session.user && session.data.session.user.email || 'admin';
 
-  var{error} = await sb.from('salesweb_order_payments').insert([{
+  var basePayload = {
     order_id: orderId,
     paid_at:  paidAt,
     amount:   amt,
     note:     noteRaw ? String(noteRaw).trim() : null,
-    attachment_url: attUrl,
+    attachment_url:  attUrl,
     attachment_name: attName,
     created_by: user,
-  }]);
-  if(error){ toast('Save failed: '+error.message,'error'); return; }
+  };
+  var{error} = await sb.from('salesweb_order_payments').insert([basePayload]);
+  // Gracefully degrade if the DB schema is missing the newer attachment
+  // columns — retry without them so the payment still records. Prompts
+  // the admin to run the order_payment_attachment.sql migration for
+  // full functionality.
+  if(error && /attachment_(name|url)/i.test(error.message||'')){
+    var retry = Object.assign({}, basePayload);
+    delete retry.attachment_name;
+    delete retry.attachment_url;
+    var r2 = await sb.from('salesweb_order_payments').insert([retry]);
+    if(r2.error){ toast('Save failed: '+r2.error.message,'error'); return; }
+    toast('Saved (attachment skipped — run order_payment_attachment.sql to store attachments)');
+  } else if(error){
+    toast('Save failed: '+error.message,'error'); return;
+  }
 
   // Timeline entry so admins reviewing the order history see the payment
   // event in context with status changes.

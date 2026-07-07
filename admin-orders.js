@@ -2929,22 +2929,29 @@ async function savePaymentEntry(){
     paid_at:  paidAt,
     amount:   amt,
     note:     noteRaw ? String(noteRaw).trim() : null,
-    attachment_url:  attUrl,
-    attachment_name: attName,
     created_by: user,
   };
+  // Only include the attachment columns when there's actually a file to
+  // record — keeps the insert payload minimal for the common case where
+  // no attachment is uploaded, and side-steps any schema-cache issues
+  // with those columns on Supabase instances that haven't run
+  // order_payment_attachment.sql yet.
+  if(attUrl)  basePayload.attachment_url  = attUrl;
+  if(attName) basePayload.attachment_name = attName;
+
   var{error} = await sb.from('salesweb_order_payments').insert([basePayload]);
-  // Gracefully degrade if the DB schema is missing the newer attachment
-  // columns — retry without them so the payment still records. Prompts
-  // the admin to run the order_payment_attachment.sql migration for
-  // full functionality.
-  if(error && /attachment_(name|url)/i.test(error.message||'')){
+  // If the insert failed AND we had attachment fields in the payload,
+  // retry once with them stripped. Catches every schema-cache / missing-
+  // column variant reported by PostgREST (Could not find the 'X' column…,
+  // column "X" does not exist, unknown column, etc.).
+  if(error && (basePayload.attachment_url != null || basePayload.attachment_name != null)){
+    console.warn('[savePaymentEntry] first insert failed:', error.message||error);
     var retry = Object.assign({}, basePayload);
     delete retry.attachment_name;
     delete retry.attachment_url;
     var r2 = await sb.from('salesweb_order_payments').insert([retry]);
     if(r2.error){ toast('Save failed: '+r2.error.message,'error'); return; }
-    toast('Saved (attachment skipped — run order_payment_attachment.sql to store attachments)');
+    toast('Saved (attachment name not persisted — run order_payment_attachment.sql to enable)');
   } else if(error){
     toast('Save failed: '+error.message,'error'); return;
   }

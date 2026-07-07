@@ -2908,17 +2908,29 @@ async function savePaymentEntry(){
 
   // Optional attachment upload — reuses the existing order-attachments
   // bucket. The file is saved with a payment_<orderid>_<ts>.<ext> name
-  // so it's distinguishable from regular order document uploads.
-  var attUrl = null, attName = null;
+  // so it's distinguishable from regular order document uploads. An
+  // upload failure no longer blocks the payment save; we log a
+  // console warning + toast, but still write the amount/date row so the
+  // ledger stays correct.
+  var attUrl = null, attName = null, uploadWarning = null;
   if(fileInp && fileInp.files && fileInp.files[0]){
     var f = fileInp.files[0];
     var ext = (f.name.split('.').pop()||'bin').toLowerCase();
     var key = 'payment_' + orderId.substring(0,8) + '_' + Date.now() + '.' + ext;
-    var{error:upErr} = await sb.storage.from('order-attachments').upload(key, f, { contentType: f.type, upsert: true });
-    if(upErr){ toast('Upload failed: '+upErr.message,'error'); return; }
-    var{data:urlData} = sb.storage.from('order-attachments').getPublicUrl(key);
-    attUrl = urlData && urlData.publicUrl || null;
-    attName = f.name;
+    try{
+      var{error:upErr} = await sb.storage.from('order-attachments').upload(key, f, { contentType: f.type, upsert: true });
+      if(upErr){
+        console.warn('[savePaymentEntry] upload failed:', upErr.message||upErr);
+        uploadWarning = 'Attachment upload failed ('+(upErr.message||'unknown')+') — payment saved without file.';
+      } else {
+        var{data:urlData} = sb.storage.from('order-attachments').getPublicUrl(key);
+        attUrl = urlData && urlData.publicUrl || null;
+        attName = f.name;
+      }
+    }catch(e){
+      console.warn('[savePaymentEntry] upload threw:', e);
+      uploadWarning = 'Attachment upload threw ('+(e && e.message || e)+') — payment saved without file.';
+    }
   }
 
   var session = await sb.auth.getSession();
@@ -2968,7 +2980,7 @@ async function savePaymentEntry(){
   }catch(e){ /* non-fatal */ }
 
   closeModal('modal-add-payment');
-  toast('Payment recorded: RM '+fmtMYR(amt));
+  toast(uploadWarning ? ('Payment RM '+fmtMYR(amt)+' saved. '+uploadWarning) : ('Payment recorded: RM '+fmtMYR(amt)));
   viewOrder(orderId);
 }
 

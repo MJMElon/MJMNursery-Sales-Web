@@ -614,15 +614,17 @@ async function viewOrder(id){
 
   // Compute payment state once — used by both the discount/coupon block and
   // the dedicated payment tracking card below.
-  var paidNow = Number(order.amount_paid||0);
+  // Sum the payment ledger client-side so the top-of-modal Amount Paid
+  // tile always matches the entries the admin can see under Billings.
+  // (Trigger-maintained order.amount_paid is authoritative on the row,
+  // but if the read isn't fresh yet the tile would look off.)
+  var paidNow  = paymentRows.reduce(function(s,p){return s+(Number(p.amount)||0);}, 0);
   var totalNow = Number(order.total||0);
-  // A settled status (Paid / Ready for Collection / Completed) means the
-  // amount is fully settled — show no outstanding balance even if the
-  // recorded amount_paid is lower (e.g. a legacy partial-paid then marked Paid).
-  var settled = orderFullyPaid(order);
-  var paidDisplay = settled ? totalNow : paidNow;
-  var balanceNow = settled ? 0 : Math.max(0, totalNow - paidNow);
-  var payState = settled ? 'paid' : (paidNow <= 0 ? 'unpaid' : 'partial');
+  var paidDisplay = paidNow;
+  var balanceNow  = Math.max(0, totalNow - paidNow);
+  var payState = paidNow >= totalNow && totalNow > 0
+                   ? 'paid'
+                   : (paidNow <= 0 ? 'unpaid' : 'partial');
 
   // ── Adjustments (Set Discount / Apply Coupon) — placed ABOVE Payment
   //    Tracking. Discounts can be entered as either an RM amount OR a
@@ -828,24 +830,31 @@ async function viewOrder(id){
           '<td style="text-align:right;color:'+(billPaid>0?'var(--green)':'var(--ink4)')+';font-weight:600;">RM '+fmtMYR(billPaid)+'</td>'+
           '<td style="text-align:right;white-space:nowrap;">'+actionCell+'</td>'+
         '</tr>';
-        // Nested payment rows for this bill
+        // Nested payment rows for this bill — compact "chip" style: Date
+        // received, Amount, Attachment. Clicking anywhere on the row
+        // (except the delete affordance) opens the attachment preview
+        // if there is one, mirroring the toggle behaviour the ops team
+        // asked for.
         if(billPays.length){
           billPays.forEach(function(p){
             var rid = String(p.id||'').replace(/[\\'"<>]/g,'');
-            var docCell = '';
-            if(p.attachment_url){
+            var hasAtt = !!p.attachment_url;
+            var attCell = '<span style="color:var(--ink4);">—</span>';
+            var rowClick = '';
+            var rowStyle = 'background:#fafafa;';
+            if(hasAtt){
               var u = String(p.attachment_url).replace(/'/g,'%27');
               var n = String(p.attachment_name||'document').replace(/'/g,'\\\'');
-              docCell = ' <a href="#" onclick="event.preventDefault();openAttachmentPreview(\''+u+'\',\''+n+'\',\'\');" style="color:var(--green);text-decoration:underline;">📎 View</a>';
+              attCell = '<span style="color:var(--green);">📎 '+esc(p.attachment_name||'document')+'</span>';
+              rowClick = ' onclick="openAttachmentPreview(\''+u+'\',\''+n+'\',\'\');" title="Click to open the attachment"';
+              rowStyle += 'cursor:pointer;';
             }
-            html+='<tr style="background:#fafafa;">'+
-              '<td colspan="2" style="padding-left:1.5rem;font-size:11px;color:var(--ink3);">↳ Payment '+esc(fmtDate(p.paid_at))+(p.note?' · '+esc(p.note):'')+'</td>'+
-              '<td></td>'+
-              '<td></td>'+
-              '<td style="text-align:right;font-size:11px;font-weight:600;color:var(--green);">RM '+fmtMYR(p.amount)+docCell+'</td>'+
+            html+='<tr style="'+rowStyle+'"'+rowClick+'>'+
+              '<td colspan="2" style="padding-left:1.5rem;font-size:11px;color:var(--ink3);">↳ '+esc(fmtDate(p.paid_at))+'</td>'+
+              '<td colspan="2" style="font-size:11px;">'+attCell+'</td>'+
+              '<td style="text-align:right;font-size:11px;font-weight:600;color:var(--green);">RM '+fmtMYR(p.amount)+'</td>'+
               '<td style="text-align:right;">'+
-                (fullyPaid ? '' :
-                  '<button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;color:var(--red);border-color:var(--red);" onclick="deletePaymentEntry(\''+rid+'\',\''+id+'\')">✕</button>')+
+                '<button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;color:var(--red);border-color:var(--red);" onclick="event.stopPropagation();deletePaymentEntry(\''+rid+'\',\''+id+'\')">✕</button>'+
               '</td>'+
             '</tr>';
           });
@@ -856,27 +865,25 @@ async function viewOrder(id){
         html+='<tr style="background:#fff7ed;"><td colspan="6" style="font-size:11px;font-weight:600;color:#9a3412;padding-top:.4rem;">Unlinked payments (not tied to a specific invoice)</td></tr>';
         unlinkedPays.forEach(function(p){
           var rid = String(p.id||'').replace(/[\\'"<>]/g,'');
-          var docCell = '';
-          if(p.attachment_url){
+          var hasAtt = !!p.attachment_url;
+          var attCell = '<span style="color:var(--ink4);">—</span>';
+          var rowClick = '';
+          var rowStyle = 'background:#fff7ed;';
+          if(hasAtt){
             var u = String(p.attachment_url).replace(/'/g,'%27');
             var n = String(p.attachment_name||'document').replace(/'/g,'\\\'');
-            docCell = ' <a href="#" onclick="event.preventDefault();openAttachmentPreview(\''+u+'\',\''+n+'\',\'\');" style="color:var(--green);text-decoration:underline;">📎 View</a>';
+            attCell = '<span style="color:var(--green);">📎 '+esc(p.attachment_name||'document')+'</span>';
+            rowClick = ' onclick="openAttachmentPreview(\''+u+'\',\''+n+'\',\'\');" title="Click to open the attachment"';
+            rowStyle += 'cursor:pointer;';
           }
-          html+='<tr style="background:#fff7ed;">'+
-            '<td>'+esc(fmtDate(p.paid_at))+'</td>'+
-            '<td colspan="3" style="color:var(--ink3);">'+esc(p.note||'—')+docCell+'</td>'+
+          html+='<tr style="'+rowStyle+'"'+rowClick+'>'+
+            '<td colspan="2" style="font-size:11px;color:var(--ink3);">'+esc(fmtDate(p.paid_at))+'</td>'+
+            '<td colspan="2" style="font-size:11px;">'+attCell+'</td>'+
             '<td style="text-align:right;font-weight:600;color:var(--green);">RM '+fmtMYR(p.amount)+'</td>'+
-            '<td style="text-align:right;"><button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;color:var(--red);border-color:var(--red);" onclick="deletePaymentEntry(\''+rid+'\',\''+id+'\')">✕</button></td>'+
+            '<td style="text-align:right;"><button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;color:var(--red);border-color:var(--red);" onclick="event.stopPropagation();deletePaymentEntry(\''+rid+'\',\''+id+'\')">✕</button></td>'+
           '</tr>';
         });
       }
-      var totalPaidAll = paymentRows.reduce(function(s,p){return s+(Number(p.amount)||0);},0);
-      html+='<tr style="background:#f8fafc;font-weight:700;">'+
-              '<td colspan="3" style="text-align:right;">Total billed / paid</td>'+
-              '<td style="text-align:right;">RM '+fmtMYR(billedSum)+'</td>'+
-              '<td style="text-align:right;color:var(--green);">RM '+fmtMYR(totalPaidAll)+'</td>'+
-              '<td style="text-align:right;font-size:10px;color:var(--ink3);">'+billedFullPct.toFixed(1)+'% billed</td>'+
-            '</tr>';
       html+='</tbody></table>';
     } else {
       html+='<div style="font-size:12px;color:var(--ink4);padding:.3rem 0;">No bills yet. Click <strong>+ Add Bill</strong> to log the first one.</div>';

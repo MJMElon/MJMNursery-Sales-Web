@@ -3136,6 +3136,11 @@ async function savePaymentEntry(){
 
 async function deletePaymentEntry(paymentId, orderId){
   if(!confirm('Delete this payment entry? The order’s Amount Paid total will recalculate automatically.')) return;
+  // Route through the SECURITY DEFINER RPC so RLS on
+  // salesweb_order_payments doesn't silently swallow the delete.
+  var rpc = await sb.rpc('delete_order_payment', { p_payment_id: paymentId });
+  if(!rpc.error){ toast('Payment entry deleted'); viewOrder(orderId); return; }
+  console.warn('[deletePaymentEntry] RPC unavailable, falling back to direct delete:', rpc.error.message);
   var{error} = await sb.from('salesweb_order_payments').delete().eq('id', paymentId);
   if(error){ toast('Delete failed: '+error.message,'error'); return; }
   toast('Payment entry deleted');

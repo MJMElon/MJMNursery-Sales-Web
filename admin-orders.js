@@ -889,41 +889,6 @@ async function viewOrder(id){
       html+='<div style="font-size:12px;color:var(--ink4);padding:.3rem 0;">No bills yet. Click <strong>+ Add Bill</strong> to log the first one.</div>';
     }
     html+='</div>';
-    html+='<table class="data-table" style="font-size:12px;"><thead><tr><th>Month</th><th style="text-align:right;">Qty Collected</th><th>Invoice</th><th style="text-align:right;">Action</th></tr></thead><tbody>';
-    periods.forEach(function(p){
-      var qty=qtyByPeriod[p]||0;
-      var inv=creditInvoicesByPeriod[p]||null;
-      var isLinked=inv&&order.credit_invoice_id===inv.id;
-      html+='<tr>';
-      html+='<td style="font-weight:600;">'+esc(periodLabel(p))+'</td>';
-      html+='<td style="text-align:right;'+(qty>0?'font-weight:600;':'color:var(--ink4);')+'">'+(qty>0?qty.toLocaleString():'—')+'</td>';
-      // Invoice column
-      html+='<td>';
-      if(inv){
-        var st=inv.status||'issued';
-        var stColor=st==='paid'?'background:#dcfce7;color:#166534;border:1px solid #bbf7d0;':st==='overdue'?'background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;':'background:#fef3c7;color:#92400e;border:1px solid #fde68a;';
-        html+='<span style="font-weight:600;">'+esc(inv.invoice_number||'—')+'</span>';
-        html+=' <span class="badge" style="font-size:10px;padding:2px 6px;'+stColor+'">'+st.toUpperCase()+'</span>';
-        if(!isLinked&&qty>0)html+=' <span style="font-size:10px;color:#92400e;">(not linked to this order)</span>';
-        if(inv.invoice_file_url)html+=' <a href="'+esc(inv.invoice_file_url)+'" target="_blank" rel="noopener" style="margin-left:.3rem;text-decoration:none;" title="View invoice PDF">📄</a>';
-        if(inv.payment_proof_url)html+='<a href="'+esc(inv.payment_proof_url)+'" target="_blank" rel="noopener" style="margin-left:.2rem;text-decoration:none;" title="View payment proof">🧾</a>';
-      } else if(qty>0){
-        html+='<span style="font-size:11px;color:#92400e;">Not issued</span>';
-      } else {
-        html+='<span style="font-size:11px;color:var(--ink4);">—</span>';
-      }
-      html+='</td>';
-      // Action column
-      html+='<td style="text-align:right;">';
-      if(inv&&inv.status!=='paid'){
-        html+='<button class="btn btn-outline btn-sm" onclick="markCreditInvoicePaid(\''+esc(inv.id)+'\',\''+id+'\')" style="font-size:10px;padding:2px 8px;">✓ Mark Paid</button>';
-      } else if(!inv&&qty>0){
-        html+='<button class="btn btn-primary btn-sm" onclick="openInvoiceUploadModalForMonth(\''+id+'\',\''+p+'\')" style="font-size:10px;padding:2px 8px;">📤 Upload</button>';
-      }
-      html+='</td>';
-      html+='</tr>';
-    });
-    html+='</tbody></table>';
     if(!order.customer_id){
       html+='<div style="font-size:11px;color:#92400e;margin-top:.5rem;">⚠ This order has no <code>customer_id</code>, so it cannot be tied to a customer invoice. Edit the customer record first.</div>';
     }

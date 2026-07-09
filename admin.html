@@ -1,0 +1,38 @@
+<!--
+═══════════════════════════════════════════════════════════════
+  MJM NURSERY — ADMIN PORTAL (React shell)
+  ⚠️ AI: The shell (layout, CSS, auth, helpers, settings) is React:
+  src/entries/admin.jsx → src/pages/Admin.jsx + src/lib/adminShell.js.
+  Auth via auth.html → admits users with shared_profiles.permissions
+  .modules.salesweb in ('admin','normal'), or legacy role='admin'.
+
+  📁 ADMIN FILE MAP:
+  ├── admin.html                  ← THIS FILE (Vite entry shell only)
+  ├── src/pages/Admin.jsx         ← markup (ids/classes identical to old page)
+  ├── src/lib/adminShell.js       ← ported inline script + window bridge + module loader
+  ├── src/styles/admin.css        ← the old inline <style> block, verbatim
+  └── public/admin-*.js           ← nine NOT-yet-migrated classic modules
+      (orders, reports, customers, products, payments, users,
+       promotions, coupons, web-design) — loaded at runtime as classic
+       scripts; each migrates in its own PR later.
+═══════════════════════════════════════════════════════════════
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>MJM Nursery — Admin Portal</title>
+<!-- Inline SVG favicon — purple "MJM" badge to match the admin sidebar theme. -->
+<link rel="icon" type="image/svg+xml" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="%23ebe5f5"/><text x="32" y="43" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue,Arial,sans-serif" font-size="20" font-weight="900" fill="%237c5cbf" text-anchor="middle" letter-spacing="-0.5">MJM</text></svg>'>
+<link rel="apple-touch-icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="%23ebe5f5"/><text x="32" y="43" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue,Arial,sans-serif" font-size="20" font-weight="900" fill="%237c5cbf" text-anchor="middle" letter-spacing="-0.5">MJM</text></svg>'>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+<div id="root"></div>
+<script type="module" src="/src/entries/admin.jsx"></script>
+</body>
+</html>

@@ -19,7 +19,7 @@ export default defineConfig({
     outDir: 'dist',
     rollupOptions: {
       input: {
-        dev: resolve(__dirname, 'dev.html'),
+        auth: resolve(__dirname, 'auth.html'),
       },
     },
   },

@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MJM Nursery | Login</title>
+<link rel="icon" type="image/png" href="https://cdn.store-assets.com/s/1408881/f/16655641.png">
+<link rel="apple-touch-icon" href="https://cdn.store-assets.com/s/1408881/f/16655641.png">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  :root{
+    --green-dark:#2D4A30;--green-mid:#3E6B42;--green-light:#6A9B6E;--green-pale:#C8DFC9;
+    --gold:#C9A84C;--gold-light:#E8D49A;--cream:#F7F3EC;--white:#FFFFFF;
+    --text-dark:#1A2E1B;--text-mid:#4A6B4C;--text-light:#8AAB8C;
+  }
+  body{
+    font-family:'DM Sans',sans-serif;margin:0;min-height:100vh;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--green-dark);position:relative;overflow:hidden;
+  }
+
+  /* Dark green background with subtle texture */
+  .auth-bg{
+    position:fixed;inset:0;z-index:0;
+    background:
+      radial-gradient(ellipse at 30% 50%,rgba(201,168,76,.08) 0%,transparent 60%),
+      radial-gradient(ellipse at 80% 20%,rgba(106,155,110,.12) 0%,transparent 50%),
+      var(--green-dark);
+  }
+
+  .auth-card{
+    background:rgba(255,255,255,.06);backdrop-filter:blur(20px);
+    border:1px solid rgba(255,255,255,.1);border-radius:24px;
+    padding:2.5rem 2rem;width:100%;max-width:400px;
+    position:relative;z-index:10;
+    box-shadow:0 30px 60px rgba(0,0,0,.3);
+  }
+
+  /* Logo */
+  .auth-logo{text-align:center;margin-bottom:1.5rem;}
+  .auth-logo img{
+    height:120px;margin-bottom:1rem;
+    animation:logoMetallic 12s ease-in-out infinite;
+  }
+  @keyframes logoMetallic{
+    0%{filter:drop-shadow(0 4px 15px rgba(201,168,76,.2)) brightness(1);}
+    50%{filter:drop-shadow(0 4px 25px rgba(201,168,76,.5)) brightness(1.15);}
+    100%{filter:drop-shadow(0 4px 15px rgba(201,168,76,.2)) brightness(1);}
+  }
+  .auth-logo-title{
+    font-family:'Cormorant Garamond',serif;font-size:1.8rem;font-weight:300;
+    color:var(--white);letter-spacing:.03em;
+  }
+  .auth-logo-sub{
+    font-size:11px;font-weight:500;color:rgba(255,255,255,.4);
+    letter-spacing:.15em;text-transform:uppercase;margin-top:.4rem;
+  }
+
+  .auth-divider{width:50px;height:1px;margin:1.2rem auto 1.5rem;background:linear-gradient(90deg,transparent,var(--gold),transparent);}
+
+  /* Input */
+  .auth-input{
+    background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);
+    color:var(--white);border-radius:12px;padding:14px 16px;width:100%;
+    font-size:14px;font-weight:500;outline:none;transition:all .2s;
+    font-family:'DM Sans',sans-serif;box-sizing:border-box;
+  }
+  .auth-input::placeholder{color:rgba(255,255,255,.35);}
+  .auth-input:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,168,76,.15);background:rgba(255,255,255,.1);}
+
+  /* Buttons */
+  .auth-btn{
+    width:100%;padding:14px;
+    background:linear-gradient(135deg,var(--gold),var(--gold-light));
+    color:var(--green-dark);font-weight:700;font-size:12px;
+    letter-spacing:.12em;text-transform:uppercase;
+    border:none;border-radius:12px;cursor:pointer;transition:all .2s;
+    font-family:'DM Sans',sans-serif;
+  }
+  .auth-btn:hover{box-shadow:0 8px 20px rgba(201,168,76,.3);transform:translateY(-1px);}
+  .auth-btn:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none;}
+
+  .otp-btn{
+    width:100%;padding:12px;background:none;
+    border:1.5px solid rgba(201,168,76,.4);color:var(--gold-light);
+    font-weight:600;font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    border-radius:12px;cursor:pointer;transition:all .2s;
+    font-family:'DM Sans',sans-serif;
+  }
+  .otp-btn:hover{background:rgba(201,168,76,.1);border-color:var(--gold);}
+  .otp-btn:disabled{opacity:.4;cursor:not-allowed;}
+
+  /* OTP verify row */
+  .otp-verify-row{display:none;gap:.5rem;margin-top:.75rem;}
+  .otp-verify-row.show{display:flex;}
+  .otp-verify-row .auth-input{flex:1;}
+  .otp-verify-btn{
+    padding:14px 20px;background:linear-gradient(135deg,var(--gold),var(--gold-light));
+    color:var(--green-dark);font-weight:700;font-size:11px;letter-spacing:.08em;
+    text-transform:uppercase;border:none;border-radius:12px;cursor:pointer;
+    transition:all .2s;font-family:'DM Sans',sans-serif;white-space:nowrap;
+  }
+  .otp-verify-btn:hover{box-shadow:0 4px 12px rgba(201,168,76,.3);}
+
+  /* Separator */
+  .or-line{display:flex;align-items:center;gap:1rem;margin:.75rem 0;}
+  .or-line span{font-size:10px;font-weight:600;color:rgba(255,255,255,.25);letter-spacing:.1em;text-transform:uppercase;}
+  .or-line::before,.or-line::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.1);}
+
+  .link-btn{
+    background:none;border:none;color:rgba(255,255,255,.4);font-size:12px;
+    font-weight:500;cursor:pointer;transition:color .2s;font-family:'DM Sans',sans-serif;
+  }
+  .link-btn:hover{color:var(--gold-light);}
+
+  .status-msg{font-size:12px;font-weight:500;padding:10px 14px;border-radius:10px;margin-bottom:1rem;display:none;}
+  .status-msg.error{display:block;background:rgba(239,68,68,.15);color:#fca5a5;border:1px solid rgba(239,68,68,.2);}
+  .status-msg.success{display:block;background:rgba(16,185,129,.15);color:#86efac;border:1px solid rgba(16,185,129,.2);}
+
+  .back-link{display:block;text-align:center;margin-top:1.5rem;font-size:12px;color:rgba(255,255,255,.3);text-decoration:none;font-weight:500;transition:color .2s;}
+  .back-link:hover{color:var(--gold-light);}
+
+  .auth-footer{text-align:center;margin-top:1.2rem;font-size:10px;color:rgba(255,255,255,.2);letter-spacing:.05em;}
+
+  .input-hint{font-size:10px;color:rgba(255,255,255,.25);margin-top:.3rem;padding-left:.2rem;}
+</style>
+</head>
+<body>
+
+<div class="auth-bg"></div>
+
+<div class="auth-card">
+  <div class="auth-logo">
+    <img src="https://cdn.store-assets.com/s/1408881/f/16655641.png" alt="MJM Nursery">
+    <div class="auth-logo-title">Welcome Back</div>
+    <div class="auth-logo-sub">Sign in to your account</div>
+  </div>
+
+  <div class="auth-divider"></div>
+
+  <div class="status-msg" id="status-msg"></div>
+
+  <!-- Main form -->
+  <div id="form-main">
+    <div style="display:flex;flex-direction:column;gap:.75rem;">
+      <!-- Signup name (hidden) -->
+      <div id="signup-fields" style="display:none;">
+        <input type="text" id="signup-name" class="auth-input" placeholder="Full Name" style="margin-bottom:.75rem;">
+      </div>
+
+      <!-- Email or Phone -->
+      <input type="text" id="identity-input" class="auth-input" placeholder="Email or Phone Number" oninput="detectInputType()">
+      <div class="input-hint" id="input-hint"></div>
+
+      <!-- Password -->
+      <input type="password" id="password-input" class="auth-input" placeholder="Password">
+
+      <!-- Sign In with password -->
+      <button class="auth-btn" id="btn-login" onclick="loginWithPassword()">Sign In</button>
+
+      <div class="or-line"><span>or</span></div>
+
+      <!-- OTP button -->
+      <button class="otp-btn" id="btn-otp" onclick="sendOTP()">Send OTP Code</button>
+
+      <!-- OTP verify row (appears after sending) -->
+      <div class="otp-verify-row" id="otp-verify-row">
+        <input type="text" id="otp-code" class="auth-input" placeholder="Enter 8-digit code" maxlength="8">
+        <button class="otp-verify-btn" onclick="verifyOTP()">Login with OTP</button>
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:1rem;">
+      <button class="link-btn" onclick="forgotPassword()">Forgot Password?</button>
+      <button class="link-btn" id="btn-toggle-signup" onclick="toggleSignup()">Create Account</button>
+    </div>
+  </div>
+
+  <!-- Recovery form -->
+  <div id="form-recovery" style="display:none;">
+    <div style="text-align:center;margin-bottom:1rem;">
+      <div class="auth-logo-title" style="font-size:1.3rem;">New <em>Password</em></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:.75rem;">
+      <input type="password" id="rec-password" class="auth-input" placeholder="Enter New Password">
+      <button class="auth-btn" onclick="updatePassword()">Save Password</button>
+    </div>
+  </div>
+
+  <a href="index.html" class="back-link">&larr; Back to Shop</a>
+  <div class="auth-footer">&copy; 2026 Mega Jutamas Sdn Bhd (663951-U)</div>
+</div>
+
+<script>
+var SUPABASE_URL='https://kibqjztozokohqmhqqqf.supabase.co';
+var SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpYnFqenRvem9rb2hxbWhxcXFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMzQzNjIsImV4cCI6MjA4OTgxMDM2Mn0.J7qJUZhWXYf5b9oey4wXJkjdi66jomEMw_NeV9NWF7M';
+var _supabase=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+
+var isSignUp=false;
+var isRecovery=window.location.hash.includes('type=recovery');
+var inputType='email'; // 'email' or 'phone'
+var emailTypoAccepted=false; // user accepted the typo suggestion
+
+// ── Common email domains for typo detection ──
+var KNOWN_DOMAINS=['gmail.com','yahoo.com','yahoo.com.my','hotmail.com','outlook.com','live.com','icloud.com','me.com','msn.com','aol.com','mail.com','protonmail.com','zoho.com','ymail.com','googlemail.com','163.com','qq.com','naver.com','hanmail.net','daum.net'];
+var DOMAIN_TYPO_MAP={
+  'gmai.com':'gmail.com','gmial.com':'gmail.com','gmal.com':'gmail.com','gmali.com':'gmail.com','gamil.com':'gmail.com','gnail.com':'gmail.com','gmail.co':'gmail.com','gmail.om':'gmail.com','gmail.cm':'gmail.com','gmail.con':'gmail.com','gmaill.com':'gmail.com','gmailcom':'gmail.com','gmail.comm':'gmail.com',
+  'homail.com':'hotmail.com','hotmal.com':'hotmail.com','hotmial.com':'hotmail.com','hotmil.com':'hotmail.com','hotmai.com':'hotmail.com','hotmail.co':'hotmail.com','hotmail.om':'hotmail.com','hotmail.con':'hotmail.com','hotamil.com':'hotmail.com','hotmaill.com':'hotmail.com','hotmail.cm':'hotmail.com','hotmails.com':'hotmail.com','hotmali.com':'hotmail.com','hotmaol.com':'hotmail.com',
+  'yaho.com':'yahoo.com','yahooo.com':'yahoo.com','yhoo.com':'yahoo.com','yahoo.co':'yahoo.com','yahoo.om':'yahoo.com','yahoo.con':'yahoo.com','yahooo.com.my':'yahoo.com.my','yaho.com.my':'yahoo.com.my',
+  'outlok.com':'outlook.com','outloo.com':'outlook.com','outlool.com':'outlook.com','outlook.co':'outlook.com','outllok.com':'outlook.com','outlokk.com':'outlook.com',
+  'iclould.com':'icloud.com','icloud.co':'icloud.com','icoud.com':'icloud.com','iclud.com':'icloud.com',
+  'liv.com':'live.com','live.co':'live.com','live.om':'live.com','protonmal.com':'protonmail.com'
+};
+
+function checkEmailTypo(email){
+  if(!email||!email.includes('@'))return null;
+  var parts=email.split('@');
+  if(parts.length!==2)return null;
+  var domain=parts[1].toLowerCase();
+  // Direct typo map match
+  if(DOMAIN_TYPO_MAP[domain])return parts[0]+'@'+DOMAIN_TYPO_MAP[domain];
+  // Fuzzy: check if domain is close to a known domain (1 char difference)
+  if(KNOWN_DOMAINS.indexOf(domain)===-1){
+    for(var i=0;i<KNOWN_DOMAINS.length;i++){
+      if(Math.abs(domain.length-KNOWN_DOMAINS[i].length)<=1&&levenshtein(domain,KNOWN_DOMAINS[i])===1){
+        return parts[0]+'@'+KNOWN_DOMAINS[i];
+      }
+    }
+  }
+  return null;
+}
+
+function levenshtein(a,b){
+  var m=a.length,n=b.length;
+  if(!m)return n;if(!n)return m;
+  var d=[];
+  for(var i=0;i<=m;i++)d[i]=[i];
+  for(var j=0;j<=n;j++)d[0][j]=j;
+  for(i=1;i<=m;i++){
+    for(j=1;j<=n;j++){
+      d[i][j]=a[i-1]===b[j-1]?d[i-1][j-1]:Math.min(d[i-1][j-1],d[i][j-1],d[i-1][j])+1;
+    }
+  }
+  return d[m][n];
+}
+
+// ── Detect if user typed email or phone ──
+function detectInputType(){
+  var val=document.getElementById('identity-input').value.trim();
+  var hint=document.getElementById('input-hint');
+  var otpBtn=document.getElementById('btn-otp');
+  emailTypoAccepted=false;
+
+  if(val.startsWith('+')||/^\d{8,}$/.test(val)){
+    inputType='phone';
+    hint.innerHTML='☎ Phone detected — OTP will be sent via SMS';
+    hint.style.color='';
+    otpBtn.textContent='Send SMS OTP';
+  } else if(val.includes('@')){
+    inputType='email';
+    var suggestion=checkEmailTypo(val);
+    if(suggestion){
+      hint.innerHTML='⚠️ Did you mean <strong style="color:#E8D49A;cursor:pointer;text-decoration:underline;" onclick="applyEmailSuggestion(\''+suggestion+'\')">' + suggestion + '</strong>? <span style="opacity:.6;cursor:pointer;" onclick="dismissEmailSuggestion()">No, it\'s correct</span>';
+      hint.style.color='#fca5a5';
+    } else {
+      hint.innerHTML='✉ Email detected — OTP will be sent to your inbox';
+      hint.style.color='';
+    }
+    otpBtn.textContent='Send Email OTP';
+  } else {
+    inputType='email';
+    hint.innerHTML='';
+    hint.style.color='';
+    otpBtn.textContent='Send OTP Code';
+  }
+}
+
+function applyEmailSuggestion(corrected){
+  document.getElementById('identity-input').value=corrected;
+  var hint=document.getElementById('input-hint');
+  hint.innerHTML='✅ Email corrected!';
+  hint.style.color='#86efac';
+  emailTypoAccepted=true;
+  setTimeout(function(){hint.innerHTML='✉ Email detected — OTP will be sent to your inbox';hint.style.color='';},2000);
+}
+
+function dismissEmailSuggestion(){
+  var hint=document.getElementById('input-hint');
+  hint.innerHTML='✉ Email detected — OTP will be sent to your inbox';
+  hint.style.color='';
+  emailTypoAccepted=true;
+}
+
+function toggleSignup(){
+  isSignUp=!isSignUp;
+  document.getElementById('signup-fields').style.display=isSignUp?'block':'none';
+  document.getElementById('btn-login').textContent=isSignUp?'Create Account':'Sign In';
+  document.getElementById('btn-toggle-signup').textContent=isSignUp?'Back to Sign In':'Create Account';
+}
+
+function showStatus(msg,type){var el=document.getElementById('status-msg');el.textContent=msg;el.className='status-msg '+type;}
+function clearStatus(){document.getElementById('status-msg').className='status-msg';}
+
+// ── Sign in with Password ──
+async function loginWithPassword(){
+  var identity=document.getElementById('identity-input').value.trim();
+  var pw=document.getElementById('password-input').value;
+  if(!identity||!pw){showStatus('Please enter email/phone and password.','error');return;}
+
+  // Check email typo before proceeding
+  if(inputType==='email'&&!emailTypoAccepted){
+    var suggestion=checkEmailTypo(identity);
+    if(suggestion){
+      showStatus('Did you mean '+suggestion+'? Check the suggestion below, or click "No, it\'s correct" to continue.','error');
+      detectInputType();
+      return;
+    }
+  }
+
+  if(isSignUp){
+    var name=document.getElementById('signup-name').value.trim();
+    if(!name){showStatus('Please enter your full name.','error');return;}
+    if(pw.length<6){showStatus('Password must be at least 6 characters.','error');return;}
+    showStatus('Creating account...','success');
+    var{data:signUpData,error}=await _supabase.auth.signUp({email:identity,password:pw,options:{data:{full_name:name}}});
+    if(error){
+      if(error.message.toLowerCase().includes('database')){
+        var{data:retryData,error:retryErr}=await _supabase.auth.signUp({email:identity,password:pw});
+        if(retryErr){showStatus(retryErr.message,'error');return;}
+        if(retryData&&retryData.user){
+          await _supabase.from('shared_profiles').upsert({id:retryData.user.id,email:identity,full_name:name,role:'customer'},{onConflict:'id'});
+        }
+      } else {showStatus(error.message,'error');return;}
+    } else if(signUpData&&signUpData.user){
+      await _supabase.from('shared_profiles').upsert({id:signUpData.user.id,email:identity,full_name:name,role:'customer'},{onConflict:'id'});
+    }
+    showStatus('Account created! You can now sign in.','success');toggleSignup();return;
+  }
+
+  showStatus('Signing in...','success');
+  var creds=inputType==='phone'?{phone:identity,password:pw}:{email:identity,password:pw};
+  var{data,error}=await _supabase.auth.signInWithPassword(creds);
+  if(error){showStatus(error.message,'error');return;}
+  await handlePostLogin(data.session);
+}
+
+// ── Send OTP (auto-detect email or SMS) ──
+async function sendOTP(){
+  var identity=document.getElementById('identity-input').value.trim();
+  if(!identity){showStatus('Please enter your email or phone number.','error');return;}
+
+  // Check email typo before proceeding
+  if(inputType==='email'&&!emailTypoAccepted){
+    var suggestion=checkEmailTypo(identity);
+    if(suggestion){
+      showStatus('Did you mean '+suggestion+'? Check the suggestion below, or click "No, it\'s correct" to continue.','error');
+      detectInputType();
+      return;
+    }
+  }
+
+  var btn=document.getElementById('btn-otp');
+  btn.disabled=true;btn.textContent='Sending...';
+
+  var opts=inputType==='phone'?{phone:identity}:{email:identity};
+  var{error}=await _supabase.auth.signInWithOtp(opts);
+
+  if(error){
+    showStatus(error.message,'error');
+    btn.disabled=false;btn.textContent=inputType==='phone'?'Send SMS OTP':'Send Email OTP';
+    return;
+  }
+
+  var dest=inputType==='phone'?'SMS sent to '+identity:'Code sent to '+identity;
+  showStatus(dest,'success');
+
+  // Show OTP input
+  document.getElementById('otp-verify-row').classList.add('show');
+  document.getElementById('otp-code').focus();
+
+  // Countdown
+  btn.textContent='Sent';
+  var cd=30;
+  var t=setInterval(function(){
+    cd--;btn.textContent='Resend ('+cd+')';
+    if(cd<=0){clearInterval(t);btn.disabled=false;btn.textContent=inputType==='phone'?'Resend SMS':'Resend Code';}
+  },1000);
+}
+
+// ── Verify OTP ──
+async function verifyOTP(){
+  var identity=document.getElementById('identity-input').value.trim();
+  var otp=document.getElementById('otp-code').value.trim();
+  if(!identity||!otp){showStatus('Please enter the 8-digit code.','error');return;}
+
+  showStatus('Verifying...','success');
+  var opts=inputType==='phone'
+    ?{phone:identity,token:otp,type:'sms'}
+    :{email:identity,token:otp,type:'email'};
+
+  var{data,error}=await _supabase.auth.verifyOtp(opts);
+  if(error){showStatus(error.message,'error');return;}
+  await handlePostLogin(data.session);
+}
+
+// ── Forgot Password ──
+async function forgotPassword(){
+  var identity=document.getElementById('identity-input').value.trim();
+  if(!identity||inputType==='phone'){showStatus('Enter your email address first.','error');return;}
+  // Pin the reset link to THIS app's recovery page. Without an explicit
+  // redirectTo, Supabase falls back to the project-wide Site URL (which points
+  // at a different MJM app), so customers land on the wrong login screen.
+  var{error}=await _supabase.auth.resetPasswordForEmail(identity,{
+    redirectTo:window.location.origin+'/auth.html'
+  });
+  if(error){showStatus(error.message,'error');return;}
+  showStatus('Reset link sent! Check your inbox.','success');
+}
+
+async function updatePassword(){
+  var pw=document.getElementById('rec-password').value;
+  if(!pw||pw.length<6){showStatus('Password must be at least 6 characters.','error');return;}
+  var{error}=await _supabase.auth.updateUser({password:pw});
+  if(error){showStatus(error.message,'error');return;}
+  showStatus('Password updated!','success');
+  isRecovery=false;window.location.hash='';
+  setTimeout(function(){window.location.href='auth.html';},1500);
+}
+
+// ── Post Login ──
+async function handlePostLogin(session){
+  if(!session){showStatus('Login failed.','error');return;}
+  showStatus('Welcome! Redirecting...','success');
+  sessionStorage.setItem('mjm_user_email',session.user.email||'');
+  sessionStorage.setItem('mjm_user_name',session.user.user_metadata?.full_name||session.user.email||session.user.phone||'');
+
+  // Routing: read per-module access from shared_profiles.permissions JSONB
+  // (set via the User Access page). Fall back to legacy role='admin' column
+  // for users provisioned before the permissions migration.
+  var{data:profile}=await _supabase.from('shared_profiles').select('role, permissions').eq('id',session.user.id).single();
+  var swLevel=(profile&&profile.permissions&&profile.permissions.modules&&profile.permissions.modules.salesweb)||'none';
+  var legacyAdmin=profile&&profile.role==='admin';
+
+  if(swLevel==='admin'||swLevel==='normal'||legacyAdmin){
+    window.location.href='admin.html';
+  } else {
+    sessionStorage.setItem('mjm_last_page','portal');
+    window.location.href='index.html';
+  }
+}
+
+// ── Auth state ──
+var pageLoaded=false;
+setTimeout(function(){pageLoaded=true;},300); // ignore auth events for first 300ms only
+
+_supabase.auth.onAuthStateChange(async function(event,session){
+  if(event==='PASSWORD_RECOVERY'){
+    isRecovery=true;
+    document.getElementById('form-main').style.display='none';
+    document.getElementById('form-recovery').style.display='block';
+    return;
+  }
+  // Only redirect on fresh login, not on page load existing session
+  if(event==='SIGNED_IN'&&session&&!isRecovery&&pageLoaded){await handlePostLogin(session);}
+});
+
+// Don't auto-redirect on page load — let user see the login page
+// Only redirect after they actively log in (handled by onAuthStateChange SIGNED_IN event)
+
+if(isRecovery){
+  document.getElementById('form-main').style.display='none';
+  document.getElementById('form-recovery').style.display='block';
+}
+
+document.querySelectorAll('.auth-input').forEach(function(input){
+  input.addEventListener('keydown',function(e){
+    if(e.key==='Enter'){
+      if(input.id==='otp-code'){verifyOTP();}
+      else if(input.id==='identity-input'||input.id==='password-input'){loginWithPassword();}
+      else if(input.id==='rec-password'){updatePassword();}
+    }
+  });
+});
+</script>
+</body>
+</html>

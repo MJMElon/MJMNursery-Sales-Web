@@ -2943,29 +2943,46 @@ async function savePaymentEntry(){
     note:     noteRaw ? String(noteRaw).trim() : null,
     created_by: user,
   };
-  // Only include the attachment columns when there's actually a file to
-  // record — keeps the insert payload minimal for the common case where
-  // no attachment is uploaded, and side-steps any schema-cache issues
-  // with those columns on Supabase instances that haven't run
-  // order_payment_attachment.sql yet.
   if(attUrl)  basePayload.attachment_url  = attUrl;
   if(attName) basePayload.attachment_name = attName;
 
-  var{error} = await sb.from('salesweb_order_payments').insert([basePayload]);
-  // If the insert failed AND we had attachment fields in the payload,
-  // retry once with them stripped. Catches every schema-cache / missing-
-  // column variant reported by PostgREST (Could not find the 'X' column…,
-  // column "X" does not exist, unknown column, etc.).
-  if(error && (basePayload.attachment_url != null || basePayload.attachment_name != null)){
-    console.warn('[savePaymentEntry] first insert failed:', error.message||error);
-    var retry = Object.assign({}, basePayload);
-    delete retry.attachment_name;
-    delete retry.attachment_url;
-    var r2 = await sb.from('salesweb_order_payments').insert([retry]);
-    if(r2.error){ toast('Save failed: '+r2.error.message,'error'); return; }
-    toast('Saved (attachment name not persisted — run order_payment_attachment.sql to enable)');
-  } else if(error){
-    toast('Save failed: '+error.message,'error'); return;
+  // Retry loop that peels off optional columns whenever PostgREST reports
+  // one missing from the schema cache. Handles ANY combination of missing
+  // columns on older Supabase instances that were created before
+  // order_payment_attachment.sql (or a similar column backfill) was run.
+  // The only fields we never drop are order_id, paid_at, and amount —
+  // those are the ledger's minimum required set.
+  var OPTIONAL_COLS = ['attachment_name','attachment_url','created_by','note'];
+  var payload = Object.assign({}, basePayload);
+  var lastErr = null, missedCols = [];
+  for(var pass = 0; pass < 6; pass++){
+    var r = await sb.from('salesweb_order_payments').insert([payload]);
+    if(!r.error){ lastErr = null; break; }
+    lastErr = r.error;
+    var msg = (r.error.message||'').toLowerCase();
+    // Try to detect which optional column PostgREST is complaining about
+    // and strip only that one so the next pass keeps as much data as
+    // possible.
+    var stripped = null;
+    for(var i=0;i<OPTIONAL_COLS.length;i++){
+      var col = OPTIONAL_COLS[i];
+      if(payload[col] !== undefined && msg.indexOf(col) !== -1){
+        delete payload[col];
+        missedCols.push(col);
+        stripped = col;
+        break;
+      }
+    }
+    if(!stripped) break; // error isn't about a known optional column
+  }
+  if(lastErr){
+    console.warn('[savePaymentEntry] insert failed after strip retries:', lastErr.message||lastErr);
+    toast('Save failed: '+lastErr.message,'error');
+    return;
+  }
+  if(missedCols.length){
+    console.warn('[savePaymentEntry] saved without columns:', missedCols.join(', '));
+    toast('Saved (skipped: '+missedCols.join(', ')+' — run order_payment_attachment.sql)');
   }
 
   // Timeline entry so admins reviewing the order history see the payment

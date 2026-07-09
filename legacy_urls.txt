@@ -10,8 +10,6 @@ admin-users.js
 admin-web-design.js
 admin.html
 auth.html
-customer-portal-script.js
-customer-portal-styles.css
 customer-portal.html
 index.html
 payment-callback.html

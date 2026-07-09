@@ -419,14 +419,24 @@ async function viewOrder(id){
   // Payment ledger — one row per partial payment received. amount_paid on
   // the order row is kept in sync via the salesweb_recalc_order_amount_paid
   // trigger, so the order's amount_paid number always matches SUM(rows).
+  // Read via SECURITY DEFINER RPC — mirrors the write-side gate so the
+  // ledger renders for every admin-portal user regardless of whether
+  // their profile happens to satisfy the salesweb_order_payments RLS
+  // policy directly. Fall back to direct SELECT if the RPC isn't
+  // installed yet on this Supabase.
   var paymentRows = [];
-  try {
-    var{data:pmRows} = await sb.from('salesweb_order_payments')
-      .select('id, paid_at, amount, note, attachment_url, attachment_name, created_by')
-      .eq('order_id', id)
-      .order('paid_at', { ascending: false });
-    paymentRows = pmRows || [];
-  } catch(e) { /* ledger table may not exist yet on a stale DB; fall back to empty */ }
+  var rpcListPay = await sb.rpc('list_order_payments', { p_order_id: id });
+  if(!rpcListPay.error){
+    paymentRows = rpcListPay.data || [];
+  } else {
+    try {
+      var{data:pmRows} = await sb.from('salesweb_order_payments')
+        .select('id, paid_at, amount, note, attachment_url, attachment_name, created_by')
+        .eq('order_id', id)
+        .order('paid_at', { ascending: false });
+      paymentRows = pmRows || [];
+    } catch(e) { /* ledger table may not exist yet on a stale DB */ }
+  }
 
   // For credit orders, fetch per-collection events + all of this customer's
   // monthly invoices so the per-month breakdown table can render.
@@ -442,10 +452,17 @@ async function viewOrder(id){
       var{data:invRows}=await sb.from('salesweb_credit_invoices').select('id,invoice_number,billing_period,total_qty,total_amount,status,invoice_file_url,payment_proof_url,issued_at,due_date,paid_at').eq('customer_id',order.customer_id);
       (invRows||[]).forEach(function(inv){creditInvoicesByPeriod[inv.billing_period]=inv;});
     }
-    try{
-      var{data:billRows}=await sb.from('salesweb_credit_bills').select('id,bill_date,qty,amount,invoice_no,created_at').eq('order_id',id).order('bill_date',{ascending:true});
-      creditBills=billRows||[];
-    }catch(e){ creditBills=[]; /* migration not applied yet */ }
+    // Same trick as payment ledger: prefer SECURITY DEFINER RPC, fall
+    // back to direct SELECT so old Supabase instances still render.
+    var rpcListBills = await sb.rpc('list_credit_bills', { p_order_id: id });
+    if(!rpcListBills.error){
+      creditBills = rpcListBills.data || [];
+    } else {
+      try{
+        var{data:billRows}=await sb.from('salesweb_credit_bills').select('id,bill_date,qty,amount,invoice_no,created_at').eq('order_id',id).order('bill_date',{ascending:true});
+        creditBills=billRows||[];
+      }catch(e){ creditBills=[]; /* migration not applied yet */ }
+    }
   }
 
   var shortId=order.order_number||order.id.substring(0,8).toUpperCase();

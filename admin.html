@@ -1000,6 +1000,19 @@ input,select,textarea,button{font-family:inherit;}
   <div class="modal-foot"><button class="btn btn-outline" onclick="closeModal('modal-invoice-upload')">Cancel</button><button class="btn btn-primary" id="miu-submit" onclick="submitInvoiceUpload()">Upload &amp; Issue Invoice</button></div>
 </div></div>
 
+<!-- CREDIT BILL ADD / EDIT MODAL — repeatable per credit order -->
+<div class="modal-overlay" id="modal-credit-bill" style="z-index:270;"><div class="modal" style="max-width:520px;"><div class="modal-head"><h2 id="cb-title">Add Bill</h2><button class="modal-close" onclick="closeModal('modal-credit-bill')">&#x2715;</button></div><div class="modal-body" style="padding:1.2rem;">
+  <input type="hidden" id="cb-order-id">
+  <input type="hidden" id="cb-bill-id">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;">
+    <div><label style="font-size:11px;color:var(--ink3);">Billing date *</label><input class="form-input" id="cb-date" type="date" style="font-size:12px;padding:6px 10px;"></div>
+    <div><label style="font-size:11px;color:var(--ink3);">Invoice No.</label><input class="form-input" id="cb-invoice" type="text" placeholder="e.g. INV-2026-045" style="font-size:12px;padding:6px 10px;"></div>
+    <div><label style="font-size:11px;color:var(--ink3);">Billing qty (palm) *</label><input class="form-input" id="cb-qty" type="number" min="0" step="1" style="font-size:12px;padding:6px 10px;"></div>
+    <div><label style="font-size:11px;color:var(--ink3);">Billing amount (RM) *</label><input class="form-input" id="cb-amount" type="number" min="0" step="0.01" style="font-size:12px;padding:6px 10px;"></div>
+  </div>
+  <div id="cb-help" style="font-size:11px;color:var(--ink4);margin-top:.6rem;"></div>
+</div><div class="modal-foot"><button class="btn btn-outline" onclick="closeModal('modal-credit-bill')">Cancel</button><button class="btn btn-primary" id="cb-submit" onclick="submitCreditBill()">Save Bill</button></div></div></div>
+
 <!-- REPORTS — VIEW MORE MODAL — chart drill-down list -->
 <div class="modal-overlay" id="modal-report-view-more" style="z-index:255;"><div class="modal" style="max-width:880px;"><div class="modal-head"><h2 id="rpt-vm-title">Detail</h2><button class="modal-close" onclick="closeModal('modal-report-view-more')">&#x2715;</button></div><div class="modal-body" id="rpt-vm-body" style="max-height:78vh;overflow-y:auto;"></div></div></div>
 
@@ -1714,7 +1727,7 @@ document.addEventListener('DOMContentLoaded',function(){
 });
 </script>
 
-<script src="admin-orders.js?v=2026-06-16-pay-rpc"></script>
+<script src="admin-orders.js?v=2026-06-16-credit-bills"></script>
 <script src="admin-reports.js?v=2026-06-15-charts"></script>
 <script src="admin-customers.js?v=2026-05-28-customer-groups"></script>
 <script src="admin-products.js?v=2026-06-16-publish-race"></script>

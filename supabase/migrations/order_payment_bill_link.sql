@@ -14,6 +14,13 @@ ALTER TABLE salesweb_order_payments
 
 CREATE INDEX IF NOT EXISTS idx_order_payments_bill ON salesweb_order_payments(bill_id);
 
+-- Drop the previous signatures first — CREATE OR REPLACE FUNCTION
+-- refuses to change the return type (list_*) or would leave a stale
+-- overload behind (save_* gained a new parameter). Both drops are IF
+-- EXISTS so this is safe to re-run on a fresh DB too.
+DROP FUNCTION IF EXISTS public.save_order_payment(UUID, TIMESTAMPTZ, NUMERIC, TEXT, TEXT, TEXT, TEXT);
+DROP FUNCTION IF EXISTS public.list_order_payments(UUID);
+
 -- Refresh save_order_payment with the extra p_bill_id parameter. Same
 -- SECURITY DEFINER gate; same auto-flip-to-Paid behaviour.
 CREATE OR REPLACE FUNCTION public.save_order_payment(

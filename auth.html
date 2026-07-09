@@ -324,17 +324,17 @@ async function loginWithPassword(){
     if(!name){showStatus('Please enter your full name.','error');return;}
     if(pw.length<6){showStatus('Password must be at least 6 characters.','error');return;}
     showStatus('Creating account...','success');
-    var{data:signUpData,error}=await _supabase.auth.signUp({email:identity,password:pw,options:{data:{full_name:name}}});
+    var{data:signUpData,error}=await _supabase.auth.signUp({email:identity,password:pw,options:{data:{full_name:name,user_type:'customer'}}});
     if(error){
       if(error.message.toLowerCase().includes('database')){
-        var{data:retryData,error:retryErr}=await _supabase.auth.signUp({email:identity,password:pw});
+        var{data:retryData,error:retryErr}=await _supabase.auth.signUp({email:identity,password:pw,options:{data:{user_type:'customer'}}});
         if(retryErr){showStatus(retryErr.message,'error');return;}
         if(retryData&&retryData.user){
-          await _supabase.from('shared_profiles').upsert({id:retryData.user.id,email:identity,full_name:name,role:'customer'},{onConflict:'id'});
+          await _supabase.from('shared_profiles').upsert({id:retryData.user.id,email:identity,full_name:name,role:'customer',user_type:'customer'},{onConflict:'id'});
         }
       } else {showStatus(error.message,'error');return;}
     } else if(signUpData&&signUpData.user){
-      await _supabase.from('shared_profiles').upsert({id:signUpData.user.id,email:identity,full_name:name,role:'customer'},{onConflict:'id'});
+      await _supabase.from('shared_profiles').upsert({id:signUpData.user.id,email:identity,full_name:name,role:'customer',user_type:'customer'},{onConflict:'id'});
     }
     showStatus('Account created! You can now sign in.','success');toggleSignup();return;
   }

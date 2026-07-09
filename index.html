@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<script>
+// ── BUILD-VERSION CACHE BUSTER (defensive) ────────────────────────────────
+// Triggers a ONE-TIME hard reload via ?_v=<ts> when the cached HTML predates
+// the current build. Aggressively guarded so it CANNOT break a load:
+//   • Whole thing wrapped in a single outer try/catch.
+//   • Hot path (same build) returns immediately — zero side effects.
+//   • Skips entirely on first visit (prev=null) so brand-new users never
+//     trigger a reload.
+//   • Uses sessionStorage as an extra latch: max ONE auto-reload per tab
+//     session, so even a logic bug here can't infinite-loop.
+//   • Removed the synchronous caches.keys() call that was firing on every
+//     load — Safari WebKit was occasionally hanging on that promise during
+//     parse, leaving the page blank. Cache Storage clear is no longer
+//     attempted here; the HTTP-cache bypass via ?_v= is sufficient.
+// Bump MJM_BUILD on every meaningful deploy.
+(function() {
+  try {
+    var MJM_BUILD = '2026-05-18-portal-points-activity';
+    var prev = null;
+    try { prev = localStorage.getItem('mjm_build'); } catch (_) { return; }
+    if (prev === MJM_BUILD) return;                // already on latest
+    try { localStorage.setItem('mjm_build', MJM_BUILD); } catch (_) {}
+    if (!prev) return;                              // first visit — no reload
+    // Single-shot latch: one reload per tab session, never more.
+    var reloaded = null;
+    try { reloaded = sessionStorage.getItem('mjm_cb_done'); } catch (_) { return; }
+    if (reloaded === '1') return;
+    try { sessionStorage.setItem('mjm_cb_done', '1'); } catch (_) {}
+    try {
+      var u = new URL(location.href);
+      u.searchParams.set('_v', String(Date.now()));
+      location.replace(u.href);
+    } catch (_) {}
+  } catch (_) {}
+})();
+</script>
+<script>
+// ── VISIBLE JS ERROR REPORTER ─────────────────────────────────────────────
+// Surfaces ANY uncaught JS error as a red banner at the top of the page so
+// we can finally see what's breaking on Safari/iOS. Without this, users on
+// non-Chrome browsers see a blank page with no clue. The banner only
+// appears if something throws — happy path is invisible.
+(function() {
+  function showErr(label, detail) {
+    try {
+      var b = document.getElementById('js-error-banner');
+      if (!b) {
+        b = document.createElement('div');
+        b.id = 'js-error-banner';
+        b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#dc2626;color:#fff;padding:.6rem 1rem;font:12px/1.4 -apple-system,BlinkMacSystemFont,sans-serif;text-align:left;box-shadow:0 4px 12px rgba(0,0,0,.3);white-space:pre-wrap;word-break:break-word;max-height:50vh;overflow-y:auto;';
+        (document.body || document.documentElement).appendChild(b);
+      }
+      // Append (don't replace) so multiple errors are all visible.
+      b.textContent = (b.textContent ? b.textContent + '\n\n' : '') + '⚠ ' + label + ': ' + detail;
+    } catch (_) {}
+  }
+  window.addEventListener('error', function(ev) {
+    var msg = (ev && (ev.message || (ev.error && ev.error.message))) || 'Unknown error';
+    var where = (ev && ev.filename) ? (' @ ' + ev.filename + ':' + (ev.lineno || '?') + ':' + (ev.colno || '?')) : '';
+    showErr('JS error', msg + where);
+  });
+  window.addEventListener('unhandledrejection', function(ev) {
+    var reason = ev && ev.reason;
+    var msg = (reason && (reason.message || String(reason))) || 'Unknown promise rejection';
+    showErr('Promise rejection', msg);
+  });
+})();
+</script>
+<title>MJM Nursery | MPOB Certified Oil Palm Seedlings</title>
+<link rel="icon" type="image/png" href="https://cdn.store-assets.com/s/1408881/f/16655641.png">
+<link rel="apple-touch-icon" href="https://cdn.store-assets.com/s/1408881/f/16655641.png">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&display=swap" rel="stylesheet">
+</head>
+<body>
+<div id="root"></div>
+<script type="module" src="/src/entries/index.jsx"></script>
+</body>
+</html>

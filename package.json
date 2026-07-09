@@ -6,7 +6,7 @@
   "description": "MJM Nursery Sales Web — storefront + admin (React + Vite + Supabase)",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/clean_static.mjs",
     "preview": "vite preview",
     "check:urls": "bash scripts/check_urls.sh"
   },

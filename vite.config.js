@@ -21,6 +21,7 @@ export default defineConfig({
       input: {
         auth: resolve(__dirname, 'auth.html'),
         'customer-portal': resolve(__dirname, 'customer-portal.html'),
+        admin: resolve(__dirname, 'admin.html'),
       },
     },
   },

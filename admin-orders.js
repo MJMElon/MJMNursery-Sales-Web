@@ -2936,6 +2936,35 @@ async function savePaymentEntry(){
   var session = await sb.auth.getSession();
   var user = session && session.data && session.data.session && session.data.session.user && session.data.session.user.email || 'admin';
 
+  // Preferred path: call the SECURITY DEFINER RPC. It bypasses the
+  // table's RLS and mirrors the admin-portal gate itself, so anyone who
+  // can open the admin portal can record a payment. If the RPC isn't
+  // installed yet on this Supabase, fall through to the legacy direct
+  // insert with strip-on-error retry loop.
+  var rpcRes = await sb.rpc('save_order_payment', {
+    p_order_id:        orderId,
+    p_paid_at:         paidAt,
+    p_amount:          amt,
+    p_note:            noteRaw ? String(noteRaw).trim() : null,
+    p_attachment_url:  attUrl,
+    p_attachment_name: attName,
+    p_created_by:      user
+  });
+  if(!rpcRes.error){
+    // RPC path succeeded — skip the legacy direct-insert flow below.
+    closeModal('modal-add-payment');
+    toast(uploadWarning ? ('Payment RM '+fmtMYR(amt)+' saved. '+uploadWarning) : ('Payment recorded: RM '+fmtMYR(amt)));
+    viewOrder(orderId);
+    return;
+  }
+  var rpcMsg = (rpcRes.error && rpcRes.error.message) || '';
+  // If the RPC is installed and returned a real authorisation error,
+  // surface it verbatim so the admin knows why.
+  if(/not authorised|not authenticated/i.test(rpcMsg)){
+    toast('Save failed: '+rpcMsg,'error'); return;
+  }
+  console.warn('[savePaymentEntry] RPC unavailable, falling back to direct insert:', rpcMsg);
+
   var basePayload = {
     order_id: orderId,
     paid_at:  paidAt,

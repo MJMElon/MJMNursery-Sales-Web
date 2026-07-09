@@ -22,6 +22,7 @@ export default defineConfig({
         auth: resolve(__dirname, 'auth.html'),
         'customer-portal': resolve(__dirname, 'customer-portal.html'),
         admin: resolve(__dirname, 'admin.html'),
+        index: resolve(__dirname, 'index.html'),
       },
     },
   },

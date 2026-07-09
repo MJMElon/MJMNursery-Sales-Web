@@ -1,0 +1,1265 @@
+<!--
+═══════════════════════════════════════════════════
+  MJM NURSERY — CHECKOUT / PAYMENT PAGE
+  Cart data loaded from sessionStorage (mjm_cart)
+  After payment: creates order in salesweb_customer_orders + salesweb_order_items
+═══════════════════════════════════════════════════
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>MJM Nursery | Checkout</title>
+<link rel="icon" type="image/png" href="https://cdn.store-assets.com/s/1408881/f/16655641.png">
+<link rel="apple-touch-icon" href="https://cdn.store-assets.com/s/1408881/f/16655641.png">
+<!-- BUILD: 2026-05-19c — points-redeem button + min-redemption feedback -->
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{--green-dark:#2D4A30;--green-mid:#3E6B42;--green-light:#6A9B6E;--green-pale:#C8DFC9;--gold:#C9A84C;--gold-light:#E8D49A;--cream:#F7F3EC;--white:#FFFFFF;--text-dark:#1A2E1B;--text-mid:#4A6B4C;--text-light:#8AAB8C;}
+body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-dark);min-height:100vh;}
+
+/* Nav */
+.nav{background:var(--green-dark);padding:0 3rem;height:100px;display:flex;align-items:center;justify-content:space-between;}
+.nav img{height:90px;cursor:pointer;transition:transform .3s ease;}
+.nav img:hover{transform:scale(2.5);z-index:100;position:relative;}
+.nav a{color:rgba(255,255,255,.7);text-decoration:none;font-size:13px;font-weight:500;transition:color .2s;}
+.nav a:hover{color:#fff;}
+
+/* Page title */
+.page-title{text-align:center;padding:2rem 1rem .5rem;font-family:'Cormorant Garamond',serif;font-size:2rem;font-weight:400;color:var(--text-dark);}
+
+/* Layout */
+.checkout-wrap{max-width:1060px;margin:1rem auto 3rem;padding:0 2rem;display:grid;grid-template-columns:1fr 380px;gap:2rem;align-items:start;}
+@media(max-width:768px){.checkout-wrap{grid-template-columns:1fr;}}
+
+.section{background:#fff;border-radius:16px;border:1px solid var(--green-pale);padding:1.5rem;margin-bottom:1rem;box-shadow:0 2px 8px rgba(0,0,0,.04);}
+.section-title{font-family:'Cormorant Garamond',serif;font-size:1.2rem;font-weight:400;color:var(--text-dark);margin-bottom:1rem;padding-bottom:.6rem;border-bottom:1px solid var(--green-pale);}
+
+/* Form */
+.field{margin-bottom:1rem;}
+.field label{display:block;font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.3rem;}
+.field label .req{color:#dc2626;font-weight:700;}
+.billing-required-note{font-size:11px;color:var(--text-light);margin-bottom:1rem;font-style:italic;}
+.field input,.field select,.field textarea{width:100%;background:var(--cream);border:1.5px solid var(--green-pale);border-radius:10px;padding:10px 14px;font-size:13px;font-weight:500;color:var(--text-dark);outline:none;font-family:'DM Sans',sans-serif;transition:border-color .2s;}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--green-mid);}
+/* Billing information fields render + save uppercase so e-invoice records
+   read consistently (matches the government TIN/MyKad casing conventions). */
+#billing-personal input,#billing-company input{text-transform:uppercase;}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:1rem;}
+@media(max-width:500px){.field-row{grid-template-columns:1fr;}}
+
+/* Billing selector */
+.billing-saved-wrap{margin-bottom:1rem;}
+.billing-saved-list{display:flex;flex-direction:column;gap:.5rem;margin-bottom:.8rem;}
+.billing-saved-card{display:flex;align-items:center;gap:.8rem;padding:.8rem 1rem;border:1.5px solid var(--green-pale);border-radius:10px;cursor:pointer;transition:all .15s;background:var(--cream);}
+.billing-saved-card:hover{border-color:var(--green-mid);}
+.billing-saved-card.selected{border-color:var(--green-mid);background:rgba(62,107,66,.06);box-shadow:0 0 0 2px rgba(62,107,66,.1);}
+.billing-saved-radio{width:18px;height:18px;border-radius:50%;border:2px solid var(--green-pale);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:border-color .15s;}
+.billing-saved-card.selected .billing-saved-radio{border-color:var(--green-mid);}
+.billing-saved-card.selected .billing-saved-radio::after{content:'';width:10px;height:10px;border-radius:50%;background:var(--green-mid);}
+.billing-saved-info{flex:1;min-width:0;}
+.billing-saved-type{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text-light);margin-bottom:.15rem;}
+.billing-saved-name{font-size:13px;font-weight:600;color:var(--text-dark);}
+.billing-saved-detail{font-size:11px;color:var(--text-mid);margin-top:.1rem;}
+
+.btn-new-billing{display:inline-flex;align-items:center;gap:.3rem;padding:8px 14px;border:1.5px dashed var(--green-pale);border-radius:10px;background:none;font-size:12px;font-weight:600;color:var(--green-mid);cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;}
+.btn-new-billing:hover{border-color:var(--green-mid);background:rgba(62,107,66,.04);}
+.btn-edit-billing{flex-shrink:0;background:#fff;border:1px solid var(--green-pale);color:var(--green-mid);font-size:11px;font-weight:600;padding:5px 10px;border-radius:8px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;display:inline-flex;align-items:center;gap:.2rem;}
+.btn-edit-billing:hover{background:var(--green-dark);color:#fff;border-color:var(--green-dark);}
+.btn-save-billing{width:100%;display:flex;align-items:center;justify-content:center;gap:.4rem;padding:10px 20px;background:var(--green-dark);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;font-family:'DM Sans',sans-serif;margin-top:.5rem;}
+.btn-save-billing:hover{background:var(--green-mid);}
+.btn-save-billing:disabled{opacity:.5;cursor:not-allowed;}
+.billing-edit-banner{font-size:11px;font-weight:600;color:#92400e;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;margin-bottom:.8rem;display:flex;justify-content:space-between;align-items:center;gap:.5rem;}
+.billing-edit-banner button{background:none;border:none;color:#92400e;font-size:11px;font-weight:700;cursor:pointer;text-decoration:underline;font-family:inherit;}
+
+/* Billing type toggle */
+.billing-toggle{display:flex;gap:.3rem;margin-bottom:1rem;background:var(--cream);border-radius:10px;padding:3px;}
+.billing-toggle button{flex:1;padding:8px;border:none;background:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;color:var(--text-light);}
+.billing-toggle button.active{background:#fff;color:var(--green-dark);box-shadow:0 1px 4px rgba(0,0,0,.06);}
+
+/* Cart summary */
+.cart-line{display:flex;align-items:center;gap:.8rem;padding:.6rem 0;border-bottom:1px solid #f0f0ec;}
+.cart-line:last-child{border-bottom:none;}
+.cart-line-img{width:48px;height:48px;border-radius:8px;background:var(--green-pale);object-fit:cover;flex-shrink:0;}
+.cart-line-info{flex:1;min-width:0;}
+.cart-line-name{font-size:13px;font-weight:600;color:var(--text-dark);line-height:1.3;}
+.cart-line-meta{font-size:11px;color:var(--text-light);}
+.cart-line-total{font-size:13px;font-weight:700;text-align:right;min-width:70px;}
+
+.summary-row{display:flex;justify-content:space-between;padding:.3rem 0;font-size:13px;}
+.summary-discount{display:flex;justify-content:space-between;align-items:center;padding:.3rem 0;font-size:13px;color:#059669;}
+.summary-discount .sd-label{display:inline-flex;align-items:center;gap:.4rem;}
+.summary-total{display:flex;justify-content:space-between;padding:.5rem 0;font-size:17px;font-weight:700;border-top:1.5px solid var(--green-pale);margin-top:.3rem;}
+.discount-clear{width:18px;height:18px;border-radius:50%;border:1px solid #d1d5db;background:#fff;color:#6b7280;font-size:13px;line-height:1;cursor:pointer;font-family:inherit;padding:0;display:inline-flex;align-items:center;justify-content:center;}
+.discount-clear:hover{background:#fee2e2;color:#dc2626;border-color:#fca5a5;}
+
+/* Discounts & Rewards section */
+.promo-section{margin-top:.8rem;padding-top:.8rem;border-top:1px solid #f0f0ec;}
+.promo-label{font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.6rem;}
+.promo-item{margin-top:.6rem;}
+.promo-item:first-of-type{margin-top:0;}
+.promo-item-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem;}
+.promo-item-label{font-size:12px;font-weight:600;color:var(--text-dark);}
+.promo-row{display:flex;gap:.4rem;}
+.promo-input{flex:1;background:var(--cream);border:1.5px solid var(--green-pale);border-radius:8px;padding:8px 10px;font-size:12px;font-weight:500;color:var(--text-dark);outline:none;font-family:'DM Sans',sans-serif;transition:border-color .15s;}
+.promo-input:focus{border-color:var(--green-mid);}
+.promo-btn{padding:8px 14px;background:var(--green-dark);color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:background .15s;white-space:nowrap;}
+.promo-btn:hover{background:var(--green-mid);}
+.promo-btn:disabled{opacity:.5;cursor:not-allowed;}
+.promo-msg{font-size:11px;margin-top:.3rem;font-weight:500;}
+.promo-msg.ok{color:#059669;}.promo-msg.err{color:#dc2626;}.promo-msg.warn{color:#b45309;}
+.points-bal{font-size:11px;color:var(--text-mid);}
+
+/* Payment method */
+.pay-method-section{margin-top:1rem;padding-top:.8rem;border-top:1px solid #f0f0ec;}
+.pay-method-label{font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem;}
+.pay-method-group{display:flex;flex-direction:column;gap:.35rem;}
+.pay-method-opt{display:flex;align-items:center;gap:.6rem;padding:.55rem .7rem;border:1.5px solid var(--green-pale);border-radius:8px;cursor:pointer;transition:all .12s;background:var(--cream);font-size:12.5px;font-weight:500;color:var(--text-dark);}
+.pay-method-opt:hover{border-color:var(--green-mid);}
+.pay-method-opt.selected{border-color:var(--green-mid);background:rgba(62,107,66,.06);box-shadow:0 0 0 2px rgba(62,107,66,.08);}
+.pay-method-dot{width:16px;height:16px;border-radius:50%;border:2px solid var(--green-pale);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:border-color .12s;}
+.pay-method-opt.selected .pay-method-dot{border-color:var(--green-mid);}
+.pay-method-opt.selected .pay-method-dot::after{content:'';width:8px;height:8px;border-radius:50%;background:var(--green-mid);}
+.pay-method-tag{font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;text-transform:uppercase;letter-spacing:.05em;margin-left:auto;}
+.pay-method-tag.offline{background:rgba(201,168,76,.15);color:var(--gold);}
+.pay-method-tag.online{background:rgba(59,130,246,.1);color:#3b82f6;}
+.pay-method-info{flex:1;min-width:0;}
+.pay-method-info>div:first-child{font-size:12.5px;font-weight:600;color:var(--text-dark);line-height:1.3;}
+.pay-method-sub{font-size:10.5px;color:var(--text-light);margin-top:.15rem;font-weight:400;}
+
+/* Collection section */
+.collection-card{background:var(--cream);border-radius:12px;padding:1.2rem;border:1px solid var(--green-pale);}
+.collection-title{font-size:14px;font-weight:700;color:var(--text-dark);margin-bottom:.1rem;display:flex;align-items:center;gap:.4rem;}
+.collection-title svg{width:16px;height:16px;fill:#dc2626;}
+.collection-addr{font-size:12.5px;color:var(--text-mid);line-height:1.6;margin-bottom:.8rem;}
+.collection-note{font-size:11.5px;color:var(--text-dark);font-weight:600;margin-bottom:1rem;padding:.6rem .8rem;background:rgba(201,168,76,.15);border:1px solid rgba(201,168,76,.3);border-radius:8px;line-height:1.5;}
+.collection-hours{margin-bottom:1rem;}
+.collection-hours-title{font-size:13px;font-weight:700;color:var(--text-dark);margin-bottom:.5rem;}
+.collection-hours table{width:100%;font-size:12.5px;border-collapse:collapse;}
+.collection-hours td{padding:.35rem .5rem;border-bottom:1px solid rgba(200,223,201,.3);}
+.collection-hours tr:last-child td{border-bottom:none;}
+.collection-hours td:first-child{font-weight:500;color:var(--text-dark);width:110px;}
+.collection-hours td:last-child{color:var(--text-mid);font-weight:600;}
+.btn-map{display:inline-flex;align-items:center;gap:.4rem;padding:9px 16px;background:var(--green-dark);color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;text-decoration:none;transition:all .2s;font-family:'DM Sans',sans-serif;}
+.btn-map:hover{background:var(--green-mid);}
+.btn-map svg{width:14px;height:14px;fill:none;stroke:#fff;stroke-width:2;}
+
+/* Buttons */
+.btn-pay{width:100%;padding:.8rem;background:var(--green-dark);color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;font-family:'DM Sans',sans-serif;margin-top:.8rem;}
+.btn-pay:hover{background:var(--green-mid);}
+.btn-pay:disabled{opacity:.5;cursor:not-allowed;}
+.btn-back{display:inline-flex;align-items:center;gap:.3rem;color:var(--text-light);font-size:13px;font-weight:500;text-decoration:none;margin-bottom:1rem;transition:color .2s;}
+.btn-back:hover{color:var(--green-mid);}
+
+/* Order success / payment proof page */
+.order-success{grid-column:1/-1;max-width:640px;margin:0 auto;padding:2rem 0;}
+.order-success-header{text-align:center;margin-bottom:1.5rem;}
+.order-success-icon{font-size:3rem;margin-bottom:.5rem;}
+.order-success-title{font-family:'Cormorant Garamond',serif;font-size:1.8rem;color:var(--text-dark);margin-bottom:.3rem;}
+.order-success-meta{font-size:14px;color:var(--text-mid);}
+
+.next-step-card{background:#fff;border:1px solid var(--green-pale);border-radius:16px;padding:1.5rem;margin-bottom:1rem;box-shadow:0 2px 8px rgba(0,0,0,.04);}
+.next-step-title{font-family:'Cormorant Garamond',serif;font-size:1.1rem;color:var(--text-dark);margin-bottom:1rem;padding-bottom:.5rem;border-bottom:1px solid var(--green-pale);}
+.pay-info-row{display:flex;justify-content:space-between;padding:.35rem 0;font-size:13px;border-bottom:1px solid #f0f0ec;}
+.pay-info-row:last-child{border-bottom:none;}
+.pay-info-label{color:var(--text-light);font-weight:500;}
+.pay-info-val{color:var(--text-dark);font-weight:600;}
+
+.duitnow-qr{text-align:center;padding:1rem;background:var(--cream);border-radius:12px;margin-bottom:1rem;}
+.duitnow-qr img{max-width:220px;border-radius:8px;margin-bottom:.5rem;}
+.duitnow-qr-note{font-size:11px;color:var(--text-mid);}
+
+.upload-section{margin-top:.5rem;}
+.upload-label{font-size:12px;font-weight:600;color:var(--text-dark);margin-bottom:.5rem;}
+.upload-area{border:2px dashed var(--green-pale);border-radius:12px;padding:1.5rem;text-align:center;cursor:pointer;transition:all .15s;background:var(--cream);}
+.upload-area:hover{border-color:var(--green-mid);background:rgba(62,107,66,.04);}
+.upload-area svg{width:32px;height:32px;stroke:var(--text-light);fill:none;stroke-width:1.5;margin-bottom:.4rem;}
+.upload-area-text{font-size:12px;color:var(--text-light);font-weight:500;}
+.upload-area-sub{font-size:10px;color:var(--text-light);margin-top:.2rem;opacity:.7;}
+.upload-preview{margin-top:.8rem;display:none;}
+.upload-preview img{max-width:100%;max-height:200px;border-radius:8px;border:1px solid var(--green-pale);}
+.upload-preview-name{font-size:11px;color:var(--text-mid);margin-top:.3rem;}
+.btn-upload-submit{width:100%;padding:10px;background:var(--green-dark);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;font-family:'DM Sans',sans-serif;margin-top:.8rem;}
+.btn-upload-submit:hover{background:var(--green-mid);}
+.btn-upload-submit:disabled{opacity:.5;cursor:not-allowed;}
+
+/* Toast */
+.toast{position:fixed;bottom:2rem;left:50%;transform:translateX(-50%) translateY(80px);background:var(--green-dark);color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:600;z-index:999;opacity:0;transition:all .3s;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<div class="nav">
+  <a href="index.html"><img src="https://cdn.store-assets.com/s/1408881/f/16655641.png" alt="MJM Nursery"></a>
+</div>
+
+<h1 class="page-title">Checkout</h1>
+
+<div class="checkout-wrap">
+  <!-- LEFT: Forms -->
+  <div>
+    <a href="index.html" class="btn-back">&larr; Continue Shopping</a>
+
+    <!-- Section 1: Contact Information -->
+    <div class="section">
+      <div class="section-title">1. Contact Information</div>
+      <div class="field"><label>Contact Person Name</label><input type="text" id="ck-contact-name"></div>
+      <div class="field-row">
+        <div class="field"><label>Phone Number</label><input type="tel" id="ck-phone"></div>
+        <div class="field"><label>Email</label><input type="email" id="ck-email"></div>
+      </div>
+    </div>
+
+    <!-- Section 2: Billing Information -->
+    <div class="section">
+      <div class="section-title">2. Billing Information</div>
+
+      <!-- Saved billing selector -->
+      <div class="billing-saved-wrap" id="billing-saved-wrap" style="display:none;">
+        <div class="billing-saved-list" id="billing-saved-list"></div>
+      </div>
+      <button class="btn-new-billing" id="btn-new-billing" onclick="toggleNewBilling()">+ Create New Billing Info</button>
+
+      <!-- New / Edit billing form (hidden when using saved) -->
+      <div id="billing-new-form" style="display:none;margin-top:1rem;">
+        <div id="billing-edit-banner" class="billing-edit-banner" style="display:none;">
+          <span><span id="billing-edit-banner-text">Editing saved billing info</span></span>
+          <button type="button" onclick="cancelEditBilling()">Cancel</button>
+        </div>
+        <div class="billing-toggle">
+          <button class="active" id="bt-personal" onclick="switchBilling('personal')">Personal</button>
+          <button id="bt-company" onclick="switchBilling('company')">Company</button>
+        </div>
+
+        <div class="billing-required-note"><span class="req">*</span> All fields are required</div>
+
+        <!-- Personal billing -->
+        <div id="billing-personal">
+          <div class="field"><label>Full Name <span class="req">*</span></label><input type="text" id="ck-name"></div>
+          <div class="field"><label>I/C Number <span class="req">*</span></label><input type="text" id="ck-ic"></div>
+          <div class="field"><label>Billing Address <span class="req">*</span></label><input type="text" id="ck-addr"></div>
+          <div class="field-row">
+            <div class="field"><label>Country <span class="req">*</span></label><input type="text" id="ck-country" value="Malaysia"></div>
+            <div class="field"><label>State <span class="req">*</span></label><input type="text" id="ck-state" value="Sarawak"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>City <span class="req">*</span></label><input type="text" id="ck-city"></div>
+            <div class="field"><label>Postcode <span class="req">*</span></label><input type="text" id="ck-postcode"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>TIN <span class="req">*</span></label><input type="text" id="ck-tin"></div>
+            <div class="field"><label>MPOB License No. <span class="req">*</span></label><input type="text" id="ck-mpob"></div>
+          </div>
+        </div>
+
+        <!-- Company billing -->
+        <div id="billing-company" style="display:none;">
+          <div class="field"><label>Company Name <span class="req">*</span></label><input type="text" id="ck-coname"></div>
+          <div class="field"><label>Registration No. <span class="req">*</span></label><input type="text" id="ck-coreg"></div>
+          <div class="field"><label>Billing Address <span class="req">*</span></label><input type="text" id="ck-co-addr"></div>
+          <div class="field-row">
+            <div class="field"><label>Country <span class="req">*</span></label><input type="text" id="ck-co-country" value="Malaysia"></div>
+            <div class="field"><label>State <span class="req">*</span></label><input type="text" id="ck-co-state" value="Sarawak"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>City <span class="req">*</span></label><input type="text" id="ck-co-city"></div>
+            <div class="field"><label>Postcode <span class="req">*</span></label><input type="text" id="ck-co-postcode"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>TIN <span class="req">*</span></label><input type="text" id="ck-cotin"></div>
+            <div class="field"><label>MPOB License No. <span class="req">*</span></label><input type="text" id="ck-co-mpob"></div>
+          </div>
+        </div>
+
+        <button class="btn-save-billing" id="btn-save-billing" onclick="saveNewBilling()">Save Billing Info</button>
+      </div>
+    </div>
+
+    <!-- Section 3: Collection Address -->
+    <div class="section">
+      <div class="section-title">3. Collection Address</div>
+      <div class="collection-card">
+        <div style="font-size:11px;font-weight:500;color:var(--text-light);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem;">Self Collection Only</div>
+        <div class="collection-title">
+          <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3" fill="#fff"/></svg>
+          MJM Nursery Office
+        </div>
+        <div class="collection-addr">
+          Lot 141 Block 0 & Lot 71, 100, 101, 103, 261 & 267 Block 20,<br>
+          Niah Land District, Miri, 98000, Sarawak, Malaysia
+        </div>
+        <div class="collection-note">
+          Please WhatsApp or call 011-2933 7889 for seedling collection appointment.
+        </div>
+        <div class="collection-hours">
+          <div class="collection-hours-title">Business hour:</div>
+          <table>
+            <tr><td>Monday</td><td>08:00 - 16:30</td></tr>
+            <tr><td>Tuesday</td><td>08:00 - 16:30</td></tr>
+            <tr><td>Wednesday</td><td>08:00 - 16:30</td></tr>
+            <tr><td>Thursday</td><td>08:00 - 16:30</td></tr>
+            <tr><td>Friday</td><td>08:00 - 16:30</td></tr>
+            <tr><td>Saturday</td><td>08:00 - 12:00</td></tr>
+            <tr><td>Sunday</td><td>Closed</td></tr>
+          </table>
+        </div>
+        <a class="btn-map" href="https://maps.app.goo.gl/5619wt1roayXzvb5A" target="_blank">
+          <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          View Location on Google Maps
+        </a>
+      </div>
+    </div>
+
+    <!-- Section 4: Remark -->
+    <div class="section">
+      <div class="section-title">4. Remark</div>
+      <div class="field"><label>Order Notes (Optional)</label><textarea id="ck-remark" rows="2"></textarea></div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Order Summary -->
+  <div style="padding-top:2rem;">
+    <div class="section" style="position:sticky;top:1rem;">
+      <div class="section-title">Order Summary</div>
+      <div id="ck-items"></div>
+
+      <!-- Discounts & Rewards (voucher + points, unified) -->
+      <div class="promo-section">
+        <div class="promo-label">Discounts &amp; Rewards</div>
+
+        <div class="promo-item">
+          <div class="promo-item-head"><span class="promo-item-label">Voucher Code</span></div>
+          <div class="promo-row">
+            <input class="promo-input" type="text" id="ck-voucher" placeholder="Enter voucher code">
+            <button class="promo-btn" id="btn-voucher" onclick="applyVoucher()">Apply</button>
+          </div>
+          <div class="promo-msg" id="voucher-msg"></div>
+        </div>
+
+        <div class="promo-item" id="points-item" style="display:none;">
+          <div class="promo-item-head">
+            <span class="promo-item-label">Use Points</span>
+            <span class="points-bal" id="points-bal">Balance: 0 pts</span>
+          </div>
+          <div class="promo-row">
+            <input class="promo-input" type="number" id="ck-points" value="0" min="0" placeholder="0">
+            <button class="promo-btn" id="btn-redeem-points" onclick="applyPoints()">Redeem</button>
+          </div>
+          <div class="promo-msg" id="points-msg"></div>
+        </div>
+      </div>
+
+      <!-- Summary totals -->
+      <div style="margin-top:.8rem;" id="ck-summary"></div>
+
+      <!-- Payment Method -->
+      <div class="pay-method-section">
+        <div class="pay-method-label">Payment Method</div>
+        <div class="pay-method-group" id="pay-methods">
+          <div class="pay-method-opt" onclick="selectPayMethod(this,'offline')">
+            <div class="pay-method-dot"></div>
+            <div class="pay-method-info">
+              <div>DuitNow QR / Bank Transfer / Cash Deposit / Cheque</div>
+              <div class="pay-method-sub">Manual payment — Upload payment details after order</div>
+            </div>
+          </div>
+          <div class="pay-method-opt" onclick="selectPayMethod(this,'online')">
+            <div class="pay-method-dot"></div>
+            <div class="pay-method-info">
+              <div>FPX Online Banking / Credit &amp; Debit Card</div>
+              <div class="pay-method-sub">Pay instantly via secure online payment</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn-pay" id="btn-pay" onclick="placeOrder()">Place Order</button>
+      <div style="text-align:center;margin-top:.6rem;font-size:10px;color:var(--text-light);line-height:1.5;">By placing order, I agree to the MJM Nursery | MPOB Certified Oil Palm Seedlings's Terms of Service, Privacy Policy and Refund Policy.</div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var SB_URL='https://kibqjztozokohqmhqqqf.supabase.co';
+var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpYnFqenRvem9rb2hxbWhxcXFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMzQzNjIsImV4cCI6MjA4OTgxMDM2Mn0.J7qJUZhWXYf5b9oey4wXJkjdi66jomEMw_NeV9NWF7M';
+var _sb=supabase.createClient(SB_URL,SB_KEY);
+
+function fmtRM(n){return'RM '+n.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function showToast(m){var t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},3000);}
+
+// ── Cart ──
+var cart=[];
+try{cart=JSON.parse(sessionStorage.getItem('mjm_cart'))||[];}catch(e){}
+
+// ── Discounts & Payment state ──
+var voucherDiscount=0;
+var voucherCode='';
+var voucherCouponId=null;
+var pointsUsed=0;
+var pointsBalance=0;
+var selectedPayMethod='';
+
+// ── Pre-fill contact info from session/profile ──
+(async function(){
+  var name=sessionStorage.getItem('mjm_user_name')||'';
+  var email=sessionStorage.getItem('mjm_user_email')||'';
+  if(name)document.getElementById('ck-contact-name').value=name;
+  if(email)document.getElementById('ck-email').value=email;
+  var session=await _sb.auth.getSession();
+  var user=session?.data?.session?.user;
+  if(user){
+    if(user.phone)document.getElementById('ck-phone').value=user.phone;
+    if(!name||!user.phone){
+      try{
+        var{data:prof}=await _sb.from('shared_profiles').select('full_name,phone').eq('id',user.id).single();
+        if(prof){
+          if(prof.full_name&&!document.getElementById('ck-contact-name').value)document.getElementById('ck-contact-name').value=prof.full_name;
+          if(prof.phone&&!document.getElementById('ck-phone').value)document.getElementById('ck-phone').value=prof.phone;
+        }
+      }catch(e){}
+    }
+  }
+})();
+
+// Redeem ratio loaded from points_config — defaults to 100pts = RM1 (1pt = RM0.01).
+// Any integer number of points may be redeemed; the discount is computed
+// proportionally and rounded to 2 decimal places (the database column is
+// NUMERIC(10,2) so we round at the boundary). The previous behaviour
+// snapped the count down to a whole multiple of redeemPtsPerRm, which
+// silently discarded points when the customer's balance wasn't a clean
+// multiple of the chunk size (e.g. 45 pts → snapped to 25 with ratio 25:1).
+var redeemPtsPerRm = 100;   // points per `redeemRmPerUnit` of discount
+var redeemRmPerUnit = 1;    // RM produced by `redeemPtsPerRm` points
+function ptsToRm(pts){
+  var rm = (Number(pts)||0) * (redeemRmPerUnit / redeemPtsPerRm);
+  return Math.round(rm * 100) / 100;
+}
+
+// ── Load points balance + redeem ratio ──
+async function loadPointsBalance(){
+  var session=await _sb.auth.getSession();
+  var userId=session?.data?.session?.user?.id;
+  if(!userId)return;
+
+  // 1. Real balance from the ledger view (single source of truth). The view
+  //    subtracts points snapshotted on orders still in 'Pending Payment'
+  //    so the same points cannot be redeemed twice across overlapping
+  //    unpaid orders. pending_redeemed is exposed so we can tell the
+  //    customer *why* their balance dropped.
+  var pendingHold=0;
+  try{
+    var{data:bal}=await _sb.from('salesweb_customer_points_balance')
+      .select('balance,pending_redeemed').eq('user_id',userId).maybeSingle();
+    if(bal){
+      pointsBalance=Math.max(0, Number(bal.balance)||0);
+      pendingHold=Number(bal.pending_redeemed)||0;
+    }
+  }catch(e){}
+
+  // 2. Live redeem ratio so checkout discount uses whatever the admin set.
+  try{
+    var{data:cfg}=await _sb.from('salesweb_app_settings')
+      .select('value').eq('key','points_config').maybeSingle();
+    if(cfg&&cfg.value){
+      var parsed = typeof cfg.value==='string' ? JSON.parse(cfg.value) : cfg.value;
+      if(parsed){
+        if(parsed.redeem_pts && Number(parsed.redeem_pts)>0) redeemPtsPerRm = Number(parsed.redeem_pts);
+        if(parsed.redeem_rm  && Number(parsed.redeem_rm) >0) redeemRmPerUnit = Number(parsed.redeem_rm);
+      }
+    }
+  }catch(e){}
+
+  // Always show the section for logged-in customers, even at zero balance,
+  // so the feature is discoverable. Input + Redeem button are disabled
+  // unless there are spendable points; pending holds are surfaced in the
+  // balance label so the customer understands why the number is what it is.
+  document.getElementById('points-item').style.display='block';
+  var balText='Balance: '+pointsBalance.toLocaleString()+' pts';
+  if(pendingHold>0) balText+=' ('+pendingHold.toLocaleString()+' on hold for pending order)';
+  document.getElementById('points-bal').textContent=balText;
+  var input=document.getElementById('ck-points');
+  input.max=pointsBalance;
+  input.step=1;
+  input.disabled=(pointsBalance<=0);
+  var btn=document.getElementById('btn-redeem-points');
+  if(btn) btn.disabled=(pointsBalance<=0);
+}
+loadPointsBalance();
+
+// ── Render cart summary ──
+function renderCheckout(){
+  var el=document.getElementById('ck-items');
+  if(!cart.length){el.innerHTML='<div style="text-align:center;padding:1rem;color:var(--text-light);">Cart is empty</div>';document.getElementById('btn-pay').disabled=true;return;}
+  el.innerHTML=cart.map(function(c){
+    var img=c.image_url?'<img src="'+c.image_url+'" class="cart-line-img">':'<div class="cart-line-img" style="display:flex;align-items:center;justify-content:center;font-size:1.2rem;">🌱</div>';
+    return '<div class="cart-line">'+img+'<div class="cart-line-info"><div class="cart-line-name">'+c.name+(c.month?' — '+c.month:'')+'</div><div class="cart-line-meta">'+c.qty.toLocaleString()+' x '+fmtRM(c.price)+'</div></div><div class="cart-line-total">'+fmtRM(c.price*c.qty)+'</div></div>';
+  }).join('');
+  updateSummary();
+}
+
+function updateSummary(){
+  var subtotal=cart.reduce(function(s,c){return s+(c.price*c.qty);},0);
+  var html='<div class="summary-row"><span>Subtotal</span><span>'+fmtRM(subtotal)+'</span></div>';
+  if(voucherDiscount>0){
+    html+='<div class="summary-discount">'+
+            '<span class="sd-label">Voucher ('+voucherCode+')'+
+              '<button type="button" class="discount-clear" onclick="clearVoucher()" title="Remove voucher" aria-label="Remove voucher">&times;</button>'+
+            '</span>'+
+            '<span>- '+fmtRM(voucherDiscount)+'</span>'+
+          '</div>';
+  }
+  var pointsValue=ptsToRm(pointsUsed);   // uses admin-configured redeem rate
+  if(pointsUsed>0){
+    html+='<div class="summary-discount">'+
+            '<span class="sd-label">Points ('+pointsUsed.toLocaleString()+' pts)'+
+              '<button type="button" class="discount-clear" onclick="clearPoints()" title="Remove points" aria-label="Remove points">&times;</button>'+
+            '</span>'+
+            '<span>- '+fmtRM(pointsValue)+'</span>'+
+          '</div>';
+  }
+  var finalTotal=Math.max(0,subtotal-voucherDiscount-pointsValue);
+  html+='<div class="summary-total"><span>Amount to Pay</span><span>'+fmtRM(finalTotal)+'</span></div>';
+  document.getElementById('ck-summary').innerHTML=html;
+}
+
+// Remove an applied voucher — clears state and the input field, refreshes summary.
+function clearVoucher(){
+  voucherCode='';
+  voucherDiscount=0;
+  voucherCouponId=null;
+  var input=document.getElementById('ck-voucher'); if(input) input.value='';
+  var msg=document.getElementById('voucher-msg'); if(msg){msg.className='promo-msg';msg.textContent='';}
+  updateSummary();
+}
+
+// Remove a points redemption — resets to 0, refreshes summary.
+function clearPoints(){
+  pointsUsed=0;
+  var input=document.getElementById('ck-points'); if(input) input.value=0;
+  var msg=document.getElementById('points-msg'); if(msg){msg.className='promo-msg';msg.textContent='';}
+  updateSummary();
+}
+
+renderCheckout();
+
+// ── Voucher ──
+async function applyVoucher(){
+  var code=document.getElementById('ck-voucher').value.trim().toUpperCase();
+  var msg=document.getElementById('voucher-msg');
+  if(!code){msg.className='promo-msg err';msg.textContent='Please enter a voucher code';return;}
+  var btn=document.getElementById('btn-voucher');
+  btn.disabled=true;btn.textContent='Checking...';
+
+  // Delegate ALL validation (expiry, active, usage_limit, per_customer_limit,
+  // first_order_only, min_order_value, scope, max_discount, discount math) to
+  // the preview_coupon RPC — single source of truth shared with admin.
+  var subtotal=cart.reduce(function(s,c){return s+(c.price*c.qty);},0);
+  var items=cart.map(function(c){
+    return {product_id:c.id, category:c.category||null, qty:c.qty, price:c.price};
+  });
+  var session=await _sb.auth.getSession();
+  var userId=session?.data?.session?.user?.id||null;
+
+  var{data,error}=await _sb.rpc('preview_coupon',{
+    p_code:code, p_customer_id:userId, p_subtotal:subtotal, p_items:items
+  });
+  btn.disabled=false;btn.textContent='Apply';
+
+  // RPC returns a set; supabase-js gives us an array.
+  var row=Array.isArray(data)?data[0]:data;
+  if(error||!row){
+    msg.className='promo-msg err';
+    msg.textContent=(error&&error.message)||'Could not validate voucher';
+    voucherDiscount=0;voucherCode='';voucherCouponId=null;updateSummary();return;
+  }
+  if(!row.valid){
+    msg.className='promo-msg err';
+    msg.textContent=row.reason||'Voucher not valid';
+    voucherDiscount=0;voucherCode='';voucherCouponId=null;updateSummary();return;
+  }
+
+  voucherDiscount=Number(row.discount)||0;
+  voucherCode=code;
+  voucherCouponId=row.coupon_id||null;
+  msg.className='promo-msg ok';
+  msg.textContent=fmtRM(voucherDiscount)+' discount applied!'+(row.coupon_name?' ('+row.coupon_name+')':'');
+  updateSummary();
+}
+
+// ── Points ──
+// Triggered only by the "Redeem" button next to the input (no longer on every
+// keystroke/blur, which used to silently snap the value to 0). Behaviour:
+//   • user types any number → value stays as typed until they click Redeem
+//   • if they redeem more than balance → cap to balance, warn message
+//     "Max value is N pts (your balance)."
+//   • if they redeem fewer pts than the minimum chunk (e.g. typed 50 when
+//     100pts=RM1) → keep raw=0, show clear "Minimum is N pts" warning so the
+//     user understands why no discount was applied.
+//   • redeeming 0 simply un-redeems any previously applied amount.
+function applyPoints(){
+  var input  = document.getElementById('ck-points');
+  var msg    = document.getElementById('points-msg');
+  var typed  = parseInt(input.value)||0;
+  if(typed<0)typed=0;
+
+  var capped=false;
+  var raw   =typed;
+  if(raw>pointsBalance){ raw=pointsBalance; capped=true; }
+
+  // Don't let a redemption exceed what the order can actually absorb —
+  // any extra points beyond (subtotal − voucherDiscount) would just be
+  // spent for no benefit. Floor() so the chosen count never overshoots
+  // the chargeable amount once converted back to RM.
+  var subtotal     = cart.reduce(function(s,c){return s+(c.price*c.qty);},0);
+  var maxUsefulRm  = Math.max(0, subtotal - voucherDiscount);
+  var maxUsefulPts = Math.floor(maxUsefulRm * redeemPtsPerRm / redeemRmPerUnit);
+  var overOrder    = false;
+  if(raw > maxUsefulPts){ raw = maxUsefulPts; overOrder = true; }
+
+  var rm = ptsToRm(raw);
+
+  // If the chosen count is positive but worth less than RM 0.01 once
+  // rounded to 2dp (only happens with unusual configs where 1 pt is
+  // worth a fraction of a sen), refuse rather than spending the points
+  // for nothing.
+  var below_min = (raw > 0 && rm < 0.01);
+  if(below_min){ raw = 0; rm = 0; }
+
+  input.value=raw;
+  pointsUsed =raw;
+
+  if(below_min){
+    var minPts = Math.ceil(0.01 * redeemPtsPerRm / redeemRmPerUnit);
+    msg.className='promo-msg warn';
+    msg.textContent='Minimum redemption is '+minPts.toLocaleString()+' pts '
+                  + '(RM 0.01 off). Nothing deducted.';
+  } else if(overOrder){
+    msg.className='promo-msg warn';
+    if(raw>0){
+      msg.textContent='Capped at '+raw.toLocaleString()+' pts — that\'s the most this order can absorb. '+fmtRM(rm)+' deducted.';
+    } else {
+      msg.textContent='Order is already fully covered — no points needed.';
+    }
+  } else if(capped){
+    msg.className='promo-msg warn';
+    msg.textContent='Max value is '+pointsBalance.toLocaleString()+' pts (your balance). '
+                  + (raw>0 ? fmtRM(rm)+' deducted.' : '');
+  } else if(raw>0){
+    msg.className='promo-msg ok';
+    msg.textContent=fmtRM(rm)+' deducted from points';
+  } else {
+    msg.className='promo-msg';
+    msg.textContent='';
+  }
+  updateSummary();
+}
+
+// ── Payment method ──
+function selectPayMethod(el,method){
+  selectedPayMethod=method;
+  document.querySelectorAll('.pay-method-opt').forEach(function(o){o.classList.remove('selected');});
+  el.classList.add('selected');
+}
+
+// ── Billing toggle (personal / company) ──
+var billingType='personal';
+function switchBilling(type){
+  billingType=type;
+  document.getElementById('billing-personal').style.display=type==='personal'?'block':'none';
+  document.getElementById('billing-company').style.display=type==='company'?'block':'none';
+  document.getElementById('bt-personal').classList.toggle('active',type==='personal');
+  document.getElementById('bt-company').classList.toggle('active',type==='company');
+}
+
+// ── Saved billing info ──
+var savedBilling=[];
+var selectedBillingId=null;
+var showingNewForm=false;
+// When non-null, the new/edit form is in "edit" mode and the saved
+// billing row with this id is what gets UPDATEd on save. When null,
+// the form is for a brand-new entry and INSERTs on save.
+var editingBillingId=null;
+
+async function loadSavedBilling(){
+  var session=await _sb.auth.getSession();
+  var userId=session?.data?.session?.user?.id;
+  if(!userId)return;
+  var{data}=await _sb.from('salesweb_billing_info').select('*').eq('user_id',userId).order('created_at',{ascending:true});
+  if(!data||!data.length)return;
+  savedBilling=data;
+  renderSavedBilling();
+}
+
+function renderSavedBilling(){
+  if(!savedBilling.length){
+    document.getElementById('billing-saved-wrap').style.display='none';
+    // No saved billing — show new form by default
+    showingNewForm=true;
+    document.getElementById('billing-new-form').style.display='block';
+    document.getElementById('btn-new-billing').style.display='none';
+    return;
+  }
+  document.getElementById('billing-saved-wrap').style.display='block';
+  var html='';
+  savedBilling.forEach(function(b){
+    var isPersonal=b.type==='personal';
+    var icon=isPersonal?'🧑':'🏢';
+    var typeLabel=isPersonal?'Personal':'Company';
+    var detail='';
+    if(isPersonal){
+      detail=[b.ic_number,b.tin?'TIN: '+b.tin:null,b.mpob_license?'MPOB: '+b.mpob_license:null].filter(Boolean).join(' · ');
+    } else {
+      detail=[b.company_reg?'Reg: '+b.company_reg:null,b.tin?'TIN: '+b.tin:null,b.mpob_license?'MPOB: '+b.mpob_license:null].filter(Boolean).join(' · ');
+    }
+    var sel=selectedBillingId===b.id?'selected':'';
+    var idJs=String(b.id).replace(/[\\'"<>]/g,'');
+    html+='<div class="billing-saved-card '+sel+'" onclick="selectBilling(\''+idJs+'\')">'+
+      '<div class="billing-saved-radio"></div>'+
+      '<div class="billing-saved-info">'+
+        '<div class="billing-saved-type">'+icon+' '+typeLabel+'</div>'+
+        '<div class="billing-saved-name">'+b.name+'</div>'+
+        (detail?'<div class="billing-saved-detail">'+detail+'</div>':'')+
+      '</div>'+
+      // stopPropagation so the card-level click that just selects doesn't
+      // also fire when the customer specifically wants to edit.
+      '<button type="button" class="btn-edit-billing" onclick="event.stopPropagation();editBilling(\''+idJs+'\')">✏️ Edit</button>'+
+    '</div>';
+  });
+  document.getElementById('billing-saved-list').innerHTML=html;
+  // Auto-select first if none selected
+  if(!selectedBillingId&&savedBilling.length){
+    selectBilling(savedBilling[0].id);
+  }
+}
+
+function selectBilling(id){
+  selectedBillingId=id;
+  showingNewForm=false;
+  editingBillingId=null;
+  document.getElementById('billing-new-form').style.display='none';
+  document.getElementById('billing-edit-banner').style.display='none';
+  document.getElementById('btn-new-billing').textContent='+ Create New Billing Info';
+  document.getElementById('btn-save-billing').textContent='Save Billing Info';
+  renderSavedBilling();
+}
+
+function toggleNewBilling(){
+  showingNewForm=!showingNewForm;
+  if(showingNewForm){
+    // Opening the form for a NEW entry — make sure any prior edit
+    // state from an Edit click is cleared so the save handler inserts.
+    editingBillingId=null;
+    selectedBillingId=null;
+    document.getElementById('billing-edit-banner').style.display='none';
+    document.getElementById('btn-save-billing').textContent='Save Billing Info';
+    clearBillingFormFields();
+    document.getElementById('billing-new-form').style.display='block';
+    document.getElementById('btn-new-billing').innerHTML='&larr; Back to Choose Saved Billing Info';
+    // Deselect saved cards
+    document.querySelectorAll('.billing-saved-card').forEach(function(c){c.classList.remove('selected');});
+    document.querySelectorAll('.billing-saved-radio').forEach(function(r){r.innerHTML='';});
+  } else {
+    editingBillingId=null;
+    document.getElementById('billing-new-form').style.display='none';
+    document.getElementById('billing-edit-banner').style.display='none';
+    document.getElementById('btn-new-billing').textContent='+ Create New Billing Info';
+    document.getElementById('btn-save-billing').textContent='Save Billing Info';
+    if(savedBilling.length)selectBilling(savedBilling[0].id);
+  }
+}
+
+// Open the new-billing form pre-filled with a saved entry's values so
+// the customer can fix a typo without re-keying everything. Save will
+// UPDATE the existing row (not INSERT a new one).
+function editBilling(id){
+  var b=savedBilling.find(function(x){return x.id===id;});
+  if(!b){showToast('Could not find that billing entry');return;}
+  editingBillingId=id;
+  selectedBillingId=null;
+  showingNewForm=true;
+  switchBilling(b.type==='company'?'company':'personal');
+  if(b.type==='company'){
+    setVal('ck-coname',b.name);
+    setVal('ck-coreg',b.company_reg);
+    setVal('ck-cotin',b.tin);
+    setVal('ck-co-mpob',b.mpob_license);
+    setVal('ck-co-addr',b.billing_address);
+    setVal('ck-co-country',b.country||'Malaysia');
+    setVal('ck-co-state',b.state||'Sarawak');
+    setVal('ck-co-city',b.city);
+    setVal('ck-co-postcode',b.postcode);
+  } else {
+    setVal('ck-name',b.name);
+    setVal('ck-ic',b.ic_number);
+    setVal('ck-tin',b.tin);
+    setVal('ck-mpob',b.mpob_license);
+    setVal('ck-addr',b.billing_address);
+    setVal('ck-country',b.country||'Malaysia');
+    setVal('ck-state',b.state||'Sarawak');
+    setVal('ck-city',b.city);
+    setVal('ck-postcode',b.postcode);
+  }
+  var banner=document.getElementById('billing-edit-banner');
+  document.getElementById('billing-edit-banner-text').textContent='Editing: '+(b.name||'saved billing info');
+  banner.style.display='flex';
+  document.getElementById('billing-new-form').style.display='block';
+  document.getElementById('btn-new-billing').innerHTML='&larr; Back to Choose Saved Billing Info';
+  document.getElementById('btn-save-billing').textContent='Update Billing Info';
+  document.querySelectorAll('.billing-saved-card').forEach(function(c){c.classList.remove('selected');});
+  // Scroll the form into view so it's obvious the click did something.
+  document.getElementById('billing-new-form').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function cancelEditBilling(){
+  editingBillingId=null;
+  showingNewForm=false;
+  clearBillingFormFields();
+  document.getElementById('billing-new-form').style.display='none';
+  document.getElementById('billing-edit-banner').style.display='none';
+  document.getElementById('btn-new-billing').textContent='+ Create New Billing Info';
+  document.getElementById('btn-save-billing').textContent='Save Billing Info';
+  if(savedBilling.length)selectBilling(savedBilling[0].id);
+}
+
+function setVal(id,v){var el=document.getElementById(id);if(el)el.value=v==null?'':v;}
+function clearBillingFormFields(){
+  ['ck-name','ck-ic','ck-tin','ck-mpob','ck-addr','ck-city','ck-postcode',
+   'ck-coname','ck-coreg','ck-cotin','ck-co-mpob','ck-co-addr','ck-co-city','ck-co-postcode']
+    .forEach(function(id){setVal(id,'');});
+  // Country / State default back to Malaysia / Sarawak — same defaults
+  // the form ships with when the page loads.
+  setVal('ck-country','Malaysia');
+  setVal('ck-state','Sarawak');
+  setVal('ck-co-country','Malaysia');
+  setVal('ck-co-state','Sarawak');
+}
+
+// ── Save / update billing info ──
+// One handler, two modes:
+//   editingBillingId is null  → INSERT a fresh row (legacy behaviour)
+//   editingBillingId is set   → UPDATE that row in place. Lets the
+//                                customer fix a typo without leaving
+//                                a stale duplicate behind.
+async function saveNewBilling(){
+  // Saved entries now persist full address (post billing_info_address
+  // migration), so the save-time validation is the same as the
+  // order-placement validation: every field is required.
+  var valid=validateBillingFields();
+  if(!valid)return;
+
+  var session=await _sb.auth.getSession();
+  var userId=session?.data?.session?.user?.id;
+  if(!userId){showToast('Please log in to save billing info');return;}
+
+  var btn=document.getElementById('btn-save-billing');
+  var origLabel=btn.textContent;
+  btn.disabled=true;btn.textContent=editingBillingId?'Updating...':'Saving...';
+
+  // Belt-and-braces uppercase — the delegated listener already uppercases
+  // as the customer types, this catches anything an autofill / browser
+  // extension slipped past.
+  var _v=function(id){ return (document.getElementById(id).value||'').trim().toUpperCase(); };
+  var row={};
+  if(billingType==='personal'){
+    row.type='personal';
+    row.name          = _v('ck-name');
+    row.ic_number     = _v('ck-ic');
+    row.tin           = _v('ck-tin');
+    row.mpob_license  = _v('ck-mpob') || null;
+    row.billing_address = _v('ck-addr');
+    row.country       = _v('ck-country');
+    row.state         = _v('ck-state');
+    row.city          = _v('ck-city');
+    row.postcode      = _v('ck-postcode');
+    // Personal entries leave company_reg empty so a personal→personal
+    // edit doesn't carry over stale company-reg data, and a
+    // company→personal edit clears it.
+    row.company_reg=null;
+  } else {
+    row.type='company';
+    row.name          = _v('ck-coname');
+    row.company_reg   = _v('ck-coreg');
+    row.tin           = _v('ck-cotin');
+    row.mpob_license  = _v('ck-co-mpob') || null;
+    row.billing_address = _v('ck-co-addr');
+    row.country       = _v('ck-co-country');
+    row.state         = _v('ck-co-state');
+    row.city          = _v('ck-co-city');
+    row.postcode      = _v('ck-co-postcode');
+    row.ic_number=null;
+  }
+
+  var result;
+  if(editingBillingId){
+    // UPDATE — RLS gates the row to user_id=auth.uid() so we don't
+    // need to add a user_id filter; the eq on id is enough.
+    result=await _sb.from('salesweb_billing_info').update(row).eq('id',editingBillingId).select();
+  } else {
+    row.user_id=userId;
+    result=await _sb.from('salesweb_billing_info').insert([row]).select();
+  }
+  var data=result.data, error=result.error;
+  btn.disabled=false;btn.textContent=origLabel;
+  if(error){showToast('Error saving: '+error.message);return;}
+  if(data&&data[0]){
+    if(editingBillingId){
+      // Replace the cached row in place so renderSavedBilling shows
+      // the new values without a round-trip.
+      var idx=savedBilling.findIndex(function(b){return b.id===editingBillingId;});
+      if(idx>-1) savedBilling[idx]=data[0]; else savedBilling.push(data[0]);
+      showToast('Billing info updated!');
+    } else {
+      savedBilling.push(data[0]);
+      showToast('Billing info saved!');
+    }
+    editingBillingId=null;
+    selectBilling(data[0].id);
+  }
+}
+
+loadSavedBilling();
+
+// Uppercase every keystroke in the billing form. The CSS above renders
+// each character in caps; this makes the STORED value match what the
+// customer sees so proforma invoices / e-invoice records ship uppercase
+// too. Delegated once, covers both Personal and Company panels.
+['billing-personal','billing-company'].forEach(function(id){
+  var host=document.getElementById(id);
+  if(!host) return;
+  host.addEventListener('input', function(e){
+    var t=e.target;
+    if(!t || t.tagName!=='INPUT') return;
+    var up=(t.value||'').toUpperCase();
+    if(t.value!==up){
+      var caret=t.selectionStart; // preserve caret position
+      t.value=up;
+      try{ t.setSelectionRange(caret, caret); }catch(_){/* number inputs can throw */}
+    }
+  });
+});
+
+// ── Validate billing fields ──
+// All fields are required because the saved billing entry now persists
+// the full address too (post billing_info_address migration), so a
+// successful save means the entry is complete and Edit-then-Update
+// round-trips every field.
+function validateBillingFields(){
+  if(billingType==='personal'){
+    var fields=[
+      {id:'ck-name',label:'Full Name'},
+      {id:'ck-ic',label:'I/C Number'},
+      {id:'ck-addr',label:'Billing Address'},
+      {id:'ck-country',label:'Country'},
+      {id:'ck-state',label:'State'},
+      {id:'ck-city',label:'City'},
+      {id:'ck-postcode',label:'Postcode'},
+      {id:'ck-tin',label:'TIN'},
+      {id:'ck-mpob',label:'MPOB License No.'}
+    ];
+  } else {
+    var fields=[
+      {id:'ck-coname',label:'Company Name'},
+      {id:'ck-coreg',label:'Registration No.'},
+      {id:'ck-co-addr',label:'Billing Address'},
+      {id:'ck-co-country',label:'Country'},
+      {id:'ck-co-state',label:'State'},
+      {id:'ck-co-city',label:'City'},
+      {id:'ck-co-postcode',label:'Postcode'},
+      {id:'ck-cotin',label:'TIN'},
+      {id:'ck-co-mpob',label:'MPOB License No.'}
+    ];
+  }
+  for(var i=0;i<fields.length;i++){
+    var v=document.getElementById(fields[i].id).value.trim();
+    if(!v){showToast('Please enter '+fields[i].label);document.getElementById(fields[i].id).focus();return false;}
+  }
+  return true;
+}
+
+// ── Place Order ──
+async function placeOrder(){
+  if(!cart.length){showToast('Cart is empty');return;}
+
+  var contactName=document.getElementById('ck-contact-name').value.trim();
+  var phone=document.getElementById('ck-phone').value.trim();
+  var email=document.getElementById('ck-email').value.trim();
+  if(!contactName){showToast('Please enter contact person name');document.getElementById('ck-contact-name').focus();return;}
+  if(!phone){showToast('Please enter phone number');document.getElementById('ck-phone').focus();return;}
+  if(!email){showToast('Please enter email');document.getElementById('ck-email').focus();return;}
+
+  // Billing info
+  var billingName='',billingTin='',billingMpob='',billingIc='',billingReg='',billingAddr='';
+  if(selectedBillingId&&!showingNewForm){
+    // Using saved billing
+    var sb=savedBilling.find(function(b){return b.id===selectedBillingId;});
+    if(sb){
+      billingName=sb.name;
+      billingTin=sb.tin||'';
+      billingMpob=sb.mpob_license||'';
+      billingIc=sb.ic_number||'';
+      billingReg=sb.company_reg||'';
+    }
+  } else {
+    // Using new billing form — validate all fields
+    if(!validateBillingFields())return;
+    if(billingType==='personal'){
+      billingName=document.getElementById('ck-name').value.trim();
+      billingIc=document.getElementById('ck-ic').value.trim();
+      billingTin=document.getElementById('ck-tin').value.trim();
+      billingMpob=document.getElementById('ck-mpob').value.trim();
+      billingAddr=[document.getElementById('ck-addr').value.trim(),document.getElementById('ck-city').value.trim(),document.getElementById('ck-postcode').value.trim(),document.getElementById('ck-state').value.trim(),document.getElementById('ck-country').value.trim()].filter(Boolean).join(', ');
+    } else {
+      billingName=document.getElementById('ck-coname').value.trim();
+      billingReg=document.getElementById('ck-coreg').value.trim();
+      billingTin=document.getElementById('ck-cotin').value.trim();
+      billingMpob=document.getElementById('ck-co-mpob').value.trim();
+      billingAddr=[document.getElementById('ck-co-addr').value.trim(),document.getElementById('ck-co-city').value.trim(),document.getElementById('ck-co-postcode').value.trim(),document.getElementById('ck-co-state').value.trim(),document.getElementById('ck-co-country').value.trim()].filter(Boolean).join(', ');
+    }
+  }
+
+  // Payment method
+  if(!selectedPayMethod){showToast('Please select a payment method');return;}
+
+  var btn=document.getElementById('btn-pay');
+  btn.disabled=true;btn.textContent='Processing...';
+
+  var subtotal=cart.reduce(function(s,c){return s+(c.price*c.qty);},0);
+  var pointsValue=ptsToRm(pointsUsed);
+  var finalTotal=Math.max(0,subtotal-voucherDiscount-pointsValue);
+
+  // Get user session
+  var session=await _sb.auth.getSession();
+  var userId=session?.data?.session?.user?.id||null;
+
+  // Server-side re-check: refuse to place the order if the user has somehow
+  // tried to spend more points than they actually have (e.g. by editing the
+  // input via devtools or by racing two pending orders).
+  if(pointsUsed>0 && userId){
+    try{
+      var{data:freshBal}=await _sb.from('salesweb_customer_points_balance')
+        .select('balance').eq('user_id',userId).maybeSingle();
+      var available = freshBal && Number(freshBal.balance) || 0;
+      if(pointsUsed>available){
+        showToast('Not enough points — only '+available.toLocaleString()+' available');
+        btn.disabled=false;btn.textContent='Place Order';
+        return;
+      }
+    }catch(e){ /* if the view query fails, fall through; admin sees lower-priority issue */ }
+  }
+
+  // Save phone to profile for future use
+  if(userId&&phone){
+    _sb.from('shared_profiles').update({phone:phone}).eq('id',userId).then(function(res){
+      if(res.error)console.error('Phone save error:',res.error.message);
+    });
+  }
+
+  // Build remark with all extra details
+  var remarkParts=[];
+  var userRemark=document.getElementById('ck-remark').value.trim();
+  if(userRemark)remarkParts.push(userRemark);
+  remarkParts.push('Phone: '+phone);
+  remarkParts.push('Payment: '+selectedPayMethod);
+  if(voucherCode)remarkParts.push('Voucher: '+voucherCode+' (-'+fmtRM(voucherDiscount)+')');
+  if(pointsUsed>0)remarkParts.push('Points: '+pointsUsed+' (-'+fmtRM(pointsValue)+')');
+  if(billingAddr)remarkParts.push('Billing Addr: '+billingAddr);
+  if(billingIc)remarkParts.push('IC: '+billingIc);
+  if(billingReg)remarkParts.push('Reg: '+billingReg);
+  if(billingMpob)remarkParts.push('MPOB: '+billingMpob);
+
+  // Generate 6-digit order number (e.g. A3K7B2)
+  function genOrderNumber(){
+    // 5 random alphanumeric chars (no I,O) + 1 random 0–9 digit. Used only
+    // as a fallback if next_order_number() RPC fails.
+    var chars='ABCDEFGHJKLMNPQRSTUVWXYZ0123456789';
+    var out='';
+    for(var i=0;i<5;i++){ out += chars.charAt(Math.floor(Math.random()*chars.length)); }
+    return out + Math.floor(Math.random()*10).toString();
+  }
+
+  // Try up to 5 times in case of duplicate
+  var order=null,error=null,orderNum='';
+  for(var attempt=0;attempt<5;attempt++){
+    // Sequential year-prefixed number from the DB (atomic). Falls back to a
+    // random code only if the next_order_number() function isn't installed.
+    try{ var _nr=await _sb.rpc('next_order_number'); orderNum=(_nr&&_nr.data)?_nr.data:genOrderNumber(); }
+    catch(e){ orderNum=genOrderNumber(); }
+    var result=await _sb.from('salesweb_customer_orders').insert([{
+      order_number:orderNum,
+      customer_id:userId,
+      customer_name:contactName,
+      customer_email:email,
+      // Zero-total orders (voucher/points covered the whole bill) skip the
+      // payment step and land as Paid immediately.
+      status:(Number(finalTotal)||0)<=0 ? 'Paid' : 'Pending Payment',
+      total:finalTotal,
+      // Persist voucher + flat-discount fields on the row so any later
+      // recompute (Edit Items, Apply/Remove Discount, Apply/Remove Coupon)
+      // re-derives total without losing the customer's checkout discount.
+      // Without these, total would silently snap back to subtotal.
+      coupon_code:voucherCode||null,
+      coupon_discount:Number(voucherDiscount)||0,
+      discount_amount:0,
+      // Sticky channel from the landing URL (utm_source / referrer) — see
+      // detection block at the end of index.html. Defaults to online_store.
+      channel:(function(){ try{ return sessionStorage.getItem('mjm_channel')||'online_store'; }catch(e){ return 'online_store'; } })(),
+      shipping_address:'Self Collection — MJM Nursery Office, Niah Land District, Miri, 98000, Sarawak',
+      customer_remark:remarkParts.join(' | '),
+      billing_name:billingName,
+      billing_tax_id:billingTin||null,
+      // Redemption snapshot — used by issuePoints()/billplz-webhook to insert
+      // the negative ledger row when the order flips to Paid. Defaults to 0
+      // when no points were applied.
+      points_redeemed:pointsUsed||0,
+      points_discount_rm:pointsValue||0
+    }]).select().single();
+    order=result.data;error=result.error;
+    if(!error)break;
+    if(error&&!error.message.includes('duplicate')&&!error.message.includes('unique')){break;}
+  }
+
+  if(error){showToast('Error: '+error.message);btn.disabled=false;btn.textContent='Place Order';return;}
+
+  // Create order items & hold stock in PARALLEL
+  var items=cart.map(function(c){
+    return{order_id:order.id,product_id:c.id,product_name:c.name+(c.month?' — '+c.month:''),quantity:c.qty,unit_price:c.price,subtotal:c.price*c.qty};
+  });
+
+  var stockHolds=cart.map(async function(c){
+    try{
+      var{error:rpcErr}=await _sb.rpc('hold_product_stock',{p_product_id:c.id,p_qty:c.qty});
+      if(!rpcErr)return;
+    }catch(e){}
+    // Fallback: direct stock_qty deduction
+    var{data:prod}=await _sb.from('salesweb_products').select('stock_qty').eq('id',c.id).single();
+    if(prod){await _sb.from('salesweb_products').update({stock_qty:Math.max(0,(prod.stock_qty||0)-c.qty),updated_at:new Date().toISOString()}).eq('id',c.id);}
+  });
+
+  await Promise.all([
+    _sb.from('salesweb_order_items').insert(items),
+    Promise.all(stockHolds)
+  ]);
+
+  // Record voucher redemption: bumps usage_count and writes the redemption
+  // ledger row atomically. RPC is idempotent on (order_id, coupon_id) so a
+  // back-navigation re-submit won't double-count. Errors here shouldn't
+  // block the order — the discount was already baked into total.
+  if(voucherCode){
+    try{
+      var voucherItems=cart.map(function(c){
+        return {product_id:c.id, category:c.category||null, qty:c.qty, price:c.price};
+      });
+      var{data:redeemRes,error:redeemErr}=await _sb.rpc('redeem_coupon',{
+        p_code:voucherCode,
+        p_customer_id:userId,
+        p_customer_email:email,
+        p_order_id:order.id,
+        p_subtotal:subtotal,
+        p_items:voucherItems
+      });
+      if(redeemErr) console.error('redeem_coupon error:',redeemErr.message);
+      else if(redeemRes && redeemRes.ok===false) console.warn('redeem_coupon refused:',redeemRes.reason);
+    }catch(e){ console.error('redeem_coupon threw:',e); }
+  }
+
+  // Timeline entry — fire and forget (audit log, doesn't need to block redirect)
+  _sb.from('salesweb_order_timeline').insert([{order_id:order.id,status:'Order Placed',note:'Order placed by customer',changed_by:email}]).then(function(){});
+
+  // Order row, items and stock holds are all committed at this point — the
+  // cart is no longer the source of truth, the order is. Clear it now so a
+  // customer who back-navigates to the shop doesn't see the same items
+  // sitting in the cart and assume the order failed (which used to lead to
+  // a second order being placed against the same points).
+  try{ sessionStorage.removeItem('mjm_cart'); }catch(e){}
+
+  if(selectedPayMethod==='offline'){
+    // Redirect to payment proof page
+    sessionStorage.setItem('mjm_pay_order_id',order.id);
+    sessionStorage.setItem('mjm_pay_order_total',finalTotal);
+    sessionStorage.setItem('mjm_pay_order_number',orderNum);
+    window.location.href='payment-proof.html';
+  } else {
+    // Online payment via Billplz — stash the order info so payment-callback.html
+    // can show the same Order # / total when Billplz redirects back. Webhook is
+    // the authoritative status update; this is just to render the success page.
+    sessionStorage.setItem('mjm_pay_order_id',order.id);
+    sessionStorage.setItem('mjm_pay_order_total',finalTotal);
+    sessionStorage.setItem('mjm_pay_order_number',orderNum);
+
+    btn.textContent='Redirecting to payment...';
+
+    // Build callback URL
+    var cbBase=window.location.href.substring(0,window.location.href.lastIndexOf('/')+1);
+    var callbackUrl=cbBase+'payment-callback.html';
+
+    try{
+      console.log('Creating Billplz bill...',{order_id:order.id,amount:Math.round(finalTotal*100),callback:callbackUrl});
+      var{data:billResp,error:billErr}=await _sb.functions.invoke('create-billplz-bill',{
+        body:{
+          order_id:order.id,
+          amount:Math.round(finalTotal*100),
+          email:email,
+          name:contactName,
+          phone:phone||'',
+          description:'MJM Nursery Order #'+order.id.substring(0,8).toUpperCase(),
+          callback_url:callbackUrl
+        }
+      });
+      console.log('Billplz response:',{data:billResp,error:billErr});
+
+      // Parse response
+      var billData=billResp;
+      if(typeof billData==='string'){try{billData=JSON.parse(billData);}catch(e){}}
+
+      if(billErr){
+        console.error('Billplz error:',billErr);
+        showToast('Payment error: '+(billErr.message||billErr.context?.body||'Unknown error'));
+        btn.disabled=false;btn.textContent='Place Order';
+        return;
+      }
+
+      if(billData&&billData.url){
+        // Stash the bill_id so payment-callback.html can pass it to
+        // verify-billplz-bill for server-side verification (the Billplz
+        // redirect URL params alone aren't trusted).
+        try{
+          if(billData.bill_id) sessionStorage.setItem('mjm_pay_bill_id',billData.bill_id);
+        }catch(e){}
+        // Redirect to Billplz payment page
+        window.location.href=billData.url;
+        return;
+      }
+
+      // Check if response has error field
+      if(billData&&billData.error){
+        console.error('Billplz API error:',billData.error);
+        showToast('Payment error: '+billData.error);
+        btn.disabled=false;btn.textContent='Place Order';
+        return;
+      }
+
+      // If we get here, something went wrong — show error details
+      console.error('No Billplz URL in response:',billData);
+      showToast('Could not connect to payment gateway. Please try offline payment.');
+      btn.disabled=false;btn.textContent='Place Order';
+
+    }catch(e){
+      console.error('Billplz error:',e);
+      showToast('Payment gateway error. Please try offline payment.');
+      btn.disabled=false;btn.textContent='Place Order';
+    }
+  }
+}
+</script>
+</body>
+</html>

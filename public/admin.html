@@ -1,0 +1,1741 @@
+<!--
+═══════════════════════════════════════════════════════════════
+  MJM NURSERY — ADMIN PORTAL (shell + settings)
+  ⚠️ AI: This is the main shell. Module JS is in separate files.
+  Auth via auth.html → admits users with shared_profiles.permissions
+  .modules.salesweb in ('admin','normal'), or legacy role='admin'.
+
+  📁 ADMIN FILE MAP:
+  ├── admin.html              ← THIS FILE (shell, CSS, auth, helpers, settings)
+  ├── admin-orders.js         ← Orders: loadOrders(), viewOrder(), updateOrder()
+  ├── admin-customers.js      ← Customers: loadCustomers(), viewCustomer()
+  ├── admin-products.js       ← Products: loadProducts(), openProductForm(), saveProduct(), toggleProduct()
+  ├── admin-payments.js       ← Payments: loadPayments(), openPaymentDetail(), markPayment()
+  ├── admin-users.js          ← User Access (admin-only): loadUsers(), openUserEdit(), saveUserAccess()
+  ├── admin-promotions.js     ← Promotions: loadPromos(), openPromoForm(), savePromo()
+  └── admin-coupons.js        ← Coupons: loadCoupons(), openCouponForm(), saveCoupon(), toggleCoupon()
+═══════════════════════════════════════════════════════════════
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>MJM Nursery — Admin Portal</title>
+<!-- Inline SVG favicon — purple "MJM" badge to match the admin sidebar theme. -->
+<link rel="icon" type="image/svg+xml" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="%23ebe5f5"/><text x="32" y="43" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue,Arial,sans-serif" font-size="20" font-weight="900" fill="%237c5cbf" text-anchor="middle" letter-spacing="-0.5">MJM</text></svg>'>
+<link rel="apple-touch-icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="%23ebe5f5"/><text x="32" y="43" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue,Arial,sans-serif" font-size="20" font-weight="900" fill="%237c5cbf" text-anchor="middle" letter-spacing="-0.5">MJM</text></svg>'>
+<!-- BUILD: 2026-05-19c — payment-details card + customer-list union filter -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#f8f6fc;--surface:#fff;--border:#e8e4f0;--border2:#d4cfe0;
+  --green:#7c5cbf;--green-dark:#5b3fa0;--green-light:#f3eeff;
+  --ink:#1a1428;--ink2:#3d3555;--ink3:#6b6280;--ink4:#9a93af;
+  --amber:#f59e0b;--amber-light:#fef3c7;
+  --red:#ef4444;--red-light:#fef2f2;
+  --blue:#6366f1;--blue-light:#eef2ff;
+  --sidebar-w:230px;--radius:12px;
+  --shadow:0 1px 3px rgba(100,60,150,.04),0 2px 8px rgba(100,60,150,.06);
+}
+body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;}
+input,select,textarea,button{font-family:inherit;}
+
+/* LAYOUT */
+.app{display:none;min-height:100vh;}
+.app.show{display:flex;}
+.sidebar{width:var(--sidebar-w);background:linear-gradient(180deg,#f0ecf8,#e8e4f2,#f0edf6);color:var(--ink);position:fixed;top:0;left:0;bottom:0;display:flex;flex-direction:column;z-index:50;border-right:1px solid var(--border);overflow:hidden;}
+.sb-watermark{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:8rem;font-weight:900;color:rgba(124,92,191,.06);letter-spacing:.05em;pointer-events:none;white-space:nowrap;user-select:none;}
+.sb-logo{padding:1.2rem 1.4rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.7rem;position:relative;z-index:2;}
+.sb-logo-text{font-size:1.5rem;font-weight:900;color:var(--green);letter-spacing:.03em;}
+.sb-logo-sub{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink4);}
+.sb-nav{flex:1;padding:.8rem 0;position:relative;z-index:2;}
+.sb-item{display:flex;align-items:center;gap:.7rem;padding:.65rem 1.4rem;font-size:13px;font-weight:600;color:var(--ink3);cursor:pointer;transition:all .15s;border-left:3px solid transparent;border-radius:0;}
+.sb-item:hover{color:var(--ink);background:rgba(124,92,191,.06);}
+.sb-item.active{color:var(--green-dark);background:rgba(124,92,191,.1);border-left-color:var(--green);}
+.sb-item .sb-icon{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;flex-shrink:0;}
+.sb-item .sb-icon svg{width:18px;height:18px;}
+.sb-item:hover .sb-icon svg,.sb-item.active .sb-icon svg{stroke:var(--green);}
+.sb-sub{padding:0;overflow:hidden;max-height:0;transition:max-height .25s ease;}
+.sb-sub.open{max-height:200px;}
+.sb-sub-item{display:flex;align-items:center;gap:.5rem;padding:.45rem 1.4rem .45rem 3rem;font-size:12px;font-weight:500;color:var(--ink4);cursor:pointer;transition:all .15s;}
+.sb-sub-item:hover{color:var(--green-dark);background:rgba(124,92,191,.05);}
+.sb-sub-item.active{color:var(--green-dark);font-weight:700;}
+.sb-footer{padding:1rem 1.4rem;border-top:1px solid var(--border);position:relative;z-index:2;}
+.sb-user{font-size:11px;color:var(--ink4);margin-bottom:.5rem;}
+.sb-user strong{color:var(--ink2);font-weight:600;display:block;}
+.sb-logout{background:none;border:1px solid var(--border);color:var(--ink3);font-size:11px;font-weight:600;padding:.4rem .8rem;border-radius:6px;cursor:pointer;transition:all .15s;width:100%;text-align:center;}
+.sb-logout:hover{border-color:var(--red);color:var(--red);}
+.main{margin-left:var(--sidebar-w);flex:1;padding:1.5rem 2rem;}
+.main-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;}
+.main-title{font-size:1.4rem;font-weight:800;color:var(--ink);}
+
+/* TABS */
+.tab-content{display:none;}.tab-content.active{display:block;animation:fadeIn .2s ease;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;}}
+
+/* CARDS & TABLE */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.2rem;box-shadow:var(--shadow);margin-bottom:1rem;}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:.7rem;margin-bottom:1.5rem;}
+.stat-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.85rem 1rem;box-shadow:var(--shadow);display:flex;align-items:center;gap:.7rem;min-width:0;}
+.stat-icon{width:38px;height:38px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;font-size:1.05rem;flex-shrink:0;}
+.stat-body{min-width:0;flex:1;}
+.stat-label{font-size:10px;font-weight:700;color:var(--ink4);letter-spacing:.08em;text-transform:uppercase;margin-bottom:.2rem;}
+.stat-val{font-size:1.2rem;font-weight:800;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.15;}
+.stat-val.green{color:var(--green);}
+.stat-orders .stat-icon{background:#eef2ff;color:#4338ca;}
+.stat-pending .stat-icon{background:#fef3c7;color:#92400e;}
+.stat-paid .stat-icon{background:#dbeafe;color:#1d4ed8;}
+.stat-completed .stat-icon{background:#dcfce7;color:#15803d;}
+.stat-credit .stat-icon{background:#ffedd5;color:#9a3412;}
+.stat-revenue .stat-icon{background:#d1fae5;color:#047857;}
+
+/* Order channel icon badge — sits next to the order number in the list */
+.ch-ico{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;font-size:12px;line-height:1;margin-right:.4rem;flex-shrink:0;vertical-align:middle;}
+.ch-online{background:#dcfce7;color:#15803d;}
+.ch-admin{background:#ede9fe;color:#5b21b6;}
+.ch-google{background:#fff;border:1.5px solid #e5e7eb;color:#4285F4;font-weight:900;font-family:Arial,sans-serif;}
+.ch-whatsapp{background:#25D366;color:#fff;}
+.ch-unknown{background:#f3f4f6;color:#94a3b8;}
+.data-table{width:100%;border-collapse:collapse;font-size:13px;}
+.data-table th{background:var(--bg);padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border);}
+.data-table td{padding:10px 12px;border-bottom:1px solid var(--border);font-weight:500;}
+.data-table tr:hover td{background:var(--green-light);}
+.badge{font-size:10px;font-weight:700;padding:3px 8px;border-radius:12px;letter-spacing:.04em;text-transform:uppercase;}
+.badge-green{background:var(--green-light);color:var(--green-dark);}
+.badge-amber{background:var(--amber-light);color:#92400e;}
+.badge-red{background:var(--red-light);color:#b91c1c;}
+.badge-blue{background:var(--blue-light);color:#1d4ed8;}
+.badge-grey{background:#f3f4f6;color:#4b5563;}
+
+/* BUTTONS */
+.btn{padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;border:none;font-family:inherit;}
+.btn-primary{background:var(--green);color:#fff;}.btn-primary:hover{background:var(--green-dark);}
+.btn-outline{background:none;border:1.5px solid var(--border2);color:var(--ink2);}.btn-outline:hover{border-color:var(--green);color:var(--green);}
+.btn-sm{padding:5px 10px;font-size:11px;}
+
+/* FORMS */
+.form-group{margin-bottom:1rem;}
+.form-label{display:block;font-size:11px;font-weight:700;color:var(--ink3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:.3rem;}
+.form-input{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--ink);outline:none;transition:all .2s;}
+.form-input:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(29,185,84,.08);}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:1rem;}
+.form-toggle{display:flex;align-items:center;gap:.6rem;cursor:pointer;font-size:13px;font-weight:500;}
+.form-toggle input{width:18px;height:18px;accent-color:var(--green);}
+
+/* FILTER */
+.filter-bar{display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center;}
+.filter-input{background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:7px 12px;font-size:12px;outline:none;min-width:200px;}
+.filter-input:focus{border-color:var(--green);}
+.filter-select{background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:7px 12px;font-size:12px;outline:none;cursor:pointer;}
+.filter-chip{background:var(--surface);border:1.5px solid var(--border);border-radius:999px;padding:6px 14px;font-size:11px;font-weight:600;color:var(--ink3);cursor:pointer;transition:all .15s;}
+.filter-chip:hover{border-color:var(--green);color:var(--green);}
+.filter-chip.active{background:var(--green);border-color:var(--green);color:#fff;}
+
+/* AI PROMOTION ASSISTANT — chat + preview layout */
+.promo-assistant-modal{max-width:1100px !important;width:95vw !important;}
+.promo-assistant-grid{display:grid;grid-template-columns:1fr 380px;gap:1rem;height:70vh;}
+.promo-chat{display:flex;flex-direction:column;background:var(--bg);border-radius:12px;border:1px solid var(--border);overflow:hidden;}
+.promo-chat-log{flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:.7rem;}
+.promo-chat-msg{padding:.7rem 1rem;border-radius:14px;font-size:13px;line-height:1.5;max-width:85%;white-space:pre-wrap;word-wrap:break-word;}
+.promo-chat-msg.user{align-self:flex-end;background:var(--green);color:#fff;border-bottom-right-radius:4px;}
+.promo-chat-msg.assistant{align-self:flex-start;background:#fff;color:var(--ink2);border:1px solid var(--border);border-bottom-left-radius:4px;}
+.promo-chat-msg.system{align-self:center;background:transparent;color:var(--ink4);font-size:11px;font-style:italic;padding:.2rem 0;}
+.promo-chat-input{display:flex;gap:.5rem;padding:.8rem;border-top:1px solid var(--border);background:#fff;}
+.promo-chat-input textarea{flex:1;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;padding:9px 12px;font-size:13px;font-family:inherit;outline:none;resize:none;min-height:38px;max-height:120px;}
+.promo-chat-input textarea:focus{border-color:var(--green);}
+.promo-chat-input button{padding:8px 18px;background:var(--green);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:12px;cursor:pointer;}
+.promo-chat-input button:disabled{opacity:.5;cursor:not-allowed;}
+.promo-typing{display:inline-flex;gap:3px;align-items:center;}
+.promo-typing span{width:6px;height:6px;background:var(--ink4);border-radius:50%;animation:bounce 1.2s infinite;}
+.promo-typing span:nth-child(2){animation-delay:.15s;}.promo-typing span:nth-child(3){animation-delay:.3s;}
+@keyframes bounce{0%,80%,100%{transform:translateY(0);opacity:.4;}40%{transform:translateY(-4px);opacity:1;}}
+
+.promo-preview-pane{display:flex;flex-direction:column;background:#fff;border-radius:12px;border:1px solid var(--border);overflow:hidden;}
+.promo-preview-head{padding:.7rem 1rem;border-bottom:1px solid var(--border);font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;}
+.promo-preview-body{flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:.8rem;}
+.promo-preview-empty{flex:1;display:flex;align-items:center;justify-content:center;color:var(--ink4);font-size:12px;text-align:center;padding:2rem 1rem;}
+.promo-banner{padding:14px 16px;border-radius:12px;font-weight:700;font-size:14px;text-align:center;color:#fff;display:flex;align-items:center;justify-content:center;gap:.5rem;}
+.promo-banner.green{background:linear-gradient(135deg,#7c5cbf,#5b3fa0);}
+.promo-banner.amber{background:linear-gradient(135deg,#f59e0b,#d97706);}
+.promo-banner.red{background:linear-gradient(135deg,#ef4444,#dc2626);}
+.promo-banner.blue{background:linear-gradient(135deg,#6366f1,#4f46e5);}
+.promo-banner.purple{background:linear-gradient(135deg,#a855f7,#7e22ce);}
+.promo-prod-card{background:var(--bg);border-radius:10px;padding:.8rem;border:1px solid var(--border);}
+.promo-prod-name{font-size:13px;font-weight:600;color:var(--ink);margin-bottom:.3rem;}
+.promo-prod-price{font-size:18px;font-weight:800;color:var(--green);}
+.promo-prod-strike{font-size:13px;color:var(--ink4);text-decoration:line-through;margin-right:.5rem;}
+.promo-meta-grid{display:grid;grid-template-columns:auto 1fr;gap:.4rem .8rem;font-size:12px;background:var(--bg);border-radius:8px;padding:.7rem .9rem;}
+.promo-meta-grid dt{color:var(--ink4);font-weight:600;}
+.promo-meta-grid dd{color:var(--ink2);font-weight:500;}
+.promo-preview-foot{padding:.8rem;border-top:1px solid var(--border);background:var(--bg);display:flex;gap:.5rem;}
+.promo-preview-foot button{flex:1;padding:9px;font-size:12px;font-weight:700;border-radius:9px;cursor:pointer;border:none;font-family:inherit;}
+.promo-publish-btn{background:var(--green);color:#fff;}
+.promo-publish-btn:hover{background:var(--green-dark);}
+.promo-publish-btn:disabled{opacity:.5;cursor:not-allowed;}
+.promo-discard-btn{background:none;border:1.5px solid var(--border2) !important;color:var(--ink3);}
+.promo-discard-btn:hover{border-color:var(--red) !important;color:var(--red);}
+
+@media(max-width:900px){
+  .promo-assistant-grid{grid-template-columns:1fr;height:auto;}
+  .promo-preview-pane{order:-1;}
+}
+
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center;padding:1rem;}
+.modal-overlay.open{display:flex;}
+.modal{background:#fff;border-radius:16px;width:100%;max-width:600px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2);animation:modalIn .2s ease;}
+@keyframes modalIn{from{opacity:0;transform:scale(.95) translateY(10px);}to{opacity:1;transform:none;}}
+.modal-head{display:flex;justify-content:space-between;align-items:center;padding:1.2rem 1.5rem;border-bottom:1px solid var(--border);}
+.modal-head h2{font-size:1rem;font-weight:800;}
+.modal-close{background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--ink3);}.modal-close:hover{color:var(--ink);}
+.modal-body{padding:1.5rem;}
+.modal-foot{padding:1rem 1.5rem;border-top:1px solid var(--border);display:flex;gap:.5rem;justify-content:flex-end;}
+
+/* FILTER DRAWER (slide-in sidebar) */
+.fd-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:198;animation:fadeIn .2s ease;}
+.fd-overlay.open{display:block;}
+.filter-drawer{position:fixed;top:0;right:0;bottom:0;width:360px;max-width:100vw;background:var(--surface);box-shadow:-4px 0 24px rgba(0,0,0,.12);transform:translateX(100%);transition:transform .25s ease;z-index:199;display:flex;flex-direction:column;}
+.filter-drawer.open{transform:translateX(0);}
+.fd-head{display:flex;justify-content:space-between;align-items:center;padding:1.2rem 1.5rem;border-bottom:1px solid var(--border);flex-shrink:0;}
+.fd-head h3{font-size:1rem;font-weight:800;color:var(--ink);}
+.fd-body{flex:1;overflow-y:auto;padding:.4rem 1.5rem 1rem;}
+.fd-section{padding:1rem 0;border-bottom:1px solid var(--border);}
+.fd-section:last-child{border-bottom:none;}
+.fd-title{font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.6rem;}
+.fd-dates{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;}
+.fd-label{font-size:10px;font-weight:600;color:var(--ink4);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.2rem;}
+.fd-input{width:100%;background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12px;outline:none;font-family:inherit;color:var(--ink);}
+.fd-input:focus{border-color:var(--green);}
+.fd-check{display:flex;align-items:center;gap:.55rem;padding:.32rem 0;font-size:13px;color:var(--ink2);cursor:pointer;font-weight:500;}
+.fd-check input{accent-color:var(--green);width:15px;height:15px;cursor:pointer;}
+.fd-note{color:var(--amber);font-weight:700;margin-left:.2rem;}
+.fd-footnote{font-size:10px;color:var(--ink4);line-height:1.5;margin-top:.5rem;font-style:italic;}
+.fd-footnote code{background:var(--bg);padding:1px 4px;border-radius:3px;font-size:10px;font-family:ui-monospace,monospace;color:var(--ink3);font-style:normal;}
+.fd-foot{padding:1rem 1.5rem;border-top:1px solid var(--border);display:flex;gap:.5rem;flex-shrink:0;}
+.fd-foot .btn{flex:1;}
+.btn-filter{display:inline-flex;align-items:center;gap:.4rem;background:var(--surface);border:1.5px solid var(--border);color:var(--ink2);padding:7px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;font-family:inherit;}
+.btn-filter:hover{border-color:var(--green);color:var(--green);}
+.btn-filter.has-active{border-color:var(--green);color:var(--green-dark);background:var(--green-light);}
+.filter-count{display:inline-flex;align-items:center;justify-content:center;background:var(--green);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;font-weight:700;min-width:18px;}
+
+/* TOAST */
+.toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--ink);color:#fff;padding:10px 18px;border-radius:10px;font-size:13px;font-weight:600;z-index:999;opacity:0;transform:translateY(10px);transition:all .3s;pointer-events:none;border-left:3px solid var(--green);}
+.toast.show{opacity:1;transform:translateY(0);}.toast.error{border-left-color:var(--red);}
+.loading{text-align:center;padding:2rem;color:var(--ink3);font-size:13px;}
+
+/* Product form sections */
+.mp-section{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.3rem 1.5rem;margin-bottom:1rem;box-shadow:0 1px 4px rgba(0,0,0,.03);}
+.mp-section-title{font-size:15px;font-weight:600;color:var(--ink);margin-bottom:1rem;padding-bottom:.6rem;border-bottom:1.5px solid var(--border);}
+.mp-sidebar-block{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:.9rem;margin-bottom:.7rem;box-shadow:0 1px 3px rgba(0,0,0,.02);}
+.mp-sidebar-title{font-size:12px;font-weight:600;color:var(--ink2);margin-bottom:.5rem;}
+.mp-radio{display:flex;align-items:center;gap:.5rem;cursor:pointer;padding:.3rem 0;font-size:13px;font-weight:400;color:var(--ink2);}
+.mp-radio input{accent-color:var(--green);width:15px;height:15px;}
+.mp-sub-label{font-size:10px;color:var(--ink4);margin-top:.15rem;font-weight:400;}
+#modal-product .form-label{font-size:12px;margin-bottom:.4rem;font-weight:600;color:var(--ink3);}
+#modal-product .form-input{font-size:13px;padding:10px 14px;border-radius:10px;font-weight:400;}
+#modal-product .form-group{margin-bottom:.9rem;}
+#modal-product .modal-head h2{font-weight:600;}
+#modal-product .btn{font-weight:600;border-radius:10px;}
+
+/* ── Order modal: Documents (attachments) — visual parity with the
+   customer portal's .att-file card, plus a clear View affordance. ── */
+.mo-att-row{display:flex;align-items:center;gap:.7rem;padding:.55rem .75rem;border:1px solid var(--border);border-radius:10px;background:var(--surface);margin-bottom:.4rem;}
+.mo-att-row:hover{border-color:var(--green);background:var(--green-light);}
+.mo-att-icon{font-size:1.3rem;width:32px;text-align:center;flex-shrink:0;}
+.mo-att-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:.1rem;}
+.mo-att-info strong{font-size:12.5px;color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.mo-att-info span{font-size:10px;color:var(--ink4);text-transform:uppercase;letter-spacing:.04em;}
+.mo-att-view{text-decoration:none;font-size:11px;padding:4px 10px;flex-shrink:0;}
+.mo-att-del{color:var(--red);font-size:10px;padding:4px 8px;flex-shrink:0;}
+
+/* ════════════════════ MOBILE (≤768px) ════════════════════
+   The previous breakpoint shrank the sidebar to a 60px icon rail,
+   which still cut off labels and ate horizontal space on phones. We
+   now slide the full sidebar off-canvas and reveal it via a hamburger
+   button placed at the top of the main content area. Tables that
+   would otherwise overflow get a horizontal scroll wrapper. Modals
+   fill the screen so long forms stop getting clipped. */
+.sb-toggle{display:none;}
+.sb-backdrop{display:none;}
+@media(max-width:768px){
+  .sidebar{width:260px;transform:translateX(-100%);transition:transform .22s ease;box-shadow:none;}
+  .sidebar.open{transform:translateX(0);box-shadow:0 8px 32px rgba(0,0,0,.18);}
+  .sb-logo span,.sb-item span:not(.sb-icon),.sb-user{display:inline;}
+  .sb-item{justify-content:flex-start;padding:.65rem 1.2rem;}
+  .main{margin-left:0;padding:3.5rem .9rem 1rem;}
+  .form-row{grid-template-columns:1fr;}
+  /* Floating hamburger anchored top-left of the viewport. */
+  .sb-toggle{display:inline-flex;align-items:center;justify-content:center;position:fixed;top:.6rem;left:.7rem;z-index:60;width:42px;height:42px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--ink);font-size:1.3rem;line-height:1;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.08);}
+  .sb-toggle:hover{background:var(--green-light);color:var(--green-dark);}
+  .sb-backdrop.open{display:block;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:45;}
+  /* Content density tweaks for narrow screens. */
+  .main-title{font-size:1.15rem;}
+  .stats-grid{grid-template-columns:repeat(2,1fr);gap:.5rem;}
+  .stat-box{padding:.7rem .8rem;}
+  .stat-val{font-size:1.15rem;}
+  .stat-label{font-size:9.5px;}
+  .filter-bar{flex-direction:column;align-items:stretch;}
+  .filter-input,.filter-select{width:100%;min-width:0;}
+  .card{padding:.9rem;}
+  /* Wide tables: wrap into a scrollable container so columns aren't clipped. */
+  .data-table{font-size:11.5px;min-width:560px;}
+  #orders-table,#customers-table,#products-table,#promos-table,#coupons-table,#payments-table,#users-table{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  /* Modals: full screen for usable form editing on phones. */
+  .modal{max-width:96vw !important;width:96vw !important;max-height:88vh !important;border-radius:12px;}
+  .modal-head h2{font-size:1rem;}
+  /* Attachment rows wrap cleanly when the file name is long. */
+  .mo-att-row{flex-wrap:wrap;}
+  .mo-att-info{flex-basis:calc(100% - 50px);min-width:0;}
+  .mo-att-view,.mo-att-del{margin-top:.25rem;}
+}
+</style>
+</head>
+<body>
+
+<div id="auth-loading" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);"><div style="text-align:center;"><div style="font-size:3rem;font-weight:900;color:rgba(124,92,191,.15);letter-spacing:.05em;margin-bottom:.5rem;">MJM</div><div style="font-size:13px;font-weight:600;color:var(--ink3);">Loading admin portal...</div></div></div>
+
+<!-- Mobile-only hamburger + backdrop. Sidebar slides in over the
+     content on phones; backdrop dismisses it on tap. Hidden on desktop
+     via CSS so the layout is unchanged for big screens. -->
+<button class="sb-toggle" id="sb-toggle" aria-label="Open menu" onclick="toggleSidebar()">☰</button>
+<div class="sb-backdrop" id="sb-backdrop" onclick="toggleSidebar(false)"></div>
+
+<div id="app" class="app">
+  <aside class="sidebar">
+    <div class="sb-watermark">MJM</div>
+    <div class="sb-logo"><div><div class="sb-logo-text">MJM</div><div class="sb-logo-sub">Admin Portal</div></div></div>
+    <div class="sb-nav">
+      <div class="sb-item active" id="sb-orders-item" onclick="switchTab('orders',this)">
+        <span class="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span>
+        <span>Orders</span>
+      </div>
+      <div class="sb-item" id="sb-reports-item" onclick="switchTab('reports',this)">
+        <span class="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="13" width="3" height="5"/><rect x="12" y="9" width="3" height="9"/><rect x="17" y="5" width="3" height="13"/></svg></span>
+        <span>Reports</span>
+      </div>
+      <div class="sb-item" id="sb-customers-parent" onclick="toggleSbSub('customers')">
+        <span class="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+        <span>Customers</span>
+        <svg style="margin-left:auto;width:12px;height:12px;transition:transform .2s;" id="sb-cust-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="sb-sub" id="sb-sub-customers">
+        <div class="sb-sub-item active" onclick="switchTab('customers',document.getElementById('sb-customers-parent'));showCustSubTab('list')">Customer List</div>
+        <div class="sb-sub-item" onclick="switchTab('customers',document.getElementById('sb-customers-parent'));showCustSubTab('points')">Points &amp; Membership</div>
+      </div>
+      <div class="sb-item" id="sb-products-item" onclick="switchTab('products',this)">
+        <span class="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19.2 2.96c1.4 9.3-3.45 14.5-8.2 16.04Z"/><path d="M2 22c1.59-3.43 3.7-6.45 6.3-9"/></svg></span>
+        <span>Products</span>
+      </div>
+      <div class="sb-item" id="sb-payments-item" onclick="switchTab('payments',this)">
+        <span class="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></span>
+        <span>Payments</span>
+      </div>
+      <div class="sb-item" id="sb-promos-item" onclick="switchTab('promos',this)">
+        <span class="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg></span>
+        <span>Promotions</span>
+      </div>
+      <div class="sb-item" id="sb-coupons-item" onclick="switchTab('coupons',this)">
+        <span class="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V7a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"/><line x1="13" y1="5" x2="13" y2="19"/></svg></span>
+        <span>Coupons</span>
+      </div>
+      <div class="sb-item" id="sb-webdesign-item" onclick="switchTab('webdesign',this)">
+        <span class="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg></span>
+        <span>Website Design</span>
+      </div>
+      <div class="sb-item" id="sb-settings-item" onclick="switchTab('settings',this)">
+        <span class="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+        <span>Settings</span>
+      </div>
+      <div class="sb-item" id="sb-users-item" style="display:none;" onclick="switchTab('users',this)">
+        <span class="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><circle cx="12" cy="10" r="3"/><path d="M7 20c.7-2.3 2.7-4 5-4s4.3 1.7 5 4"/></svg></span>
+        <span>User Access</span>
+      </div>
+    </div>
+    <div class="sb-footer">
+      <div class="sb-user"><strong id="admin-name">Admin</strong></div>
+      <button class="sb-logout" onclick="doLogout()">Sign Out</button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <!-- ORDERS -->
+    <div class="tab-content active" id="tab-orders">
+      <div class="main-header"><div class="main-title">Manage Orders</div><button class="btn btn-primary" onclick="openNewOrder()">+ Add Order</button></div>
+      <div class="stats-grid" id="order-stats"></div>
+      <div class="card">
+        <div class="filter-bar">
+          <input class="filter-input" id="order-search" placeholder="Search order ID, customer, billing name or email..." oninput="loadOrders()">
+          <select class="filter-select" id="order-filter" onchange="loadOrders()">
+            <option value="">All Status</option>
+            <option>Pending Payment</option>
+            <option>Ready for Collection</option>
+          </select>
+          <button class="btn-filter" id="orders-filter-btn" onclick="openOrderFilterDrawer()" title="Advanced filters">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            Filter
+            <span class="filter-count" id="orders-filter-count" style="display:none;">0</span>
+          </button>
+        </div>
+        <div id="orders-bulk-bar" style="display:none;align-items:center;gap:.8rem;padding:.6rem .9rem;margin-bottom:.8rem;background:var(--green-light);border:1px solid var(--border2);border-radius:8px;">
+          <span id="orders-bulk-count" style="font-size:13px;font-weight:600;color:var(--ink2);">0 selected</span>
+          <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red);" onclick="bulkDeleteOrders()">Delete Selected</button>
+          <button class="btn btn-outline btn-sm" onclick="clearOrderSelection()">Clear</button>
+        </div>
+        <div id="orders-count" style="display:flex;justify-content:flex-end;align-items:center;font-size:12px;color:var(--ink3);margin-bottom:.4rem;"></div>
+        <div id="orders-table"><div class="loading">Loading orders...</div></div>
+      </div>
+    </div>
+
+    <!-- ORDERS FILTER DRAWER -->
+    <div class="fd-overlay" id="orderFilterOverlay" onclick="closeOrderFilterDrawer()"></div>
+    <aside class="filter-drawer" id="orderFilterDrawer" aria-hidden="true">
+      <div class="fd-head">
+        <h3>Filter Orders</h3>
+        <button class="modal-close" onclick="closeOrderFilterDrawer()" aria-label="Close">&times;</button>
+      </div>
+      <div class="fd-body">
+        <div class="fd-section">
+          <div class="fd-title">Date Range</div>
+          <div class="fd-dates">
+            <div>
+              <label class="fd-label" for="fd-date-from">From</label>
+              <input type="date" id="fd-date-from" class="fd-input">
+            </div>
+            <div>
+              <label class="fd-label" for="fd-date-to">To</label>
+              <input type="date" id="fd-date-to" class="fd-input">
+            </div>
+          </div>
+        </div>
+        <div class="fd-section">
+          <div class="fd-title">Status</div>
+          <label class="fd-check"><input type="checkbox" class="fd-status" value="Open"> Open</label>
+          <label class="fd-check"><input type="checkbox" class="fd-status" value="Pending Payment"> Pending Payment</label>
+          <label class="fd-check"><input type="checkbox" class="fd-status" value="Ready for Collection"> Ready for Collection</label>
+          <label class="fd-check"><input type="checkbox" class="fd-status" value="Completed"> Completed</label>
+          <label class="fd-check"><input type="checkbox" class="fd-status" value="Cancelled"> Cancelled</label>
+          <label class="fd-check"><input type="checkbox" class="fd-status" value="Deleted"> Deleted</label>
+        </div>
+        <div class="fd-section">
+          <div class="fd-title">Payment</div>
+          <label class="fd-check"><input type="checkbox" class="fd-pay" value="Unpaid"> Unpaid</label>
+          <label class="fd-check"><input type="checkbox" class="fd-pay" value="Partially Paid"> Partially Paid</label>
+          <label class="fd-check"><input type="checkbox" class="fd-pay" value="Paid"> Paid</label>
+          <label class="fd-check"><input type="checkbox" class="fd-pay" value="Refunded"> Refunded</label>
+        </div>
+        <div class="fd-section">
+          <div class="fd-title">Channel</div>
+          <label class="fd-check"><input type="checkbox" class="fd-channel" value="online_store"> Online Store</label>
+          <label class="fd-check"><input type="checkbox" class="fd-channel" value="admin_panel"> Admin Panel</label>
+          <label class="fd-check"><input type="checkbox" class="fd-channel" value="google"> Google</label>
+          <label class="fd-check"><input type="checkbox" class="fd-channel" value="whatsapp"> WhatsApp</label>
+        </div>
+        <div class="fd-section">
+          <div class="fd-title">Product</div>
+          <input type="text" id="fd-product" class="fd-input" placeholder="e.g. Oil Palm Seedling">
+        </div>
+      </div>
+      <div class="fd-foot">
+        <button class="btn btn-outline" onclick="clearOrderFilters()">Clear All</button>
+        <button class="btn btn-primary" onclick="applyOrderFilters()">Apply</button>
+      </div>
+    </aside>
+
+    <!-- CUSTOMERS FILTER DRAWER -->
+    <div class="fd-overlay" id="custFilterOverlay" onclick="closeCustomerFilterDrawer()"></div>
+    <aside class="filter-drawer" id="custFilterDrawer" aria-hidden="true">
+      <div class="fd-head">
+        <h3>Filter Customers</h3>
+        <button class="modal-close" onclick="closeCustomerFilterDrawer()" aria-label="Close">&times;</button>
+      </div>
+      <div class="fd-body">
+        <div class="fd-section">
+          <div class="fd-title">Joined</div>
+          <div class="fd-dates">
+            <div><label class="fd-label" for="cf-date-from">From</label><input type="date" id="cf-date-from" class="fd-input"></div>
+            <div><label class="fd-label" for="cf-date-to">To</label><input type="date" id="cf-date-to" class="fd-input"></div>
+          </div>
+        </div>
+        <div class="fd-section">
+          <div class="fd-title">Status</div>
+          <label class="fd-check"><input type="checkbox" class="cf-status" value="verified"> Verified</label>
+          <label class="fd-check"><input type="checkbox" class="cf-status" value="unverified"> Unverified</label>
+          <label class="fd-check"><input type="checkbox" class="cf-status" value="blacklisted"> Blacklisted</label>
+        </div>
+        <div class="fd-section">
+          <div class="fd-title">Purchase</div>
+          <label class="fd-check"><input type="checkbox" class="cf-purchase" value="never"> Never purchased</label>
+          <label class="fd-check"><input type="checkbox" class="cf-purchase" value="first"> First purchase</label>
+          <label class="fd-check"><input type="checkbox" class="cf-purchase" value="repeat"> Repeat purchase</label>
+        </div>
+        <div class="fd-section">
+          <div class="fd-title">Membership</div>
+          <div id="cf-tiers"><div style="font-size:11px;color:var(--ink4);">Loading tiers…</div></div>
+        </div>
+        <div class="fd-section">
+          <div class="fd-title">Payment Terms</div>
+          <label class="fd-check"><input type="checkbox" class="cf-term" value="cash"> Cash</label>
+          <label class="fd-check"><input type="checkbox" class="cf-term" value="credit"> Credit</label>
+        </div>
+        <div class="fd-section">
+          <div class="fd-title">Has Paid Order</div>
+          <label class="fd-check"><input type="radio" name="cf-paid" class="cf-paid" value="" checked> Any</label>
+          <label class="fd-check"><input type="radio" name="cf-paid" class="cf-paid" value="yes"> Yes</label>
+          <label class="fd-check"><input type="radio" name="cf-paid" class="cf-paid" value="no"> No</label>
+        </div>
+        <div class="fd-section">
+          <div class="fd-title">Spending (RM)</div>
+          <div style="display:flex;gap:.4rem;">
+            <select id="cf-spend-op" class="fd-input" style="flex:1;"><option value="">—</option><option value="gt">More than</option><option value="eq">Equals to</option><option value="lt">Less than</option></select>
+            <input type="number" id="cf-spend-amt" class="fd-input" min="0" step="0.01" placeholder="Amount" style="flex:1;">
+          </div>
+        </div>
+        <div class="fd-section">
+          <div class="fd-title">Point Balance</div>
+          <div style="display:flex;gap:.4rem;">
+            <select id="cf-points-op" class="fd-input" style="flex:1;"><option value="">—</option><option value="gt">More than</option><option value="lt">Less than</option></select>
+            <input type="number" id="cf-points-amt" class="fd-input" min="0" step="1" placeholder="Points" style="flex:1;">
+          </div>
+        </div>
+        <div class="fd-section" style="border-bottom:none;">
+          <div class="fd-title">Credit Balance (RM outstanding)</div>
+          <div style="display:flex;gap:.4rem;">
+            <select id="cf-credit-op" class="fd-input" style="flex:1;"><option value="">—</option><option value="gt">More than</option><option value="lt">Less than</option></select>
+            <input type="number" id="cf-credit-amt" class="fd-input" min="0" step="0.01" placeholder="Amount" style="flex:1;">
+          </div>
+        </div>
+      </div>
+      <div class="fd-foot">
+        <button class="btn btn-outline" onclick="clearCustomerFilters()">Clear All</button>
+        <button class="btn btn-primary" onclick="applyCustomerFilters()">Apply</button>
+      </div>
+    </aside>
+
+    <!-- REPORTS -->
+    <div class="tab-content" id="tab-reports">
+      <div class="main-header"><div class="main-title">Reports</div></div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:.9rem 1rem;margin-bottom:1rem;">
+        <div style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;">
+          <span style="font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-right:.3rem;">Date Range</span>
+          <button class="btn btn-sm" id="rpt-preset-today"      onclick="applyReportPreset('today')"      style="font-size:11px;padding:5px 10px;border:1px solid var(--border);">Today</button>
+          <button class="btn btn-sm" id="rpt-preset-last_7"     onclick="applyReportPreset('last_7')"     style="font-size:11px;padding:5px 10px;border:1px solid var(--border);">Last 7 Days</button>
+          <button class="btn btn-sm" id="rpt-preset-last_30"    onclick="applyReportPreset('last_30')"    style="font-size:11px;padding:5px 10px;border:1px solid var(--border);">Last 30 Days</button>
+          <button class="btn btn-sm" id="rpt-preset-this_month" onclick="applyReportPreset('this_month')" style="font-size:11px;padding:5px 10px;border:1px solid var(--border);">This Month</button>
+          <button class="btn btn-sm" id="rpt-preset-last_month" onclick="applyReportPreset('last_month')" style="font-size:11px;padding:5px 10px;border:1px solid var(--border);">Last Month</button>
+          <button class="btn btn-sm" id="rpt-preset-this_year"  onclick="applyReportPreset('this_year')"  style="font-size:11px;padding:5px 10px;border:1px solid var(--border);">This Year</button>
+          <button class="btn btn-sm" id="rpt-preset-all_time"   onclick="applyReportPreset('all_time')"   style="font-size:11px;padding:5px 10px;border:1px solid var(--border);">All Time</button>
+          <span style="margin-left:.6rem;font-size:11px;color:var(--ink4);">Custom:</span>
+          <input id="rpt-from" type="date" class="form-input" style="font-size:12px;padding:5px 8px;width:140px;">
+          <span style="font-size:11px;color:var(--ink4);">→</span>
+          <input id="rpt-to"   type="date" class="form-input" style="font-size:12px;padding:5px 8px;width:140px;">
+          <button class="btn btn-primary btn-sm" onclick="applyReportRange()" style="font-size:11px;">Apply</button>
+        </div>
+      </div>
+      <div id="reports-body"><div class="loading">Pick a date range above.</div></div>
+    </div>
+
+    <!-- CUSTOMERS -->
+    <div class="tab-content" id="tab-customers">
+      <div class="main-header"><div class="main-title">Manage Customers</div><button class="btn btn-primary" onclick="openAddCustomer()">+ Add Customer</button></div>
+      <div style="display:flex;gap:.4rem;margin-bottom:1rem;">
+        <button class="btn btn-primary btn-sm" id="cust-subtab-list" onclick="showCustSubTab('list')" style="font-size:11px;">Customer List</button>
+        <button class="btn btn-outline btn-sm" id="cust-subtab-groups" onclick="showCustSubTab('groups')" style="font-size:11px;">Groups</button>
+        <button class="btn btn-outline btn-sm" id="cust-subtab-points" onclick="showCustSubTab('points')" style="font-size:11px;">Points &amp; Membership</button>
+      </div>
+      <div id="cust-panel-list">
+        <div class="stats-grid" id="cust-stats"></div>
+        <div class="card"><div class="filter-bar"><input class="filter-input" id="cust-search" placeholder="Search name or email..." oninput="loadCustomers()"><button class="btn-filter" id="cust-filter-btn" onclick="openCustomerFilterDrawer()" title="Filter customers"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filter <span class="filter-count" id="cust-filter-count" style="display:none;">0</span></button></div><div id="customers-table"><div class="loading">Loading customers...</div></div></div>
+      </div>
+
+      <div id="cust-panel-groups" style="display:none;">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem;">
+            <h3 style="margin:0;font-size:1rem;font-weight:700;">Customer Groups</h3>
+            <button class="btn btn-primary btn-sm" onclick="openCreateGroup()">+ New Group</button>
+          </div>
+          <p style="font-size:11px;color:var(--ink4);margin-bottom:.8rem;">Group customers (e.g. <em>Loyalty VIP</em>, <em>Wholesale</em>, <em>Trade Show 2026</em>) so coupons / promotions can target a specific cohort. Eligibility for a coupon's <strong>Selected customer group(s)</strong> rule reads from these groups.</p>
+          <div id="groups-table"><div class="loading">Loading groups…</div></div>
+        </div>
+      </div>
+      <div id="cust-panel-points" style="display:none;">
+        <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap;">
+          <label style="font-size:11px;font-weight:700;color:var(--ink3);">Date Range:</label>
+          <input type="date" id="pts-date-from" class="form-input" style="width:auto;font-size:12px;padding:5px 10px;" onchange="loadPointsStats()">
+          <span style="font-size:12px;color:var(--ink4);">to</span>
+          <input type="date" id="pts-date-to" class="form-input" style="width:auto;font-size:12px;padding:5px 10px;" onchange="loadPointsStats()">
+          <button class="btn btn-outline btn-sm" onclick="setPtsDateRange('month')">This Month</button>
+          <button class="btn btn-outline btn-sm" onclick="setPtsDateRange('year')">This Year</button>
+          <button class="btn btn-outline btn-sm" onclick="setPtsDateRange('all')">All Time</button>
+        </div>
+        <div class="stats-grid" id="pts-stats"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+          <div class="card">
+            <div class="card-head" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;"><h3 style="font-size:1rem;font-weight:600;">Points Settings</h3><div><button class="btn btn-outline btn-sm" id="pts-edit-btn" onclick="togglePointsEdit(true)">Edit</button><button class="btn btn-primary btn-sm" id="pts-save-btn" onclick="savePointsSettings()" style="display:none;">Save Changes</button><button class="btn btn-outline btn-sm" id="pts-cancel-btn" onclick="togglePointsEdit(false)" style="display:none;">Cancel</button></div></div>
+            <div style="font-size:12px;color:var(--ink3);margin-bottom:1rem;">Configure how customers earn and redeem points.</div>
+            <div style="background:var(--bg);border-radius:10px;padding:1rem;margin-bottom:1rem;"><div style="font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.8rem;">Earning</div><div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;"><span style="font-size:13px;font-weight:600;">Every RM</span><input class="form-input" id="pts-earn-rm" type="number" step="1" value="1" style="width:70px;font-size:13px;padding:6px 10px;text-align:center;" disabled><span style="font-size:13px;font-weight:600;">spent =</span><input class="form-input" id="pts-earn-pts" type="number" step="1" value="1" style="width:70px;font-size:13px;padding:6px 10px;text-align:center;" disabled><span style="font-size:13px;font-weight:600;">point(s)</span></div><div style="font-size:11px;color:var(--ink4);margin-top:.5rem;">Customers earn points on every purchase after payment is confirmed.</div></div>
+            <div style="background:var(--bg);border-radius:10px;padding:1rem;"><div style="font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.8rem;">Redemption</div><div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;"><input class="form-input" id="pts-redeem-pts" type="number" step="1" value="100" style="width:70px;font-size:13px;padding:6px 10px;text-align:center;" disabled><span style="font-size:13px;font-weight:600;">points = RM</span><input class="form-input" id="pts-redeem-rm" type="number" step="0.01" value="1.00" style="width:70px;font-size:13px;padding:6px 10px;text-align:center;" disabled><span style="font-size:13px;font-weight:600;">discount</span></div><div style="font-size:11px;color:var(--ink4);margin-top:.5rem;">Customers can redeem points at checkout to offset their order total.</div></div>
+            <div style="background:var(--bg);border-radius:10px;padding:1rem;margin-top:1rem;"><div style="font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem;">Summary</div><div id="pts-summary" style="font-size:13px;color:var(--ink2);line-height:1.8;"></div></div>
+            <div style="margin-top:1rem;border-top:1px solid var(--border);padding-top:1rem;"><div style="font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem;">Change History</div><div id="pts-history" style="font-size:12px;color:var(--ink4);">Loading...</div></div>
+          </div>
+          <div class="card">
+            <div class="card-head" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;"><h3 style="font-size:1rem;font-weight:600;">Member Tiers</h3><button class="btn btn-primary btn-sm" onclick="addTierRow()">+ Add Tier</button></div>
+            <div style="font-size:12px;color:var(--ink3);margin-bottom:1rem;">Define membership tiers based on total points earned. Customers are auto-upgraded.</div>
+            <div id="tiers-list"><div style="font-size:12px;color:var(--ink4);">Loading...</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PRODUCTS -->
+    <div class="tab-content" id="tab-products">
+      <div class="main-header"><div class="main-title">Manage Products</div><div style="display:flex;gap:.5rem;"><button class="btn btn-outline" onclick="syncProductsFromBatches()">🔄 Sync from Batches</button><button class="btn btn-primary" onclick="openProductForm()">+ Add Product</button></div></div>
+      <div class="stats-grid" id="prod-stats"></div>
+      <div class="card">
+        <div class="filter-bar">
+          <input class="filter-input" id="prod-search" placeholder="Search products..." oninput="loadProducts()">
+          <select class="filter-select" id="prod-type-filter" onchange="loadProducts()"><option value="">All Types</option><option>Seedling</option><option>Merchandise</option></select>
+          <select class="filter-select" id="prod-coll-filter" onchange="loadProducts()"><option value="">All Collections</option><option>Normal Sales</option><option>Promotion</option></select>
+          <select class="filter-select" id="prod-status-filter" onchange="loadProducts()"><option value="">All Status</option><option value="published">Published</option><option value="unpublished">Unpublished</option></select>
+        </div>
+        <div id="products-table"><div class="loading">Loading products...</div></div>
+      </div>
+    </div>
+
+    <!-- PAYMENTS — accountant-facing payment verification view -->
+    <div class="tab-content" id="tab-payments">
+      <div class="main-header"><div class="main-title">Payment Verification</div></div>
+      <div class="stats-grid" id="payment-stats"></div>
+      <div class="card">
+        <div class="filter-bar">
+          <input class="filter-input" id="payment-search" placeholder="Search order number or customer..." oninput="loadPayments()">
+          <select class="filter-select" id="payment-filter" onchange="loadPayments()">
+            <option value="awaiting">Awaiting Verification</option>
+            <option value="paid">Paid</option>
+            <option value="refunded">Refunded</option>
+            <option value="">All</option>
+          </select>
+          <select class="filter-select" id="payment-method-filter" onchange="loadPayments()">
+            <option value="">All Methods</option>
+            <option value="cash">Cash / Bank Transfer</option>
+            <option value="credit">Credit Terms</option>
+          </select>
+        </div>
+        <div id="payments-table"><div class="loading">Loading payments...</div></div>
+      </div>
+    </div>
+
+    <!-- PROMOTIONS -->
+    <div class="tab-content" id="tab-promos">
+      <div class="main-header">
+        <div class="main-title">Manage Promotions</div>
+        <div style="display:flex;gap:.5rem;">
+          <button class="btn btn-primary" onclick="openPromoAssistant()">✨ AI Builder</button>
+          <button class="btn btn-outline" onclick="openPromoForm()">+ Manual Entry</button>
+        </div>
+      </div>
+      <div class="filter-bar" style="margin-bottom:1rem;">
+        <button class="filter-chip active" data-promo-status="" onclick="setPromoFilter('')">All</button>
+        <button class="filter-chip" data-promo-status="live" onclick="setPromoFilter('live')">Live</button>
+        <button class="filter-chip" data-promo-status="scheduled" onclick="setPromoFilter('scheduled')">Scheduled</button>
+        <button class="filter-chip" data-promo-status="draft" onclick="setPromoFilter('draft')">Drafts</button>
+        <button class="filter-chip" data-promo-status="ended" onclick="setPromoFilter('ended')">Ended</button>
+      </div>
+      <div class="card"><div id="promos-table"><div class="loading">Loading promotions...</div></div></div>
+    </div>
+
+    <!-- COUPONS -->
+    <div class="tab-content" id="tab-coupons">
+      <div class="main-header">
+        <div class="main-title">Manage Coupons</div>
+        <div style="display:flex;gap:.5rem;">
+          <button class="btn btn-outline" onclick="openCouponBulkForm()">⚡ Bulk Generate</button>
+          <button class="btn btn-primary" onclick="openCouponForm()">+ New Coupon</button>
+        </div>
+      </div>
+      <div class="stats-grid" id="coupon-stats"></div>
+      <div class="card">
+        <div class="filter-bar">
+          <input class="filter-input" id="coupon-search" placeholder="Search code or name..." oninput="loadCoupons()">
+          <button class="filter-chip active" data-coupon-status="" onclick="setCouponFilter('')">All</button>
+          <button class="filter-chip" data-coupon-status="active" onclick="setCouponFilter('active')">Active</button>
+          <button class="filter-chip" data-coupon-status="scheduled" onclick="setCouponFilter('scheduled')">Scheduled</button>
+          <button class="filter-chip" data-coupon-status="expired" onclick="setCouponFilter('expired')">Expired</button>
+          <button class="filter-chip" data-coupon-status="exhausted" onclick="setCouponFilter('exhausted')">Exhausted</button>
+          <button class="filter-chip" data-coupon-status="inactive" onclick="setCouponFilter('inactive')">Inactive</button>
+        </div>
+        <div id="coupons-table"><div class="loading">Loading coupons...</div></div>
+      </div>
+    </div>
+
+    <!-- WEBSITE DESIGN -->
+    <div class="tab-content" id="tab-webdesign">
+      <div class="main-header"><div class="main-title">Website Design — Our Passion Section</div></div>
+      <p style="color:#64748b;font-size:13px;margin-bottom:1rem;">Upload images and edit text for the "Our Passion" ecosystem flow on the storefront. Changes appear instantly on the live site.</p>
+      <div class="card" id="webdesign-passion-list"><div class="loading">Loading...</div></div>
+    </div>
+
+    <!-- USER ACCESS — admin-only -->
+    <div class="tab-content" id="tab-users">
+      <div class="main-header"><div class="main-title">User Access</div></div>
+      <div class="card">
+        <div class="filter-bar">
+          <input class="filter-input" id="user-search" placeholder="Search name or email..." oninput="loadUsers()">
+          <select class="filter-select" id="user-filter" onchange="loadUsers()">
+            <option value="">All Access Levels</option>
+            <option value="admin">Admin</option>
+            <option value="normal">Normal</option>
+            <option value="none">No Access</option>
+          </select>
+        </div>
+        <div id="users-table"><div class="loading">Loading users...</div></div>
+      </div>
+      <div class="card" style="margin-top:1rem;background:var(--green-light);border-color:var(--green);">
+        <div style="display:flex;gap:.7rem;align-items:flex-start;">
+          <div style="font-size:1.4rem;">ⓘ</div>
+          <div style="font-size:12px;line-height:1.7;color:var(--ink2);">
+            <strong>How this list works.</strong>
+            Only users granted salesweb access from the <em>umbrella User Access portal</em> appear here.
+            <span style="display:inline-block;margin-left:.2rem;"><span class="badge badge-green">admin</span> users always see every page.</span>
+            <span style="display:inline-block;margin-left:.4rem;"><span class="badge badge-blue">normal</span> users only see pages you tick in <strong>Edit Pages</strong>.</span>
+            Granting / revoking salesweb access itself is still done from the umbrella portal.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="tab-content" id="tab-settings">
+      <div class="main-header"><div class="main-title">Settings</div></div>
+      <div style="display:flex;gap:.4rem;margin-bottom:1rem;flex-wrap:wrap;">
+        <button class="btn btn-primary btn-sm" id="set-subtab-catalog" onclick="showSettingsSubTab('catalog')">Catalog</button>
+        <button class="btn btn-outline btn-sm" id="set-subtab-payments" onclick="showSettingsSubTab('payments')">Payments</button>
+        <button class="btn btn-outline btn-sm" id="set-subtab-orders" onclick="showSettingsSubTab('orders')">Orders</button>
+        <button class="btn btn-outline btn-sm" id="set-subtab-notifications" onclick="showSettingsSubTab('notifications')">Notifications</button>
+      </div>
+
+      <!-- CATALOG: product types / collections / tags -->
+      <div id="set-panel-catalog">
+      <div class="card"><h3>Product Types</h3><div id="settings-product-types"></div><div style="display:flex;gap:.5rem;margin-top:.8rem;"><input class="form-input" id="new-ptype" style="max-width:250px;" placeholder="New product type name"><button class="btn btn-primary btn-sm" onclick="addProductType()">Add</button></div></div>
+      <div class="card"><h3>Collections</h3><div id="settings-collections"></div><div style="display:flex;gap:.5rem;margin-top:.8rem;"><input class="form-input" id="new-collection" style="max-width:250px;" placeholder="New collection name"><button class="btn btn-primary btn-sm" onclick="addCollection()">Add</button></div></div>
+      <div class="card"><h3>Product Tags</h3><div id="settings-tags"></div><div style="display:flex;gap:.5rem;margin-top:.8rem;"><input class="form-input" id="new-tag" style="max-width:250px;" placeholder="New tag name"><button class="btn btn-primary btn-sm" onclick="addTag()">Add</button></div></div>
+      </div><!-- /catalog -->
+
+      <!-- PAYMENTS -->
+      <div id="set-panel-payments" style="display:none;">
+      <!-- ─── Payment Details (offline bank transfer + DuitNow QR) ─── -->
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+          <h3 style="margin:0;">Payment Details (Bank Transfer / DuitNow QR)</h3>
+          <button class="btn btn-primary btn-sm" id="pay-save-btn" onclick="savePaymentDetails()">Save</button>
+        </div>
+        <p style="font-size:11px;color:var(--ink4);margin-bottom:.4rem;">These are shown to customers on the offline-payment screen so they know where to transfer money to.</p>
+        <p id="pay-debug" style="font-size:11px;font-weight:600;margin-bottom:.8rem;">Loading saved values…</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem;margin-bottom:.8rem;">
+          <div>
+            <label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.25rem;">Bank Name</label>
+            <input class="form-input" id="pay-bank-name" placeholder="e.g. Maybank" style="font-size:13px;">
+          </div>
+          <div>
+            <label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.25rem;">Account Name</label>
+            <input class="form-input" id="pay-account-name" placeholder="e.g. MJM Nursery Sdn Bhd" style="font-size:13px;">
+          </div>
+        </div>
+        <div style="margin-bottom:.8rem;">
+          <label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.25rem;">Account Number</label>
+          <input class="form-input" id="pay-account-number" placeholder="e.g. 5121-1234-5678" style="font-size:13px;font-family:monospace;letter-spacing:.05em;">
+        </div>
+        <div style="margin-bottom:.5rem;">
+          <label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.25rem;">DuitNow QR Image</label>
+          <input type="file" id="pay-qr-file" accept="image/*" style="font-size:12px;" onchange="uploadPaymentQr()">
+          <div id="pay-qr-status" style="font-size:11px;color:var(--ink4);margin-top:.3rem;">No QR uploaded yet.</div>
+          <div id="pay-qr-preview" style="margin-top:.5rem;display:none;">
+            <img id="pay-qr-img" style="max-width:200px;border:1px solid var(--border);border-radius:8px;padding:.4rem;background:#fff;">
+            <div><button class="btn btn-outline btn-sm" onclick="removePaymentQr()" style="color:var(--red);font-size:10px;margin-top:.3rem;">Remove QR</button></div>
+          </div>
+        </div>
+      </div>
+
+      </div><!-- /payments -->
+
+      <!-- NOTIFICATIONS -->
+      <div id="set-panel-notifications" style="display:none;">
+      <!-- ─── Notification Config (admin emails + booking URL for post-payment) ─── -->
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+          <h3 style="margin:0;">Notifications (Order-Paid Email)</h3>
+          <button class="btn btn-primary btn-sm" id="notif-save-btn" onclick="saveNotificationConfig()">Save</button>
+        </div>
+        <p style="font-size:11px;color:var(--ink4);margin-bottom:.8rem;">When an order flips to <b>Paid</b>, the customer gets a confirmation email and these admin addresses are CC'd. The booking URL is used in the email and on the post-payment success page.</p>
+        <p id="notif-debug" style="font-size:11px;font-weight:600;margin-bottom:.8rem;">Loading saved values…</p>
+        <div style="display:grid;grid-template-columns:1fr;gap:.8rem;">
+          <div>
+            <label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.25rem;">Admin Notification Emails</label>
+            <textarea class="form-input" id="notif-admin-emails" rows="2" placeholder="one address per line, e.g.&#10;orders@mjmnursery.com&#10;elon.mjm@gmail.com" style="font-size:13px;font-family:monospace;resize:vertical;"></textarea>
+            <div style="font-size:10.5px;color:var(--ink4);margin-top:.2rem;">One per line. These are CC'd on every customer order-paid email.</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem;">
+            <div>
+              <label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.25rem;">From Email</label>
+              <input class="form-input" id="notif-from-email" placeholder="orders@mjmnursery.com" style="font-size:13px;font-family:monospace;">
+              <div style="font-size:10.5px;color:var(--ink4);margin-top:.2rem;">Must be on a domain verified in Resend.</div>
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.25rem;">From Name</label>
+              <input class="form-input" id="notif-from-name" placeholder="MJM Nursery" style="font-size:13px;">
+            </div>
+          </div>
+          <div>
+            <label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.25rem;">Collection Booking URL</label>
+            <input class="form-input" id="notif-booking-url" placeholder="https://collect.mjmnursery.com/" style="font-size:13px;font-family:monospace;">
+            <div style="font-size:10.5px;color:var(--ink4);margin-top:.2rem;">Linked from both the customer email and the post-payment success page.</div>
+          </div>
+        </div>
+      </div>
+
+      </div><!-- /notifications -->
+
+      <!-- ORDERS -->
+      <div id="set-panel-orders" style="display:none;">
+      <!-- ─── Stock Auto-Release (unpaid cash orders) ─── -->
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+          <h3 style="margin:0;">Stock Auto-Release (Unpaid Cash Orders)</h3>
+          <button class="btn btn-primary btn-sm" id="autorel-save-btn" onclick="saveAutoReleaseConfig()">Save</button>
+        </div>
+        <p style="font-size:11px;color:var(--ink4);margin-bottom:.8rem;">A <b>cash-term</b> order left unpaid (Pending Payment) for longer than the window below is automatically cancelled and its held stock returned. <b>Credit-term orders are never auto-released</b> — their stock is always kept.</p>
+        <p id="autorel-debug" style="font-size:11px;font-weight:600;margin-bottom:.8rem;">Loading saved values…</p>
+        <div style="display:flex;align-items:center;gap:1.2rem;flex-wrap:wrap;">
+          <label style="display:flex;align-items:center;gap:.5rem;font-size:13px;font-weight:600;color:var(--ink2);cursor:pointer;">
+            <input type="checkbox" id="autorel-enabled" style="width:16px;height:16px;accent-color:var(--green);"> Enable auto-release
+          </label>
+          <div style="display:flex;align-items:center;gap:.5rem;">
+            <label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;">Release after</label>
+            <input class="form-input" id="autorel-hours" type="number" min="1" step="1" value="48" style="width:90px;font-size:13px;text-align:right;">
+            <span style="font-size:12px;color:var(--ink3);">hours unpaid</span>
+          </div>
+        </div>
+        <div style="font-size:10.5px;color:var(--ink4);margin-top:.6rem;">e.g. 48 = release after 2 days, 24 = after 1 day, 72 = after 3 days. Cleanup runs whenever this Orders page is opened, and on the optional pg_cron schedule.</div>
+      </div>
+      </div><!-- /orders -->
+
+      <!-- Visible build stamp so an admin can verify they're on the new
+           version (and not a cached older HTML). Bump when the page changes. -->
+      <div style="text-align:center;font-size:10px;color:var(--ink4);padding:.5rem 0;">Admin build 2026-05-26 · paid-balance + grouped settings</div>
+    </div>
+  </div>
+</div>
+
+<!-- ORDER DETAIL MODAL -->
+<div class="modal-overlay" id="modal-order" style="z-index:250;"><div class="modal" style="max-width:750px;"><div class="modal-head"><h2 id="mo-title">Order Details</h2><button class="modal-close" onclick="closeModal('modal-order');">&#x2715;</button></div><div class="modal-body" id="mo-body" style="max-height:75vh;overflow-y:auto;"></div><div class="modal-foot" id="mo-foot"></div></div></div>
+
+<!-- ATTACHMENT PREVIEW (floating viewer for order documents — avoids tab-jumping) -->
+<div class="modal-overlay" id="modal-att-preview" style="z-index:260;"><div class="modal" style="max-width:900px;">
+  <div class="modal-head">
+    <h2 id="att-preview-title" style="font-size:1.05rem;">Document</h2>
+    <button class="modal-close" onclick="closeModal('modal-att-preview')">&#x2715;</button>
+  </div>
+  <div class="modal-body" id="att-preview-body" style="max-height:78vh;overflow:auto;background:#f1f5f9;border-radius:8px;"></div>
+  <div class="modal-foot">
+    <button class="btn btn-outline" onclick="printAttachment()">Print</button>
+    <button class="btn btn-outline" onclick="closeModal('modal-att-preview')">Close</button>
+  </div>
+</div></div>
+
+<!-- ADD PAYMENT ENTRY (ledger row for salesweb_order_payments) -->
+<div class="modal-overlay" id="modal-add-payment" style="z-index:265;"><div class="modal" style="max-width:480px;">
+  <div class="modal-head"><h2 style="font-size:1.05rem;">Record Payment</h2><button class="modal-close" onclick="closeModal('modal-add-payment')">&#x2715;</button></div>
+  <div class="modal-body" style="max-height:75vh;overflow-y:auto;">
+    <input type="hidden" id="pay-order-id">
+    <div style="margin-bottom:.6rem;">
+      <label style="font-size:11px;color:var(--ink3);display:block;margin-bottom:.2rem;">Date received *</label>
+      <input class="form-input" id="pay-date" type="date" style="font-size:13px;">
+    </div>
+    <div style="margin-bottom:.6rem;">
+      <label style="font-size:11px;color:var(--ink3);display:block;margin-bottom:.2rem;">Amount (RM) *</label>
+      <input class="form-input" id="pay-amount" type="number" step="0.01" min="0" placeholder="0.00" style="font-size:13px;">
+    </div>
+    <div style="margin-bottom:.6rem;">
+      <label style="font-size:11px;color:var(--ink3);display:block;margin-bottom:.2rem;">Note (optional)</label>
+      <input class="form-input" id="pay-note" type="text" placeholder="e.g. Maybank transfer ref 88123" style="font-size:13px;">
+    </div>
+    <div style="margin-bottom:.6rem;">
+      <label style="font-size:11px;color:var(--ink3);display:block;margin-bottom:.2rem;">Attachment (optional)</label>
+      <input class="form-input" id="pay-file" type="file" style="font-size:12px;">
+      <div style="font-size:10px;color:var(--ink4);margin-top:.2rem;">Payment proof, bank slip, etc. Stored alongside order documents.</div>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn btn-outline" onclick="closeModal('modal-add-payment')">Cancel</button>
+    <button class="btn btn-primary" onclick="savePaymentEntry()">Save Payment</button>
+  </div>
+</div></div>
+
+<!-- PROFORMA INVOICE (preview + print + email) -->
+<div class="modal-overlay" id="modal-proforma" style="z-index:260;"><div class="modal" style="max-width:780px;">
+  <div class="modal-head">
+    <h2 id="proforma-title" style="font-size:1.05rem;">Proforma Invoice</h2>
+    <button class="modal-close" onclick="closeModal('modal-proforma')">&#x2715;</button>
+  </div>
+  <div class="modal-body" id="proforma-body" style="max-height:75vh;overflow:auto;background:#f1f5f9;"></div>
+  <div class="modal-foot">
+    <button id="proforma-print" class="btn btn-outline">Print / Save PDF</button>
+    <button id="proforma-send" class="btn btn-primary">Email to Customer</button>
+    <button class="btn btn-outline" onclick="closeModal('modal-proforma')">Close</button>
+  </div>
+</div></div>
+
+<!-- ADD-ORDER (admin-created order) -->
+<div class="modal-overlay" id="modal-new-order" style="z-index:255;"><div class="modal" style="max-width:820px;">
+  <div class="modal-head"><h2>+ New Order</h2><button class="modal-close" onclick="closeModal('modal-new-order')">&#x2715;</button></div>
+  <div class="modal-body" style="padding:1.2rem;max-height:75vh;overflow-y:auto;">
+
+    <!-- Customer block -->
+    <div style="margin-bottom:1rem;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--ink4);letter-spacing:.05em;margin-bottom:.5rem;">Customer</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;">
+        <div style="grid-column:1 / -1;position:relative;">
+          <label style="font-size:11px;color:var(--ink3);">Name *  <span style="color:var(--ink4);font-weight:400;">(type to search existing customers — leave new name and submit to create a profile)</span></label>
+          <input class="form-input" id="no-cust-name" oninput="onNewOrderCustNameInput()" onblur="setTimeout(hideNewOrderCustResults,180)" autocomplete="off" style="font-size:12px;padding:6px 10px;">
+          <div id="no-cust-results" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--rule);border-radius:8px;z-index:10;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.12);margin-top:2px;"></div>
+          <div id="no-cust-status" style="font-size:11px;margin-top:.3rem;display:none;"></div>
+        </div>
+        <div><label style="font-size:11px;color:var(--ink3);">Phone</label><input class="form-input" id="no-cust-phone" oninput="onNewOrderCustFieldEdit()" style="font-size:12px;padding:6px 10px;"></div>
+        <div><label style="font-size:11px;color:var(--ink3);">Email</label><input class="form-input" id="no-cust-email" type="email" oninput="onNewOrderCustFieldEdit()" style="font-size:12px;padding:6px 10px;"></div>
+        <div style="grid-column:1 / -1;"><label style="font-size:11px;color:var(--ink3);">Shipping address</label><input class="form-input" id="no-cust-addr" value="Self Collection — MJM Nursery Office, Niah Land District, Miri, 98000, Sarawak" style="font-size:12px;padding:6px 10px;"></div>
+        <div>
+          <label style="font-size:11px;color:var(--ink3);">Order date <span style="color:var(--ink4);font-weight:400;">(backdate if placed offline)</span></label>
+          <input class="form-input" id="no-order-date" type="datetime-local" style="font-size:12px;padding:6px 10px;">
+        </div>
+      </div>
+    </div>
+
+    <!-- Billing / E-Invoice block (mirrors customer checkout) -->
+    <div style="margin-bottom:1rem;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--ink4);letter-spacing:.05em;margin-bottom:.5rem;">Billing / E-Invoice <span style="color:var(--ink4);font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></div>
+      <div style="display:flex;gap:.4rem;margin-bottom:.6rem;">
+        <button type="button" class="btn btn-primary btn-sm" id="no-bill-tab-personal" onclick="switchNewOrderBilling('personal')" style="font-size:11px;">Personal</button>
+        <button type="button" class="btn btn-outline btn-sm" id="no-bill-tab-company" onclick="switchNewOrderBilling('company')" style="font-size:11px;">Company</button>
+      </div>
+      <!-- Personal billing -->
+      <div id="no-bill-personal" style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;">
+        <div style="grid-column:1 / -1;"><label style="font-size:11px;color:var(--ink3);">Full Name</label><input class="form-input" id="no-bill-name" style="font-size:12px;padding:6px 10px;"></div>
+        <div><label style="font-size:11px;color:var(--ink3);">I/C Number</label><input class="form-input" id="no-bill-ic" style="font-size:12px;padding:6px 10px;"></div>
+        <div><label style="font-size:11px;color:var(--ink3);">TIN</label><input class="form-input" id="no-bill-tin" style="font-size:12px;padding:6px 10px;"></div>
+        <div style="grid-column:1 / -1;"><label style="font-size:11px;color:var(--ink3);">Billing Address</label><input class="form-input" id="no-bill-addr" style="font-size:12px;padding:6px 10px;"></div>
+        <div><label style="font-size:11px;color:var(--ink3);">Country</label><input class="form-input" id="no-bill-country" value="Malaysia" style="font-size:12px;padding:6px 10px;"></div>
+        <div><label style="font-size:11px;color:var(--ink3);">State</label><input class="form-input" id="no-bill-state" value="Sarawak" style="font-size:12px;padding:6px 10px;"></div>
+        <div><label style="font-size:11px;color:var(--ink3);">City</label><input class="form-input" id="no-bill-city" style="font-size:12px;padding:6px 10px;"></div>
+        <div><label style="font-size:11px;color:var(--ink3);">Postcode</label><input class="form-input" id="no-bill-postcode" style="font-size:12px;padding:6px 10px;"></div>
+        <div style="grid-column:1 / -1;"><label style="font-size:11px;color:var(--ink3);">MPOB License No.</label><input class="form-input" id="no-bill-mpob" style="font-size:12px;padding:6px 10px;"></div>
+      </div>
+      <!-- Company billing -->
+      <div id="no-bill-company" style="display:none;grid-template-columns:1fr 1fr;gap:.6rem;">
+        <div style="grid-column:1 / -1;"><label style="font-size:11px;color:var(--ink3);">Company Name</label><input class="form-input" id="no-bill-coname" style="font-size:12px;padding:6px 10px;"></div>
+        <div><label style="font-size:11px;color:var(--ink3);">Registration No.</label><input class="form-input" id="no-bill-coreg" style="font-size:12px;padding:6px 10px;"></div>
+        <div><label style="font-size:11px;color:var(--ink3);">TIN</label><input class="form-input" id="no-bill-cotin" style="font-size:12px;padding:6px 10px;"></div>
+        <div style="grid-column:1 / -1;"><label style="font-size:11px;color:var(--ink3);">Billing Address</label><input class="form-input" id="no-bill-coaddr" style="font-size:12px;padding:6px 10px;"></div>
+        <div><label style="font-size:11px;color:var(--ink3);">Country</label><input class="form-input" id="no-bill-cocountry" value="Malaysia" style="font-size:12px;padding:6px 10px;"></div>
+        <div><label style="font-size:11px;color:var(--ink3);">State</label><input class="form-input" id="no-bill-costate" value="Sarawak" style="font-size:12px;padding:6px 10px;"></div>
+        <div><label style="font-size:11px;color:var(--ink3);">City</label><input class="form-input" id="no-bill-cocity" style="font-size:12px;padding:6px 10px;"></div>
+        <div><label style="font-size:11px;color:var(--ink3);">Postcode</label><input class="form-input" id="no-bill-copostcode" style="font-size:12px;padding:6px 10px;"></div>
+        <div style="grid-column:1 / -1;"><label style="font-size:11px;color:var(--ink3);">MPOB License No.</label><input class="form-input" id="no-bill-compob" style="font-size:12px;padding:6px 10px;"></div>
+      </div>
+    </div>
+
+    <!-- Items block -->
+    <div style="margin-bottom:1rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--ink4);letter-spacing:.05em;">Items</div>
+        <button class="btn btn-outline btn-sm" onclick="addNewOrderItem()" style="font-size:11px;padding:4px 10px;">+ Add Row</button>
+      </div>
+      <div id="no-items-container"></div>
+      <div id="no-products-status" style="font-size:10px;color:var(--ink4);margin-top:.3rem;">Loading products from Sales Web…</div>
+    </div>
+
+    <!-- Order details + totals -->
+    <div style="display:grid;grid-template-columns:1fr 220px;gap:1rem;align-items:start;">
+      <div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--ink4);letter-spacing:.05em;margin-bottom:.5rem;">Order Details</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;">
+          <div><label style="font-size:11px;color:var(--ink3);">Status</label><select class="form-input" id="no-status" style="font-size:12px;padding:6px 10px;"><option>Pending Payment</option><option>Paid</option><option>Ready for Collection</option><option>Completed</option></select></div>
+          <div><label style="font-size:11px;color:var(--ink3);">Payment terms</label><select class="form-input" id="no-terms" style="font-size:12px;padding:6px 10px;"><option value="cash">💵 Cash</option><option value="credit">💳 Credit</option></select></div>
+          <div style="grid-column:1 / -1;"><label style="font-size:11px;color:var(--ink3);">Internal notes (admin-only)</label><textarea class="form-input" id="no-internal-note" rows="2" style="font-size:12px;padding:6px 10px;resize:vertical;"></textarea></div>
+        </div>
+      </div>
+      <div style="background:var(--bg);border-radius:10px;padding:.8rem;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--ink3);margin-bottom:.3rem;"><span>Subtotal</span><span id="no-subtotal" style="font-weight:600;color:var(--ink);">RM 0.00</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;align-items:center;margin-bottom:.3rem;"><span>Discount (RM)</span><input class="form-input" id="no-discount" type="number" min="0" step="0.01" value="0" oninput="recalcNewOrderTotal()" style="width:80px;text-align:right;font-size:12px;padding:4px 8px;"></div>
+        <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;border-top:1px solid var(--rule);padding-top:.5rem;margin-top:.4rem;"><span>TOTAL</span><span id="no-total" style="color:#065f46;">RM 0.00</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn btn-outline" onclick="closeModal('modal-new-order')">Cancel</button>
+    <button class="btn btn-primary" id="no-submit" onclick="submitNewOrder()">Create Order</button>
+  </div>
+</div></div>
+
+<!-- CREDIT INVOICE UPLOAD MODAL (opened from credit order monthly breakdown) -->
+<div class="modal-overlay" id="modal-invoice-upload" style="z-index:260;"><div class="modal" style="max-width:540px;">
+  <div class="modal-head"><h2>📤 Upload Invoice</h2><button class="modal-close" onclick="closeModal('modal-invoice-upload')">&#x2715;</button></div>
+  <div class="modal-body" style="padding:1.2rem;max-height:70vh;overflow-y:auto;">
+    <input type="hidden" id="miu-customer-id">
+    <input type="hidden" id="miu-period">
+    <input type="hidden" id="miu-trigger-order-id">
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:.6rem .8rem;font-size:12px;color:#334155;margin-bottom:.4rem;">Customer: <strong id="miu-customer-name" style="color:#0f172a;">—</strong></div>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:.6rem .8rem;font-size:12px;color:#334155;margin-bottom:.4rem;">Billing period: <strong id="miu-period-label" style="color:#0f172a;">—</strong></div>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:.6rem .8rem;font-size:12px;color:#334155;margin-bottom:1rem;" id="miu-summary">—</div>
+    <div style="margin-bottom:.8rem;"><label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.25rem;">Invoice Number *</label><input type="text" id="miu-invoice-no" class="form-input" placeholder="e.g. INV-2026-05-014" autocomplete="off" style="font-size:13px;"></div>
+    <div style="margin-bottom:.8rem;"><label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.25rem;">Invoice PDF / Image *</label><input type="file" id="miu-file" class="form-input" accept="application/pdf,image/*" style="font-size:13px;"></div>
+    <div style="margin-bottom:.8rem;"><label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.25rem;">Due Date (optional)</label><input type="date" id="miu-due" class="form-input" style="font-size:13px;"></div>
+    <div style="margin-bottom:.8rem;"><label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:.25rem;">Notes (optional)</label><textarea id="miu-notes" class="form-input" rows="2" placeholder="Internal notes for this invoice" style="font-size:13px;resize:vertical;"></textarea></div>
+    <div id="miu-error" style="color:var(--red);font-size:12px;font-weight:600;min-height:16px;"></div>
+  </div>
+  <div class="modal-foot"><button class="btn btn-outline" onclick="closeModal('modal-invoice-upload')">Cancel</button><button class="btn btn-primary" id="miu-submit" onclick="submitInvoiceUpload()">Upload &amp; Issue Invoice</button></div>
+</div></div>
+
+<!-- CREDIT BILL ADD / EDIT MODAL — repeatable per credit order -->
+<div class="modal-overlay" id="modal-credit-bill" style="z-index:270;"><div class="modal" style="max-width:520px;"><div class="modal-head"><h2 id="cb-title">Add Bill</h2><button class="modal-close" onclick="closeModal('modal-credit-bill')">&#x2715;</button></div><div class="modal-body" style="padding:1.2rem;">
+  <input type="hidden" id="cb-order-id">
+  <input type="hidden" id="cb-bill-id">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;">
+    <div><label style="font-size:11px;color:var(--ink3);">Billing date *</label><input class="form-input" id="cb-date" type="date" style="font-size:12px;padding:6px 10px;"></div>
+    <div><label style="font-size:11px;color:var(--ink3);">Invoice No.</label><input class="form-input" id="cb-invoice" type="text" placeholder="e.g. INV-2026-045" style="font-size:12px;padding:6px 10px;"></div>
+    <div><label style="font-size:11px;color:var(--ink3);">Billing qty (palm) *</label><input class="form-input" id="cb-qty" type="number" min="0" step="1" style="font-size:12px;padding:6px 10px;"></div>
+    <div><label style="font-size:11px;color:var(--ink3);">Billing amount (RM) *</label><input class="form-input" id="cb-amount" type="number" min="0" step="0.01" style="font-size:12px;padding:6px 10px;"></div>
+  </div>
+  <div id="cb-help" style="font-size:11px;color:var(--ink4);margin-top:.6rem;"></div>
+</div><div class="modal-foot"><button class="btn btn-outline" onclick="closeModal('modal-credit-bill')">Cancel</button><button class="btn btn-primary" id="cb-submit" onclick="submitCreditBill()">Save Bill</button></div></div></div>
+
+<!-- REPORTS — VIEW MORE MODAL — chart drill-down list -->
+<div class="modal-overlay" id="modal-report-view-more" style="z-index:255;"><div class="modal" style="max-width:880px;"><div class="modal-head"><h2 id="rpt-vm-title">Detail</h2><button class="modal-close" onclick="closeModal('modal-report-view-more')">&#x2715;</button></div><div class="modal-body" id="rpt-vm-body" style="max-height:78vh;overflow-y:auto;"></div></div></div>
+
+<!-- CANCEL STOCK RESTORE MODAL — opened on top of modal-order (z=250) -->
+<div class="modal-overlay" id="modal-cancel-stock" style="z-index:270;"><div class="modal" style="max-width:600px;"><div class="modal-head" style="background:#fef2f2;"><h2 style="font-size:1.1rem;color:#dc2626;">Cancel Order — Restore Stock</h2><button class="modal-close" onclick="closeModal('modal-cancel-stock')">&#x2715;</button></div><div class="modal-body" id="cancel-stock-body" style="max-height:65vh;overflow-y:auto;"></div><div class="modal-foot" id="cancel-stock-foot"></div></div></div>
+
+<!-- PAYMENT DETAIL MODAL — populated by openPaymentDetail() in admin-payments.js -->
+<div class="modal-overlay" id="modal-payment" style="z-index:255;"><div class="modal" style="max-width:760px;"><div class="modal-head"><h2>Payment Review</h2><button class="modal-close" onclick="closeModal('modal-payment')">&#x2715;</button></div><div class="modal-body" id="payment-detail-body" style="max-height:78vh;overflow-y:auto;"></div></div></div>
+
+<!-- USER ACCESS MODAL — populated by openUserEdit() in admin-users.js -->
+<div class="modal-overlay" id="modal-user-access" style="z-index:255;"><div class="modal" style="max-width:520px;"><div class="modal-head"><h2>Edit User Access</h2><button class="modal-close" onclick="closeModal('modal-user-access')">&#x2715;</button></div><div class="modal-body" id="user-access-body" style="max-height:78vh;overflow-y:auto;"></div></div></div>
+
+<!-- PRODUCT FORM MODAL -->
+<div class="modal-overlay" id="modal-product"><div class="modal" style="max-width:800px;">
+  <div class="modal-head" style="background:var(--bg);"><h2 id="mp-title" style="font-size:1.1rem;">Add Product</h2><button class="modal-close" onclick="closeModal('modal-product')">&#x2715;</button></div>
+  <div class="modal-body" style="display:grid;grid-template-columns:1fr 220px;gap:1.2rem;padding:1.2rem;">
+    <input type="hidden" id="mp-id">
+    <div>
+      <div class="mp-section">
+        <div class="mp-section-title">Product Details</div>
+        <div class="form-group"><label class="form-label">Product Name</label><input class="form-input" id="mp-name"></div>
+        <div class="form-group"><label class="form-label">Description</label><textarea class="form-input" id="mp-desc" rows="2" style="resize:vertical;"></textarea></div>
+        <div class="form-group">
+          <label class="form-label">Product Image</label>
+          <div id="mp-img-area" style="border:2px dashed var(--border2);border-radius:8px;padding:1rem;text-align:center;cursor:pointer;background:var(--bg);transition:all .15s;" onclick="document.getElementById('mp-img-file').click()" onmouseover="this.style.borderColor='var(--green)'" onmouseout="this.style.borderColor='var(--border2)'">
+            <div id="mp-img-preview" style="display:none;"><img id="mp-img-thumb" src="" style="max-height:120px;border-radius:6px;"></div>
+            <div id="mp-img-placeholder"><div style="font-size:1.2rem;">📷</div><div style="font-size:12px;font-weight:600;color:var(--ink3);">Click to upload image</div></div>
+          </div>
+          <input type="file" id="mp-img-file" accept="image/*" style="display:none;" onchange="previewProductImage(this)">
+          <div id="mp-img-uploading" style="display:none;font-size:12px;color:var(--green);margin-top:.3rem;">Uploading...</div>
+          <input type="hidden" id="mp-img-url">
+        </div>
+        <div style="border-top:1.5px solid var(--border);padding-top:.8rem;margin-top:.3rem;">
+          <div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:.6rem;">Pricing</div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Selling Price (RM)</label><input class="form-input" id="mp-price" type="number" step="0.01"></div>
+            <div class="form-group"><label class="form-label">Compare at Price (RM)</label><input class="form-input" id="mp-compare" type="number" step="0.01"><div class="mp-sub-label">Shown as strikethrough on website</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="mp-section" style="background:#f8faf8;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div class="mp-section-title" style="margin-bottom:0;border:none;padding:0;">Inventory &amp; Stock</div>
+          <label style="font-size:11px;display:flex;align-items:center;gap:.4rem;cursor:pointer;color:var(--ink3);font-weight:600;"><input type="checkbox" id="mp-manual-stock" onchange="toggleManualStock()" style="accent-color:var(--green);width:15px;height:15px;">Manual</label>
+        </div>
+        <div style="border-bottom:2px solid var(--border);margin:.6rem 0 .8rem;"></div>
+        <div class="form-group">
+          <label class="form-label">Current Stock</label>
+          <input class="form-input" id="mp-stock" type="number" readonly style="background:#fff;cursor:not-allowed;font-weight:800;font-size:1.4rem;color:var(--green);max-width:200px;border:2px solid var(--green-light);">
+          <div id="mp-stock-hint" class="mp-sub-label">Auto-calculated from batch maturity</div>
+        </div>
+        <div id="mp-stock-source"></div>
+        <div style="border-top:2px solid var(--border);margin-top:.8rem;padding-top:.8rem;">
+          <div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:.3rem;">Stock Transfer (b/f from another month)</div>
+          <div class="mp-sub-label" style="margin-bottom:.6rem;">Pick a source product — its sell month and per-batch plot balance / premium-plot moves are shown so you know which leftover you're carrying forward.</div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">From Product (sell month — name)</label><select class="form-input" id="mp-transfer-from"></select></div>
+            <div class="form-group"><label class="form-label">Quantity</label><input class="form-input" id="mp-transfer-qty" type="number" min="1"></div>
+          </div>
+          <div id="mp-transfer-source-detail"></div>
+          <div class="form-group" style="margin-top:.6rem;"><label class="form-label">Reason</label><input class="form-input" id="mp-transfer-reason" placeholder="e.g. April leftover b/f to May"></div>
+          <button class="btn btn-primary" onclick="executeTransfer()" style="width:100%;padding:10px;">Transfer Stock →</button>
+        </div>
+        <div id="mp-transfer-history"></div>
+      </div>
+    </div>
+    <div>
+      <div class="mp-sidebar-block"><div class="mp-sidebar-title">Visibility</div><label class="mp-radio"><input type="radio" name="mp-vis" value="published" id="mp-published"> Publish</label><label class="mp-radio"><input type="radio" name="mp-vis" value="unpublished" id="mp-unpublished" checked> Unpublish</label></div>
+      <div class="mp-sidebar-block"><div class="mp-sidebar-title">Product Type</div><select class="form-input" id="mp-type" style="font-size:11px;padding:8px 10px;"><option value="Seedling">Seedling</option><option value="Merchandise">Merchandise</option></select></div>
+      <div class="mp-sidebar-block"><div class="mp-sidebar-title">Collection</div><select class="form-input" id="mp-coll" style="font-size:11px;padding:8px 10px;"><option value="Normal Sales">Normal Sales</option><option value="Promotion">Promotion</option></select></div>
+      <div class="mp-sidebar-block"><div class="mp-sidebar-title">Tags</div><select class="form-input" id="mp-tags" style="font-size:11px;padding:6px 10px;" multiple size="3"></select><div style="font-size:8px;color:var(--ink4);margin-top:.15rem;">Ctrl/Cmd + click to multi-select</div></div>
+    </div>
+  </div>
+  <div class="modal-foot"><button class="btn btn-outline" onclick="closeModal('modal-product')">Cancel</button><button class="btn btn-primary" id="mp-save-btn" onclick="saveProduct()">Save Product</button></div>
+</div></div>
+
+<!-- PROMO FORM MODAL (manual entry — for admins who skip the AI builder) -->
+<div class="modal-overlay" id="modal-promo"><div class="modal" style="max-width:680px;"><div class="modal-head"><h2 id="mpr-title">New Promotion</h2><button class="modal-close" onclick="closeModal('modal-promo')">&#x2715;</button></div><div class="modal-body"><input type="hidden" id="mpr-id">
+<div class="form-row"><div class="form-group"><label class="form-label">Title (internal)</label><input class="form-input" id="mpr-name"></div><div class="form-group"><label class="form-label">Status</label><select class="form-input" id="mpr-status"><option value="draft">Draft</option><option value="scheduled">Scheduled</option><option value="live">Live</option><option value="ended">Ended</option><option value="archived">Archived</option></select></div></div>
+<div class="form-group"><label class="form-label">Description (internal)</label><textarea class="form-input" id="mpr-desc" rows="2"></textarea></div>
+<div class="form-row"><div class="form-group"><label class="form-label">Customer Banner Text</label><input class="form-input" id="mpr-banner" maxlength="80" placeholder="e.g. 20% off all seedlings this weekend!"></div><div class="form-group"><label class="form-label">Banner Style</label><div style="display:flex;gap:.4rem;"><input class="form-input" id="mpr-banner-emoji" style="width:60px;text-align:center;font-size:18px;" placeholder="🎁" maxlength="4"><select class="form-input" id="mpr-banner-color" style="flex:1;"><option value="green">Green</option><option value="amber">Amber</option><option value="red">Red</option><option value="blue">Blue</option><option value="purple">Purple</option></select></div></div></div>
+<div class="form-row"><div class="form-group"><label class="form-label">Discount Type</label><select class="form-input" id="mpr-dtype"><option value="percentage">Percentage (%)</option><option value="fixed">Fixed Amount (RM)</option></select></div><div class="form-group"><label class="form-label">Discount Value</label><input class="form-input" id="mpr-dval" type="number" step="0.01"></div></div>
+<div class="form-row"><div class="form-group"><label class="form-label">Max Discount (RM, 0=none)</label><input class="form-input" id="mpr-maxdisc" type="number" step="0.01" value="0"></div><div class="form-group"><label class="form-label">Min Order (RM, 0=none)</label><input class="form-input" id="mpr-minorder" type="number" step="0.01" value="0"></div></div>
+<div class="form-group"><label class="form-label">Target</label><select class="form-input" id="mpr-target" onchange="togglePromoTargetFields()"><option value="all">All Products</option><option value="category">Specific Categories</option><option value="specific">Specific Products</option></select></div>
+<div class="form-group" id="mpr-target-cats" style="display:none;"><label class="form-label">Categories (comma-separated)</label><input class="form-input" id="mpr-tcats" placeholder="Seedling, Merchandise"></div>
+<div class="form-group" id="mpr-target-prods" style="display:none;"><label class="form-label">Products</label><select class="form-input" id="mpr-tprods" multiple size="4" style="height:auto;"></select><div style="font-size:10px;color:var(--ink4);margin-top:.2rem;">Ctrl/Cmd+click to multi-select</div></div>
+<div class="form-row"><div class="form-group"><label class="form-label">Start Date</label><input class="form-input" id="mpr-start" type="date"></div><div class="form-group"><label class="form-label">End Date</label><input class="form-input" id="mpr-end" type="date"></div></div>
+<div class="form-row"><div class="form-group"><label class="form-label">Priority (higher wins)</label><input class="form-input" id="mpr-priority" type="number" value="0"></div><div class="form-group" style="display:flex;align-items:center;"><label class="form-toggle"><input type="checkbox" id="mpr-active" checked><span>Active</span></label></div></div>
+</div><div class="modal-foot"><button class="btn btn-outline" onclick="closeModal('modal-promo')">Cancel</button><button class="btn btn-primary" onclick="savePromo()">Save Promotion</button></div></div></div>
+
+<!-- AI PROMOTION ASSISTANT MODAL -->
+<div class="modal-overlay" id="modal-promo-assistant" style="z-index:260;"><div class="modal promo-assistant-modal">
+  <div class="modal-head">
+    <h2>✨ Promotion Builder — AI Assistant</h2>
+    <button class="modal-close" onclick="closePromoAssistant()">&#x2715;</button>
+  </div>
+  <div class="modal-body" style="padding:1rem;">
+    <div class="promo-assistant-grid">
+      <div class="promo-chat">
+        <div class="promo-chat-log" id="pa-log"></div>
+        <div class="promo-chat-input">
+          <textarea id="pa-input" placeholder="e.g. 20% off all seedlings this weekend, max RM 50 discount" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendPromoMessage();}"></textarea>
+          <button id="pa-send" onclick="sendPromoMessage()">Send</button>
+        </div>
+      </div>
+      <div class="promo-preview-pane">
+        <div class="promo-preview-head">Live Preview</div>
+        <div class="promo-preview-body" id="pa-preview"><div class="promo-preview-empty">Describe your promotion in the chat — a preview will appear here as the assistant drafts it.</div></div>
+        <div class="promo-preview-foot" id="pa-preview-foot" style="display:none;">
+          <button class="promo-discard-btn" onclick="discardPromoDraft()">Discard</button>
+          <button class="promo-publish-btn" id="pa-publish" onclick="publishPromoDraft()">Publish</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<!-- COUPON FORM MODAL -->
+<div class="modal-overlay" id="modal-coupon"><div class="modal" style="max-width:720px;"><div class="modal-head"><h2 id="mc-title">New Coupon</h2><button class="modal-close" onclick="closeModal('modal-coupon')">&#x2715;</button></div><div class="modal-body"><input type="hidden" id="mc-id">
+<div class="form-row">
+  <div class="form-group"><label class="form-label">Coupon Code</label><div style="display:flex;gap:.4rem;"><input class="form-input" id="mc-code" style="text-transform:uppercase;flex:1;"><button type="button" class="btn btn-outline btn-sm" onclick="randomizeCouponCode()" title="Generate a random code">🎲</button></div></div>
+  <div class="form-group"><label class="form-label">Internal Name</label><input class="form-input" id="mc-name" placeholder="e.g. Influencer Sept campaign"></div>
+</div>
+<div class="form-group"><label class="form-label">Customer Description</label><input class="form-input" id="mc-desc" placeholder="Shown to customer when applied"></div>
+<div class="form-row">
+  <div class="form-group"><label class="form-label">Discount Type</label><select class="form-input" id="mc-dtype" onchange="togglePctDiscountFields()"><option value="percentage">Percentage (%)</option><option value="fixed">Fixed Amount (RM)</option><option value="free_shipping">Free Shipping</option></select></div>
+  <div class="form-group"><label class="form-label">Discount Value</label><input class="form-input" id="mc-dval" type="number" step="0.01"></div>
+</div>
+<div class="form-row" id="mc-row-pct">
+  <div class="form-group"><label class="form-label">Max Discount (RM, 0=none)</label><input class="form-input" id="mc-maxdisc" type="number" step="0.01" value="0"></div>
+  <div class="form-group"><label class="form-label">Min Order Value (RM)</label><input class="form-input" id="mc-min" type="number" step="0.01" value="0"></div>
+</div>
+<div class="form-row">
+  <div class="form-group"><label class="form-label">Total Usage Limit (0 = unlimited)</label><input class="form-input" id="mc-limit" type="number" value="0"></div>
+  <div class="form-group"><label class="form-label">Per-Customer Limit (0 = unlimited)</label><input class="form-input" id="mc-percust" type="number" value="0"></div>
+</div>
+<div class="form-row">
+  <div class="form-group"><label class="form-label">Start Date</label><input class="form-input" id="mc-start" type="date"></div>
+  <div class="form-group"><label class="form-label">Expiry Date</label><input class="form-input" id="mc-expiry" type="date"></div>
+</div>
+<div class="form-group"><label class="form-label">Scope</label>
+  <select class="form-input" id="mc-scope" onchange="toggleCouponScopeFields()">
+    <option value="all">All Products</option>
+    <option value="category">Specific Categories</option>
+    <option value="product">Specific Products</option>
+  </select>
+</div>
+<div class="form-group" id="mc-scope-cats" style="display:none;"><label class="form-label">Categories (comma-separated)</label><input class="form-input" id="mc-cats" placeholder="Seedling, Merchandise"></div>
+<div class="form-group" id="mc-scope-prods" style="display:none;"><label class="form-label">Products</label><select class="form-input" id="mc-prods" multiple size="4" style="height:auto;"></select></div>
+
+<!-- Discount usage — customer eligibility -->
+<div class="form-group" style="margin-top:1rem;">
+  <div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:.4rem;">Discount usage</div>
+  <label class="form-label" for="mc-elig-type">Customer eligibility</label>
+  <select class="form-input" id="mc-elig-type" onchange="onCouponEligChange()">
+    <option value="public">Open to public</option>
+    <option value="all_members" selected>All logged-in members</option>
+    <option value="groups">Selected customer group(s)</option>
+    <option value="customers">Selected customer(s)</option>
+    <option value="tiers">Selected membership tier(s)</option>
+  </select>
+</div>
+<div class="form-group" id="mc-elig-customers-wrap" style="display:none;">
+  <label class="form-label">Selected customer(s)</label>
+  <select class="form-input" id="mc-elig-customers" multiple size="5" style="height:auto;"></select>
+  <div style="font-size:10.5px;color:var(--ink4);margin-top:.2rem;">Ctrl/⌘ + click to pick multiple customers.</div>
+</div>
+<div class="form-group" id="mc-elig-tiers-wrap" style="display:none;">
+  <label class="form-label">Selected membership tier(s)</label>
+  <div id="mc-elig-tiers" style="display:flex;flex-wrap:wrap;gap:.5rem;font-size:12px;"></div>
+</div>
+<div class="form-group" id="mc-elig-groups-wrap" style="display:none;">
+  <label class="form-label">Selected customer group(s)</label>
+  <div style="font-size:11px;color:var(--ink4);padding:.4rem .6rem;background:var(--bg);border-radius:6px;">No customer groups configured yet — saving this option will store the choice but it won't filter until a groups feature is added.</div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;background:var(--bg);padding:.7rem;border-radius:8px;">
+  <label class="form-toggle" style="font-size:12px;"><input type="checkbox" id="mc-active" checked><span>Active</span></label>
+  <label class="form-toggle" style="font-size:12px;"><input type="checkbox" id="mc-firstorder"><span>First-order only</span></label>
+  <label class="form-toggle" style="font-size:12px;"><input type="checkbox" id="mc-stack" checked><span>Stack with promos</span></label>
+  <label class="form-toggle" style="font-size:12px;"><input type="checkbox" id="mc-autoapply"><span>Auto-apply at checkout</span></label>
+</div>
+</div><div class="modal-foot"><button class="btn btn-outline" onclick="closeModal('modal-coupon')">Cancel</button><button class="btn btn-primary" onclick="saveCoupon()">Save Coupon</button></div></div></div>
+
+<!-- BULK COUPON GENERATOR MODAL -->
+<div class="modal-overlay" id="modal-coupon-bulk"><div class="modal" style="max-width:560px;"><div class="modal-head"><h2>⚡ Bulk Generate Coupons</h2><button class="modal-close" onclick="closeModal('modal-coupon-bulk')">&#x2715;</button></div><div class="modal-body">
+<div style="font-size:12px;color:var(--ink3);margin-bottom:1rem;line-height:1.5;">Generate many one-time-use codes from a single template — useful for influencer campaigns, gift drops, or partnership codes.</div>
+<div class="form-row">
+  <div class="form-group"><label class="form-label">Quantity</label><input class="form-input" id="mcb-qty" type="number" value="50" min="1" max="2000"></div>
+  <div class="form-group"><label class="form-label">Code Prefix</label><input class="form-input" id="mcb-prefix" placeholder="e.g. INFLU" style="text-transform:uppercase;"></div>
+</div>
+<div class="form-row">
+  <div class="form-group"><label class="form-label">Discount Type</label><select class="form-input" id="mcb-dtype"><option value="percentage">Percentage (%)</option><option value="fixed">Fixed Amount (RM)</option></select></div>
+  <div class="form-group"><label class="form-label">Discount Value</label><input class="form-input" id="mcb-dval" type="number" step="0.01" value="10"></div>
+</div>
+<div class="form-row">
+  <div class="form-group"><label class="form-label">Min Order (RM)</label><input class="form-input" id="mcb-min" type="number" step="0.01" value="0"></div>
+  <div class="form-group"><label class="form-label">Expiry Date</label><input class="form-input" id="mcb-expiry" type="date"></div>
+</div>
+<div style="background:var(--bg);padding:.6rem .8rem;border-radius:8px;font-size:11px;color:var(--ink3);"><strong>Note:</strong> Generated codes are 8 characters long, single-use (usage_limit=1), and tagged with the same bulk_batch_id so you can track or deactivate them together.</div>
+</div><div class="modal-foot"><button class="btn btn-outline" onclick="closeModal('modal-coupon-bulk')">Cancel</button><button class="btn btn-primary" id="mcb-go" onclick="bulkGenerateCoupons()">Generate &amp; Download CSV</button></div></div></div>
+
+<!-- CUSTOMER DETAIL MODAL -->
+<div class="modal-overlay" id="modal-customer"><div class="modal" style="max-width:900px;"><div class="modal-head"><h2 id="mcu-title">Customer Profile</h2><button class="modal-close" onclick="closeModal('modal-customer')">&#x2715;</button></div><div class="modal-body" id="mcu-body" style="max-height:80vh;overflow-y:auto;"></div></div></div>
+
+<!-- ADD CUSTOMER MODAL -->
+<div class="modal-overlay" id="modal-add-customer" style="z-index:255;"><div class="modal" style="max-width:480px;">
+  <div class="modal-head"><h2>+ Add Customer</h2><button class="modal-close" onclick="closeModal('modal-add-customer')">&#x2715;</button></div>
+  <div class="modal-body" style="padding:1.2rem;">
+    <div style="display:grid;grid-template-columns:1fr;gap:.7rem;">
+      <div>
+        <label style="font-size:11px;color:var(--ink3);">Name <span style="color:var(--red);">*</span></label>
+        <input class="form-input" id="ac-name" autocomplete="off" style="font-size:13px;padding:8px 12px;">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--ink3);">Email <span style="color:var(--ink4);font-weight:400;">(used for login &amp; receipts; leave blank for walk-in)</span></label>
+        <input class="form-input" id="ac-email" type="email" autocomplete="off" style="font-size:13px;padding:8px 12px;">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--ink3);">Phone</label>
+        <input class="form-input" id="ac-phone" style="font-size:13px;padding:8px 12px;">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--ink3);">Payment terms</label>
+        <select class="form-input" id="ac-terms" style="font-size:13px;padding:8px 12px;"><option value="cash">💵 Cash</option><option value="credit">💳 Credit</option></select>
+      </div>
+      <div id="ac-status" style="font-size:11px;display:none;"></div>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn btn-outline" onclick="closeModal('modal-add-customer')">Cancel</button>
+    <button class="btn btn-primary" id="ac-submit" onclick="submitAddCustomer()">Create Customer</button>
+  </div>
+</div></div>
+
+<!-- EDIT CUSTOMER MODAL -->
+<div class="modal-overlay" id="modal-edit-customer" style="z-index:255;"><div class="modal" style="max-width:480px;">
+  <div class="modal-head"><h2>Edit Customer</h2><button class="modal-close" onclick="closeModal('modal-edit-customer')">&#x2715;</button></div>
+  <div class="modal-body" style="padding:1.2rem;">
+    <div style="display:grid;grid-template-columns:1fr;gap:.7rem;">
+      <div>
+        <label style="font-size:11px;color:var(--ink3);">Name <span style="color:var(--red);">*</span></label>
+        <input class="form-input" id="ec-name" autocomplete="off" style="font-size:13px;padding:8px 12px;">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--ink3);">Email <span style="color:var(--ink4);font-weight:400;">(leave blank for walk-in)</span></label>
+        <input class="form-input" id="ec-email" type="email" autocomplete="off" style="font-size:13px;padding:8px 12px;">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--ink3);">Phone</label>
+        <input class="form-input" id="ec-phone" style="font-size:13px;padding:8px 12px;">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--ink3);">Payment terms</label>
+        <select class="form-input" id="ec-terms" style="font-size:13px;padding:8px 12px;"><option value="cash">💵 Cash</option><option value="credit">💳 Credit</option></select>
+      </div>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn btn-outline" onclick="closeModal('modal-edit-customer')">Cancel</button>
+    <button class="btn btn-primary" id="ec-submit" onclick="submitEditCustomer()">Save Changes</button>
+  </div>
+</div></div>
+
+<!-- CUSTOMER GROUP EDIT MODAL -->
+<div class="modal-overlay" id="modal-group-edit" style="z-index:255;"><div class="modal" style="max-width:480px;">
+  <div class="modal-head"><h2 id="mg-title">New Group</h2><button class="modal-close" onclick="closeModal('modal-group-edit')">&#x2715;</button></div>
+  <div class="modal-body" style="padding:1.2rem;">
+    <input type="hidden" id="mg-id">
+    <div style="display:grid;grid-template-columns:1fr;gap:.7rem;">
+      <div>
+        <label style="font-size:11px;color:var(--ink3);">Group name <span style="color:var(--red);">*</span></label>
+        <input class="form-input" id="mg-name" placeholder="e.g. Loyalty VIP" style="font-size:13px;padding:8px 12px;">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--ink3);">Description</label>
+        <textarea class="form-input" id="mg-desc" rows="2" style="font-size:13px;padding:8px 12px;resize:vertical;"></textarea>
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--ink3);">Badge colour</label>
+        <input class="form-input" id="mg-color" type="color" value="#7c5cbf" style="height:36px;padding:2px 6px;">
+      </div>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn btn-outline" onclick="closeModal('modal-group-edit')">Cancel</button>
+    <button class="btn btn-primary" id="mg-submit" onclick="saveGroup()">Save Group</button>
+  </div>
+</div></div>
+
+<!-- MANAGE GROUP MEMBERS MODAL -->
+<div class="modal-overlay" id="modal-group-members" style="z-index:255;"><div class="modal" style="max-width:600px;">
+  <div class="modal-head"><h2 id="mm-title">Group Members</h2><button class="modal-close" onclick="closeModal('modal-group-members')">&#x2715;</button></div>
+  <div class="modal-body" style="padding:1.2rem;">
+    <input type="hidden" id="mm-group-id">
+    <input class="form-input" id="mm-search" placeholder="Search customers…" oninput="renderGroupMembersList()" style="font-size:13px;padding:8px 12px;margin-bottom:.6rem;">
+    <div style="font-size:11px;color:var(--ink4);margin-bottom:.4rem;">Tick to add to the group · untick to remove.</div>
+    <div id="mm-list" style="max-height:50vh;overflow:auto;border:1px solid var(--border);border-radius:8px;"></div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn btn-outline" onclick="closeModal('modal-group-members')">Cancel</button>
+    <button class="btn btn-primary" id="mm-submit" onclick="saveGroupMembers()">Save Members</button>
+  </div>
+</div></div>
+
+<!-- PUBLISH PRODUCT MODAL -->
+<div class="modal-overlay" id="modal-publish"><div class="modal" style="max-width:560px;">
+  <div class="modal-head" style="background:var(--bg);"><h2 id="mpb-title" style="font-size:1.05rem;">Publish to Sales Web</h2><button class="modal-close" onclick="closeModal('modal-publish')">&#x2715;</button></div>
+  <div class="modal-body" style="padding:1.2rem 1.4rem;">
+    <input type="hidden" id="mpb-product-id">
+    <div id="mpb-product-name" style="font-size:13px;font-weight:600;color:var(--ink2);margin-bottom:.6rem;"></div>
+    <div id="mpb-loading" style="font-size:12px;color:var(--ink4);">Computing quantities…</div>
+    <div id="mpb-content" style="display:none;">
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:.8rem 1rem;font-size:12.5px;margin-bottom:1rem;">
+        <div style="display:flex;justify-content:space-between;padding:.2rem 0;"><span style="color:var(--ink3);">Raw maturity (transplanted − 10%)</span><span style="font-weight:700;" id="mpb-raw">—</span></div>
+        <div style="display:flex;justify-content:space-between;padding:.2rem 0;"><span style="color:var(--ink3);">Customer allocation (reserved this month)</span><span style="font-weight:700;color:var(--amber);" id="mpb-alloc">—</span></div>
+        <div style="display:flex;justify-content:space-between;padding:.2rem 0;"><span style="color:var(--ink3);">Suitable for sales (audited ≥1.5m, prev/curr months)</span><span style="font-weight:700;color:var(--green);" id="mpb-suitable">—</span></div>
+        <div style="display:flex;justify-content:space-between;padding:.2rem 0;"><span style="color:var(--ink3);">Estimate collection (admin-keyed)</span><span style="font-weight:700;color:var(--amber);" id="mpb-estimate">—</span></div>
+      </div>
+      <div style="font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem;">Quantity to publish</div>
+      <label class="mp-radio" style="padding:.5rem .7rem;border:1px solid var(--border);border-radius:8px;margin-bottom:.4rem;display:flex;justify-content:space-between;cursor:pointer;">
+        <span><input type="radio" name="mpb-strat" value="raw" onchange="updatePublishPreview()"> Raw maturity</span>
+        <strong id="mpb-opt-raw">—</strong>
+      </label>
+      <label class="mp-radio" style="padding:.5rem .7rem;border:1px solid var(--border);border-radius:8px;margin-bottom:.4rem;display:flex;justify-content:space-between;cursor:pointer;">
+        <span><input type="radio" name="mpb-strat" value="minus_alloc" onchange="updatePublishPreview()"> After deducting customer allocation</span>
+        <strong id="mpb-opt-minus">—</strong>
+      </label>
+      <label class="mp-radio" style="padding:.5rem .7rem;border:1.5px solid var(--green);border-radius:8px;margin-bottom:.4rem;display:flex;justify-content:space-between;cursor:pointer;background:rgba(124,92,191,.04);">
+        <span><input type="radio" name="mpb-strat" value="maturity_plus_suitable_minus_estimate" checked onchange="updatePublishPreview()"> <strong>Maturity + suitable − estimate</strong> <span style="font-size:10px;color:var(--ink4);">(default)</span></span>
+        <strong id="mpb-opt-mse">—</strong>
+      </label>
+      <label class="mp-radio" style="padding:.5rem .7rem;border:1px solid var(--border);border-radius:8px;margin-bottom:.4rem;display:flex;align-items:center;gap:.6rem;cursor:pointer;">
+        <span><input type="radio" name="mpb-strat" value="manual" onchange="updatePublishPreview()"> Manual</span>
+        <input type="number" id="mpb-manual-qty" min="0" placeholder="Enter qty" style="margin-left:auto;width:110px;padding:6px 10px;font-size:13px;border:1px solid var(--border);border-radius:6px;text-align:right;" oninput="document.querySelector('input[name=mpb-strat][value=manual]').checked=true;updatePublishPreview();">
+      </label>
+      <div id="mpb-warnings" style="margin-top:.8rem;"></div>
+    </div>
+  </div>
+  <div class="modal-foot" id="mpb-foot">
+    <button class="btn btn-outline" onclick="closeModal('modal-publish')">Cancel</button>
+    <button class="btn btn-primary" id="mpb-confirm" onclick="confirmPublish()" disabled>Confirm &amp; Publish</button>
+  </div>
+</div></div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+var SB_URL='https://kibqjztozokohqmhqqqf.supabase.co';
+var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpYnFqenRvem9rb2hxbWhxcXFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyMzQzNjIsImV4cCI6MjA4OTgxMDM2Mn0.J7qJUZhWXYf5b9oey4wXJkjdi66jomEMw_NeV9NWF7M';
+var sb=supabase.createClient(SB_URL,SB_KEY);
+
+async function checkAdmin(){
+  var{data:{session}}=await sb.auth.getSession();
+  if(!session){window.location.href='auth.html';return;}
+  var{data:profile}=await sb.from('shared_profiles').select('role, permissions').eq('id',session.user.id).single();
+  var swLevel=(profile&&profile.permissions&&profile.permissions.modules&&profile.permissions.modules.salesweb)||'none';
+  var legacyAdmin=profile&&profile.role==='admin';
+  if(!profile||(swLevel!=='admin'&&swLevel!=='normal'&&!legacyAdmin)){window.location.href='index.html';return;}
+  document.getElementById('auth-loading').style.display='none';
+  document.getElementById('app').classList.add('show');
+  document.getElementById('admin-name').textContent=session.user.user_metadata?.full_name||session.user.email;
+
+  var isAdmin = (swLevel==='admin') || legacyAdmin;
+  window.__SW_IS_ADMIN__ = isAdmin;
+  window.__SW_USER_ID__  = session.user.id;
+  window.__SW_LEVEL__    = swLevel;
+  // Per-tab gating lives in permissions.salesweb_tabs as {tabKey:bool}.
+  // Missing row = grandfather: admins see everything, normals see
+  // everything except User Access (matches the pre-feature behaviour).
+  // Reads from salesweb_user_tab_access (owned by salesweb, not gated
+  // by the umbrella manage_users meta-permission); legacy fallback
+  // reads permissions.salesweb_tabs for profiles written before the
+  // dedicated table existed.
+  var tabsFromTable = null;
+  try {
+    var tabRes = await sb.from('salesweb_user_tab_access')
+      .select('tabs').eq('user_id', session.user.id).maybeSingle();
+    if (tabRes && tabRes.data && tabRes.data.tabs) tabsFromTable = tabRes.data.tabs;
+  } catch(e) { /* table may not exist yet pre-migration */ }
+  window.__SW_TABS__ = tabsFromTable
+    || (profile && profile.permissions && profile.permissions.salesweb_tabs)
+    || null;
+  applyTabVisibility();
+
+  loadOrders();
+}
+
+// Set of tabs that exist in the salesweb admin. Update both sides if you
+// add a new tab — the sidebar id pattern is sb-<key>-item.
+var SALESWEB_TAB_KEYS = ['orders','reports','customers','products','payments','promos','coupons','webdesign','settings','users'];
+
+function canSeeTab(key){
+  if (key === 'users') return !!window.__SW_IS_ADMIN__;     // User Access is admin-locked
+  if (window.__SW_IS_ADMIN__) return true;                  // admins see everything else
+  var tabs = window.__SW_TABS__;
+  if (!tabs) return true;                                   // grandfather: no settings yet → allow all
+  return tabs[key] === true;
+}
+
+function applyTabVisibility(){
+  SALESWEB_TAB_KEYS.forEach(function(key){
+    var elId = key === 'customers' ? 'sb-customers-parent' : 'sb-'+key+'-item';
+    var el = document.getElementById(elId);
+    if (!el) return;
+    el.style.display = canSeeTab(key) ? '' : 'none';
+  });
+  // If the user can't see Orders (the default boot tab), bounce them to
+  // the first allowed tab so the page isn't blank.
+  if (!canSeeTab('orders')) {
+    var first = SALESWEB_TAB_KEYS.filter(canSeeTab)[0];
+    if (first && first !== 'orders') {
+      var firstEl = document.getElementById(first === 'customers' ? 'sb-customers-parent' : 'sb-'+first+'-item');
+      switchTab(first, firstEl);
+    }
+  }
+}
+async function doLogout(){await sb.auth.signOut();sessionStorage.clear();window.location.href='auth.html';}
+
+// Toggles the mobile off-canvas sidebar. Called by the hamburger
+// button, the backdrop tap, and every switchTab() so picking a tab
+// from the drawer auto-closes it (matches normal mobile-app UX).
+function toggleSidebar(force){
+  var sb=document.querySelector('.sidebar');
+  var bd=document.getElementById('sb-backdrop');
+  if(!sb||!bd)return;
+  var open=(force===true)?true:(force===false?false:!sb.classList.contains('open'));
+  sb.classList.toggle('open',open);
+  bd.classList.toggle('open',open);
+}
+
+function switchTab(tab,el){
+  if(typeof canSeeTab==='function'&&!canSeeTab(tab)){toast('You do not have access to this page','error');return;}
+  // Auto-close the drawer on phones so the freshly opened tab is visible.
+  if(window.innerWidth<=768)toggleSidebar(false);
+  document.querySelectorAll('.tab-content').forEach(function(t){t.classList.remove('active');});
+  document.querySelectorAll('.sb-item').forEach(function(s){s.classList.remove('active');});
+  document.querySelectorAll('.sb-sub-item').forEach(function(s){s.classList.remove('active');});
+  document.getElementById('tab-'+tab).classList.add('active');
+  if(el)el.classList.add('active');
+  if(tab==='orders')loadOrders();
+  if(tab==='reports')loadReports();
+  if(tab==='customers')loadCustomers();
+  if(tab==='products')loadProducts();
+  if(tab==='payments')loadPayments();
+  if(tab==='promos')loadPromos();
+  if(tab==='coupons')loadCoupons();
+  if(tab==='webdesign')loadWebDesign();
+  if(tab==='users')loadUsers();
+  if(tab==='settings')loadSettings();
+}
+
+function toggleSbSub(name){
+  var sub=document.getElementById('sb-sub-'+name);
+  var arrow=document.getElementById('sb-cust-arrow');
+  if(sub.classList.contains('open')){sub.classList.remove('open');if(arrow)arrow.style.transform='';}
+  else{sub.classList.add('open');if(arrow)arrow.style.transform='rotate(180deg)';}
+}
+
+function openModal(id){document.getElementById(id).classList.add('open');}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+function toast(msg,type,duration){var t=document.getElementById('toast');t.textContent=msg;t.className='toast show'+(type==='error'?' error':'');setTimeout(function(){t.className='toast';},duration||3000);}
+function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+function fmtDate(d){if(!d)return'—';return new Date(d).toLocaleDateString('en-MY',{day:'2-digit',month:'short',year:'numeric'});}
+function statusBadge(s){return{'Pending':'badge-amber','Confirmed':'badge-blue','Processing':'badge-blue','Shipped':'badge-blue','Completed':'badge-green','Cancelled':'badge-red'}[s]||'badge-grey';}
+
+var adminSettings={productTypes:['Seedling','Merchandise'],collections:['Normal Sales','Promotion'],tags:['Best Seller','New Arrival','Limited']};
+
+function showSettingsSubTab(tab){
+  ['catalog','payments','orders','notifications'].forEach(function(t){
+    var panel=document.getElementById('set-panel-'+t);
+    var btn=document.getElementById('set-subtab-'+t);
+    if(panel) panel.style.display = (t===tab)?'':'none';
+    if(btn) btn.className='btn btn-'+(t===tab?'primary':'outline')+' btn-sm';
+  });
+}
+
+async function loadSettings(){
+  showSettingsSubTab('catalog');
+  try{var s=localStorage.getItem('mjm_admin_settings');if(s)adminSettings=JSON.parse(s);}catch(e){}
+  renderSettingsList('settings-product-types',adminSettings.productTypes,'ptype');
+  renderSettingsList('settings-collections',adminSettings.collections,'coll');
+  renderSettingsList('settings-tags',adminSettings.tags,'tag');
+  loadPaymentDetails();
+  loadNotificationConfig();
+  loadAutoReleaseConfig();
+}
+
+// ═══════════════════════════════════════
+//  STOCK AUTO-RELEASE CONFIG
+//  Stored in salesweb_app_settings.key='order_auto_release' as JSON:
+//    { enabled: true, hours: 48 }
+//  Read by the release_abandoned_cash_orders() SQL function.
+// ═══════════════════════════════════════
+async function loadAutoReleaseConfig(){
+  var dbg=document.getElementById('autorel-debug');
+  try{
+    var{data}=await sb.from('salesweb_app_settings').select('value').eq('key','order_auto_release').maybeSingle();
+    var cfg={enabled:true,hours:48};
+    if(data&&data.value){ try{ cfg={...cfg,...(typeof data.value==='string'?JSON.parse(data.value):data.value)}; }catch(e){} }
+    document.getElementById('autorel-enabled').checked = cfg.enabled!==false;
+    document.getElementById('autorel-hours').value = cfg.hours||48;
+    if(dbg){ dbg.textContent = cfg.enabled!==false ? ('Active — releasing after '+(cfg.hours||48)+'h.') : 'Disabled — stock is never auto-released.'; dbg.style.color='var(--ink4)'; }
+  }catch(e){ if(dbg){ dbg.textContent='Could not load setting — defaults shown.'; dbg.style.color='var(--red)'; } }
+}
+async function saveAutoReleaseConfig(){
+  var enabled=document.getElementById('autorel-enabled').checked;
+  var hours=parseInt(document.getElementById('autorel-hours').value,10);
+  if(isNaN(hours)||hours<1){ toast('Enter a valid number of hours (≥ 1)','error'); return; }
+  var btn=document.getElementById('autorel-save-btn'); btn.disabled=true; btn.textContent='Saving…';
+  var{error}=await sb.from('salesweb_app_settings').upsert({key:'order_auto_release',value:JSON.stringify({enabled:enabled,hours:hours})},{onConflict:'key'});
+  btn.disabled=false; btn.textContent='Save';
+  if(error){ toast('Error: '+error.message,'error'); return; }
+  toast('Auto-release setting saved');
+  loadAutoReleaseConfig();
+}
+
+// ═══════════════════════════════════════
+//  NOTIFICATION CONFIG (order-paid email)
+//  Stored in salesweb_app_settings.key='notification_config' as JSON:
+//    { admin_emails: ['a@b.com', ...], from_email, from_name, booking_url }
+//  Consumed by the send-order-email edge function (fired from the Billplz
+//  webhook on Paid) and by payment-callback.html (for the booking URL link).
+// ═══════════════════════════════════════
+var notificationConfig = { admin_emails:[], from_email:'', from_name:'MJM Nursery', booking_url:'https://collect.mjmnursery.com/' };
+
+async function loadNotificationConfig(){
+  var dbg = document.getElementById('notif-debug');
+  var loaded = false, errMsg = '';
+  try{
+    var{data,error}=await sb.from('salesweb_app_settings').select('value').eq('key','notification_config').maybeSingle();
+    if(error){ errMsg = 'Query error: '+error.message; }
+    else if(data && data.value){
+      try{
+        var parsed = typeof data.value==='string' ? JSON.parse(data.value) : data.value;
+        notificationConfig = Object.assign(notificationConfig, parsed||{});
+        loaded = true;
+      }catch(e){ errMsg = 'JSON parse error: '+e.message; }
+    } else {
+      errMsg = 'No row yet for key=notification_config — defaults shown.';
+    }
+  }catch(e){ errMsg = 'Exception: '+(e.message||e); }
+
+  document.getElementById('notif-admin-emails').value = (notificationConfig.admin_emails||[]).join('\n');
+  document.getElementById('notif-from-email').value   = notificationConfig.from_email   || '';
+  document.getElementById('notif-from-name').value    = notificationConfig.from_name    || 'MJM Nursery';
+  document.getElementById('notif-booking-url').value  = notificationConfig.booking_url  || 'https://collect.mjmnursery.com/';
+
+  if(dbg){
+    if(loaded){ dbg.style.color='var(--green)'; dbg.textContent='Loaded saved values from database.'; }
+    else      { dbg.style.color='var(--ink4)';  dbg.textContent=errMsg||'Defaults shown.'; }
+  }
+}
+
+async function saveNotificationConfig(){
+  var btn = document.getElementById('notif-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  // Split textarea by newline or comma; drop blanks; dedupe; lowercase.
+  var raw = document.getElementById('notif-admin-emails').value || '';
+  var emails = raw.split(/[\n,]+/).map(function(s){return s.trim().toLowerCase();}).filter(Boolean);
+  // Cheap sanity check — anything without '@' is almost certainly a typo.
+  var bad = emails.filter(function(e){return e.indexOf('@')===-1;});
+  if(bad.length){
+    btn.disabled = false; btn.textContent = 'Save';
+    toast('Looks like a typo: '+bad.join(', '),'error');
+    return;
+  }
+  var seen = {}; emails = emails.filter(function(e){if(seen[e])return false;seen[e]=1;return true;});
+
+  notificationConfig.admin_emails = emails;
+  notificationConfig.from_email   = (document.getElementById('notif-from-email').value || '').trim();
+  notificationConfig.from_name    = (document.getElementById('notif-from-name').value || 'MJM Nursery').trim();
+  notificationConfig.booking_url  = (document.getElementById('notif-booking-url').value || 'https://collect.mjmnursery.com/').trim();
+
+  var{error} = await sb.from('salesweb_app_settings').upsert({
+    key:'notification_config',
+    value:JSON.stringify(notificationConfig),
+    updated_at:new Date().toISOString()
+  },{onConflict:'key'});
+  btn.disabled = false; btn.textContent = 'Save';
+  if(error){ toast('Save failed: '+error.message,'error'); return; }
+  toast('Notification settings saved');
+}
+
+// ═══════════════════════════════════════
+//  PAYMENT DETAILS (offline bank transfer + DuitNow QR)
+//  Stored in salesweb_app_settings.key='payment_details' as JSON:
+//    { bank_name, account_name, account_number, duitnow_qr_url }
+//  Surfaced to customers on payment-proof.html.
+// ═══════════════════════════════════════
+var paymentDetails = { bank_name:'', account_name:'', account_number:'', duitnow_qr_url:'' };
+
+async function loadPaymentDetails(){
+  var dbg = document.getElementById('pay-debug');
+  var loadedFromDB = false;
+  var errMsg = '';
+  try{
+    var{data,error}=await sb.from('salesweb_app_settings').select('value').eq('key','payment_details').maybeSingle();
+    if(error){ errMsg = 'Query error: '+error.message; }
+    else if(data && data.value){
+      try{ paymentDetails = typeof data.value==='string' ? JSON.parse(data.value) : data.value; loadedFromDB = true; }
+      catch(e){ errMsg = 'JSON parse error: '+e.message; }
+    } else {
+      errMsg = 'No row found for key=payment_details';
+    }
+  }catch(e){ errMsg = 'Exception: '+(e.message||e); console.warn('payment details load failed:', e); }
+  document.getElementById('pay-bank-name').value      = paymentDetails.bank_name      || '';
+  document.getElementById('pay-account-name').value   = paymentDetails.account_name   || '';
+  document.getElementById('pay-account-number').value = paymentDetails.account_number || '';
+  renderPaymentQrPreview();
+  if(dbg){
+    if(loadedFromDB){
+      dbg.style.color='var(--green)';
+      dbg.textContent='Loaded saved values from database.';
+    } else {
+      dbg.style.color='var(--red)';
+      dbg.textContent='Could not load saved values — '+errMsg+' (fields stay empty until you Save).';
+    }
+  }
+}
+
+function renderPaymentQrPreview(){
+  var url = paymentDetails.duitnow_qr_url || '';
+  var status = document.getElementById('pay-qr-status');
+  var prev   = document.getElementById('pay-qr-preview');
+  var img    = document.getElementById('pay-qr-img');
+  if(url){
+    status.textContent = 'Current QR image:';
+    img.src = url + (url.indexOf('?')<0 ? '?t='+Date.now() : ''); // cache-bust
+    prev.style.display = 'block';
+  } else {
+    status.textContent = 'No QR uploaded yet.';
+    prev.style.display = 'none';
+  }
+}
+
+async function savePaymentDetails(){
+  var btn = document.getElementById('pay-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving...';
+  paymentDetails.bank_name      = document.getElementById('pay-bank-name').value.trim();
+  paymentDetails.account_name   = document.getElementById('pay-account-name').value.trim();
+  paymentDetails.account_number = document.getElementById('pay-account-number').value.trim();
+  // duitnow_qr_url is set by uploadPaymentQr / removePaymentQr — keep as-is.
+  var{error} = await sb.from('salesweb_app_settings').upsert({
+    key:'payment_details',
+    value:JSON.stringify(paymentDetails),
+    updated_at:new Date().toISOString()
+  },{onConflict:'key'});
+  btn.disabled = false; btn.textContent = 'Save';
+  if(error){ toast('Save failed: '+error.message,'error'); return; }
+  toast('Payment details saved');
+}
+
+async function uploadPaymentQr(){
+  var input = document.getElementById('pay-qr-file');
+  if(!input.files || !input.files[0]) return;
+  var file = input.files[0];
+  if(file.size > 2*1024*1024){ toast('QR image must be under 2MB','error'); input.value=''; return; }
+
+  var ext = (file.name.split('.').pop()||'png').toLowerCase();
+  var path = 'payment-qr/duitnow_'+Date.now()+'.'+ext;
+  toast('Uploading QR...');
+  var{error:upErr} = await sb.storage.from('order-attachments').upload(path, file, { contentType:file.type, upsert:true });
+  if(upErr){ toast('Upload failed: '+upErr.message,'error'); return; }
+
+  var{data:urlData} = sb.storage.from('order-attachments').getPublicUrl(path);
+  paymentDetails.duitnow_qr_url = urlData?.publicUrl || '';
+  renderPaymentQrPreview();
+  input.value = '';
+
+  // Persist immediately so the QR is available even if the admin forgets to
+  // click Save afterwards.
+  await sb.from('salesweb_app_settings').upsert({
+    key:'payment_details',
+    value:JSON.stringify(paymentDetails),
+    updated_at:new Date().toISOString()
+  },{onConflict:'key'});
+  toast('QR uploaded');
+}
+
+async function removePaymentQr(){
+  if(!confirm('Remove the DuitNow QR image?')) return;
+  paymentDetails.duitnow_qr_url = '';
+  renderPaymentQrPreview();
+  await sb.from('salesweb_app_settings').upsert({
+    key:'payment_details',
+    value:JSON.stringify(paymentDetails),
+    updated_at:new Date().toISOString()
+  },{onConflict:'key'});
+  toast('QR removed');
+}
+function saveSettings(){try{localStorage.setItem('mjm_admin_settings',JSON.stringify(adminSettings));}catch(e){}}
+function renderSettingsList(containerId,list,prefix){
+  var el=document.getElementById(containerId);
+  if(!list.length){el.innerHTML='<div style="font-size:12px;color:var(--ink4);padding:.5rem 0;">No items</div>';return;}
+  el.innerHTML=list.map(function(item,i){return '<div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem .6rem;background:var(--bg);border-radius:6px;margin-bottom:.4rem;font-size:13px;font-weight:500;"><span>'+esc(item)+'</span><button class="btn btn-outline btn-sm" onclick="removeSettingsItem(\''+prefix+'\','+i+')" style="color:var(--red);font-size:10px;padding:2px 8px;">Remove</button></div>';}).join('');
+}
+function addProductType(){var val=document.getElementById('new-ptype').value.trim();if(!val){toast('Enter a product type name','error');return;}if(adminSettings.productTypes.includes(val)){toast('Already exists','error');return;}adminSettings.productTypes.push(val);saveSettings();document.getElementById('new-ptype').value='';loadSettings();updateProductFormDropdowns();toast('Product type added');}
+function addCollection(){var val=document.getElementById('new-collection').value.trim();if(!val){toast('Enter a collection name','error');return;}if(adminSettings.collections.includes(val)){toast('Already exists','error');return;}adminSettings.collections.push(val);saveSettings();document.getElementById('new-collection').value='';loadSettings();updateProductFormDropdowns();toast('Collection added');}
+function addTag(){var val=document.getElementById('new-tag').value.trim();if(!val){toast('Enter a tag name','error');return;}if(adminSettings.tags.includes(val)){toast('Already exists','error');return;}adminSettings.tags.push(val);saveSettings();document.getElementById('new-tag').value='';loadSettings();updateProductFormDropdowns();toast('Tag added');}
+function removeSettingsItem(prefix,index){if(prefix==='ptype'){if(adminSettings.productTypes.length<=1){toast('Need at least one type','error');return;}adminSettings.productTypes.splice(index,1);}else if(prefix==='coll'){if(adminSettings.collections.length<=1){toast('Need at least one collection','error');return;}adminSettings.collections.splice(index,1);}else if(prefix==='tag'){adminSettings.tags.splice(index,1);}saveSettings();loadSettings();updateProductFormDropdowns();toast('Removed');}
+function updateProductFormDropdowns(){var typeEl=document.getElementById('mp-type');var collEl=document.getElementById('mp-coll');if(typeEl)typeEl.innerHTML=adminSettings.productTypes.map(function(t){return '<option value="'+esc(t)+'">'+esc(t)+'</option>';}).join('');if(collEl)collEl.innerHTML=adminSettings.collections.map(function(c){return '<option value="'+esc(c)+'">'+esc(c)+'</option>';}).join('');var tf=document.getElementById('prod-type-filter');var cf=document.getElementById('prod-coll-filter');if(tf)tf.innerHTML='<option value="">All Types</option>'+adminSettings.productTypes.map(function(t){return '<option>'+esc(t)+'</option>';}).join('');if(cf)cf.innerHTML='<option value="">All Collections</option>'+adminSettings.collections.map(function(c){return '<option>'+esc(c)+'</option>';}).join('');var tagEl=document.getElementById('mp-tags');if(tagEl)tagEl.innerHTML=adminSettings.tags.map(function(t){return '<option value="'+esc(t)+'">'+esc(t)+'</option>';}).join('');}
+try{var s=localStorage.getItem('mjm_admin_settings');if(s)adminSettings=JSON.parse(s);}catch(e){}
+
+document.addEventListener('DOMContentLoaded',function(){
+  checkAdmin();
+  // Admin modals never close on a stray backdrop click — admins lose
+  // in-progress data too easily that way. Each modal must be dismissed via
+  // its X button, Cancel, or the action button (Save / Create / etc.).
+});
+</script>
+
+<script src="admin-orders.js?v=2026-06-16-drop-monthly"></script>
+<script src="admin-reports.js?v=2026-06-15-charts"></script>
+<script src="admin-customers.js?v=2026-05-28-customer-groups"></script>
+<script src="admin-products.js?v=2026-06-16-publish-race"></script>
+<script src="admin-payments.js?v=2026-05-20-payment-verification"></script>
+<script src="admin-users.js?v=2026-05-21-tab-access-table"></script>
+<script src="admin-promotions.js?v=2026-05-18-points-ledger"></script>
+<script src="admin-coupons.js?v=2026-05-28-coupon-groups"></script>
+<script src="admin-web-design.js?v=2026-05-20-port-from-umbrella"></script>
+
+</body>
+</html>

@@ -733,38 +733,11 @@ async function viewOrder(id){
   html+='</div>';
   html+='</div>';
 
-  // Payment ledger — one row per payment received. Sum of `amount` here is
-  // what feeds the "Amount Paid" tile above (kept in sync by the
-  // salesweb_recalc_order_amount_paid trigger).
-  html+='<div style="padding-top:.5rem;border-top:1px solid var(--border);">';
-  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem;">';
-  html+='<div style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.04em;">Payment Entries</div>';
-  html+='<button class="btn btn-primary btn-sm" onclick="openAddPaymentModal(\''+id+'\','+balanceNow.toFixed(2)+')" style="font-size:11px;padding:5px 10px;">+ Add Payment</button>';
-  html+='</div>';
-  if(paymentRows.length){
-    html+='<table class="data-table" style="font-size:12px;"><thead><tr>'+
-      '<th>Date</th><th style="text-align:right;">Amount</th><th>Note</th><th>Document</th><th style="text-align:right;">Action</th>'+
-      '</tr></thead><tbody>';
-    paymentRows.forEach(function(p){
-      var rid = String(p.id||'').replace(/[\\'"<>]/g,'');
-      var docCell = '—';
-      if(p.attachment_url){
-        var u = String(p.attachment_url).replace(/'/g,'%27');
-        var n = String(p.attachment_name||'document').replace(/'/g,'\\\'');
-        docCell = '<a href="#" onclick="event.preventDefault();openAttachmentPreview(\''+u+'\',\''+n+'\',\'\');" style="font-size:11px;color:var(--green);text-decoration:underline;">View</a>';
-      }
-      html+='<tr>'+
-        '<td>'+esc(fmtDate(p.paid_at))+'</td>'+
-        '<td style="text-align:right;font-weight:600;">RM '+fmtMYR(p.amount)+'</td>'+
-        '<td style="color:var(--ink3);">'+esc(p.note||'—')+'</td>'+
-        '<td>'+docCell+'</td>'+
-        '<td style="text-align:right;"><button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 8px;color:var(--red);border-color:var(--red);" onclick="deletePaymentEntry(\''+rid+'\',\''+id+'\')">✕</button></td>'+
-      '</tr>';
-    });
-    html+='</tbody></table>';
-  } else {
-    html+='<div style="font-size:12px;color:var(--ink4);padding:.4rem 0;">No payments recorded yet. Click <strong>+ Add Payment</strong> above to log the first one.</div>';
-  }
+  // Payment Tracking is a read-only dashboard now. Payment Entries are
+  // recorded per-bill in the Credit — Monthly Invoice Breakdown table
+  // below, so the ledger lives there.
+  html+='<div style="padding-top:.5rem;border-top:1px solid var(--border);font-size:11px;color:var(--ink3);">';
+  html+='Payments are recorded per invoice under <strong>Credit — Monthly Invoice Breakdown</strong>. The totals above stay in sync automatically.';
   html+='</div>';
   html+='</div>';
 
@@ -822,21 +795,88 @@ async function viewOrder(id){
     }
     html+='</div>';
     if(creditBills.length){
-      html+='<table class="data-table" style="font-size:12px;"><thead><tr><th>Date</th><th>Invoice No.</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Amount</th><th style="text-align:right;">Action</th></tr></thead><tbody>';
+      // Bucket payment ledger by bill_id so each bill shows its own paid
+      // amount, per-bill "Fully Paid" state, and nested payment rows.
+      var paysByBill = {};
+      var unlinkedPays = [];
+      paymentRows.forEach(function(p){
+        if(p.bill_id){ (paysByBill[p.bill_id] = paysByBill[p.bill_id] || []).push(p); }
+        else { unlinkedPays.push(p); }
+      });
+
+      html+='<table class="data-table" style="font-size:12px;"><thead><tr><th>Date</th><th>Invoice No.</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Amount</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Action</th></tr></thead><tbody>';
       creditBills.forEach(function(b){
         var bidJs=String(b.id||'').replace(/[\\'"<>]/g,'');
+        var billPays = paysByBill[b.id] || [];
+        var billPaid = billPays.reduce(function(s,p){return s+(Number(p.amount)||0);}, 0);
+        var billAmt  = Number(b.amount)||0;
+        var billBal  = Math.max(0, billAmt - billPaid);
+        var fullyPaid = billAmt > 0 && billPaid >= billAmt - 0.005; // 0.5-sen tolerance
+        var actionCell = '';
+        if(fullyPaid){
+          actionCell = '<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;font-size:10px;padding:3px 8px;">✓ Fully Paid</span>';
+        } else {
+          actionCell = '<button class="btn btn-primary btn-sm" onclick="openAddPaymentModal(\''+id+'\','+billBal.toFixed(2)+',\''+bidJs+'\')" style="font-size:10px;padding:2px 8px;margin-right:.2rem;">+ Add Payment</button>'+
+                       '<button class="btn btn-outline btn-sm" onclick="openCreditBillModal(\''+id+'\',null,\''+bidJs+'\')" style="font-size:10px;padding:2px 6px;margin-right:.2rem;">Edit</button>'+
+                       '<button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;color:var(--red);border-color:var(--red);" onclick="deleteCreditBill(\''+bidJs+'\',\''+id+'\')">✕</button>';
+        }
         html+='<tr>'+
           '<td>'+esc(String(b.bill_date||'').substring(0,10))+'</td>'+
           '<td>'+esc(b.invoice_no||'—')+'</td>'+
           '<td style="text-align:right;">'+(Number(b.qty)||0).toLocaleString()+'</td>'+
-          '<td style="text-align:right;font-weight:600;">RM '+fmtMYR(b.amount)+'</td>'+
-          '<td style="text-align:right;white-space:nowrap;">'+
-            '<button class="btn btn-outline btn-sm" onclick="openCreditBillModal(\''+id+'\',null,\''+bidJs+'\')" style="font-size:10px;padding:2px 6px;margin-right:.2rem;">Edit</button>'+
-            '<button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;color:var(--red);border-color:var(--red);" onclick="deleteCreditBill(\''+bidJs+'\',\''+id+'\')">✕</button>'+
-          '</td>'+
+          '<td style="text-align:right;font-weight:600;">RM '+fmtMYR(billAmt)+'</td>'+
+          '<td style="text-align:right;color:'+(billPaid>0?'var(--green)':'var(--ink4)')+';font-weight:600;">RM '+fmtMYR(billPaid)+'</td>'+
+          '<td style="text-align:right;white-space:nowrap;">'+actionCell+'</td>'+
         '</tr>';
+        // Nested payment rows for this bill
+        if(billPays.length){
+          billPays.forEach(function(p){
+            var rid = String(p.id||'').replace(/[\\'"<>]/g,'');
+            var docCell = '';
+            if(p.attachment_url){
+              var u = String(p.attachment_url).replace(/'/g,'%27');
+              var n = String(p.attachment_name||'document').replace(/'/g,'\\\'');
+              docCell = ' <a href="#" onclick="event.preventDefault();openAttachmentPreview(\''+u+'\',\''+n+'\',\'\');" style="color:var(--green);text-decoration:underline;">📎 View</a>';
+            }
+            html+='<tr style="background:#fafafa;">'+
+              '<td colspan="2" style="padding-left:1.5rem;font-size:11px;color:var(--ink3);">↳ Payment '+esc(fmtDate(p.paid_at))+(p.note?' · '+esc(p.note):'')+'</td>'+
+              '<td></td>'+
+              '<td></td>'+
+              '<td style="text-align:right;font-size:11px;font-weight:600;color:var(--green);">RM '+fmtMYR(p.amount)+docCell+'</td>'+
+              '<td style="text-align:right;">'+
+                (fullyPaid ? '' :
+                  '<button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;color:var(--red);border-color:var(--red);" onclick="deletePaymentEntry(\''+rid+'\',\''+id+'\')">✕</button>')+
+              '</td>'+
+            '</tr>';
+          });
+        }
       });
-      html+='<tr style="background:#f8fafc;font-weight:700;"><td colspan="3" style="text-align:right;">Total billed</td><td style="text-align:right;">RM '+fmtMYR(billedSum)+'</td><td style="text-align:right;font-size:10px;color:var(--ink3);">'+billedFullPct.toFixed(1)+'%</td></tr>';
+      // Legacy / unlinked payments (recorded before per-bill link existed)
+      if(unlinkedPays.length){
+        html+='<tr style="background:#fff7ed;"><td colspan="6" style="font-size:11px;font-weight:600;color:#9a3412;padding-top:.4rem;">Unlinked payments (not tied to a specific invoice)</td></tr>';
+        unlinkedPays.forEach(function(p){
+          var rid = String(p.id||'').replace(/[\\'"<>]/g,'');
+          var docCell = '';
+          if(p.attachment_url){
+            var u = String(p.attachment_url).replace(/'/g,'%27');
+            var n = String(p.attachment_name||'document').replace(/'/g,'\\\'');
+            docCell = ' <a href="#" onclick="event.preventDefault();openAttachmentPreview(\''+u+'\',\''+n+'\',\'\');" style="color:var(--green);text-decoration:underline;">📎 View</a>';
+          }
+          html+='<tr style="background:#fff7ed;">'+
+            '<td>'+esc(fmtDate(p.paid_at))+'</td>'+
+            '<td colspan="3" style="color:var(--ink3);">'+esc(p.note||'—')+docCell+'</td>'+
+            '<td style="text-align:right;font-weight:600;color:var(--green);">RM '+fmtMYR(p.amount)+'</td>'+
+            '<td style="text-align:right;"><button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;color:var(--red);border-color:var(--red);" onclick="deletePaymentEntry(\''+rid+'\',\''+id+'\')">✕</button></td>'+
+          '</tr>';
+        });
+      }
+      var totalPaidAll = paymentRows.reduce(function(s,p){return s+(Number(p.amount)||0);},0);
+      html+='<tr style="background:#f8fafc;font-weight:700;">'+
+              '<td colspan="3" style="text-align:right;">Total billed / paid</td>'+
+              '<td style="text-align:right;">RM '+fmtMYR(billedSum)+'</td>'+
+              '<td style="text-align:right;color:var(--green);">RM '+fmtMYR(totalPaidAll)+'</td>'+
+              '<td style="text-align:right;font-size:10px;color:var(--ink3);">'+billedFullPct.toFixed(1)+'% billed</td>'+
+            '</tr>';
       html+='</tbody></table>';
     } else {
       html+='<div style="font-size:12px;color:var(--ink4);padding:.3rem 0;">No bills yet. Click <strong>+ Add Bill</strong> to log the first one.</div>';
@@ -2936,10 +2976,12 @@ async function sendProformaInvoice(orderId, defaultEmail){
 // badges, customer portal, send-order-email, etc.) sees a live value
 // without needing any code changes.
 
-function openAddPaymentModal(orderId, outstandingHint){
+function openAddPaymentModal(orderId, outstandingHint, billId){
   document.getElementById('pay-order-id').value = orderId;
-  // Default the date to today and pre-fill the amount with the outstanding
-  // balance so single-payment-in-full is one click.
+  // Bill-scope payment: stash the bill id on the modal via a data
+  // attribute so submit can pick it up later.
+  var modalEl = document.getElementById('modal-add-payment');
+  if(modalEl) modalEl.dataset.billId = billId || '';
   var today = new Date().toISOString().slice(0,10);
   document.getElementById('pay-date').value = today;
   var amt = Number(outstandingHint || 0);
@@ -3000,6 +3042,8 @@ async function savePaymentEntry(){
   // can open the admin portal can record a payment. If the RPC isn't
   // installed yet on this Supabase, fall through to the legacy direct
   // insert with strip-on-error retry loop.
+  var modalEl = document.getElementById('modal-add-payment');
+  var billId  = (modalEl && modalEl.dataset && modalEl.dataset.billId) || null;
   var rpcRes = await sb.rpc('save_order_payment', {
     p_order_id:        orderId,
     p_paid_at:         paidAt,
@@ -3007,7 +3051,8 @@ async function savePaymentEntry(){
     p_note:            noteRaw ? String(noteRaw).trim() : null,
     p_attachment_url:  attUrl,
     p_attachment_name: attName,
-    p_created_by:      user
+    p_created_by:      user,
+    p_bill_id:         billId || null
   });
   if(!rpcRes.error){
     // RPC path succeeded — skip the legacy direct-insert flow below.

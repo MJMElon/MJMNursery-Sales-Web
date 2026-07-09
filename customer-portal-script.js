@@ -36,6 +36,38 @@ function mapDbStatus(s){
 
 function fmtIsoDate(t){ if(!t) return ''; try{ return new Date(t).toISOString().split('T')[0]; }catch(e){ return ''; } }
 
+// ── Order documents (salesweb_order_attachments) helpers ──────────────
+// Which timeline step a document belongs under, inferred from its name:
+// Delivery Orders (issued by the barcode counter) appear at Collecting,
+// invoices at Order Confirmed, payment proofs at Order Placed; anything
+// else defaults to Order Confirmed.
+function attachmentStep(name){
+  var n = String(name||'').toLowerCase();
+  if (/^do[-_ ]/.test(n) || n.indexOf('delivery order') !== -1 || n.indexOf('delivery_order') !== -1) return 'collecting';
+  if (n.indexOf('invoice') !== -1) return 'confirmed';
+  if (n.indexOf('proof') !== -1 || n.indexOf('payment') !== -1 || n.indexOf('receipt') !== -1) return 'order_placed';
+  return 'confirmed';
+}
+function attIcon(a){
+  var t = String(a.file_type||'').toLowerCase(), n = String(a.file_name||'').toLowerCase();
+  if (t.indexOf('pdf') !== -1 || /\.pdf$/.test(n)) return '📄';
+  if (t.indexOf('image') === 0 || /\.(png|jpe?g|gif|webp)$/.test(n)) return '🖼️';
+  return '📎';
+}
+function attTypeLabel(a){
+  var t = String(a.file_type||'').toLowerCase();
+  if (t.indexOf('pdf') !== -1) return 'PDF';
+  if (t.indexOf('image') === 0) return 'Image';
+  return a.file_type || 'File';
+}
+function fmtAttSize(bytes){
+  if (!bytes || isNaN(bytes)) return '—';
+  var kb = bytes/1024;
+  if (kb < 1) return bytes + ' B';
+  if (kb < 1024) return kb.toFixed(1) + ' KB';
+  return (kb/1024).toFixed(1) + ' MB';
+}
+
 async function loadOrdersFromDB(){
   var session = await _sb.auth.getSession();
   var uid = session && session.data && session.data.session && session.data.session.user && session.data.session.user.id;
@@ -123,6 +155,29 @@ async function loadOrdersFromDB(){
       o.collDate = b.booking_date;
     });
   }
+
+  // Pull per-order documents in one round-trip: invoices from the credit
+  // billing flow, DO PDFs pushed by the barcode counter's Issue DO, and
+  // any admin uploads. RLS limits rows to this customer's own orders.
+  // Each file is slotted onto a timeline step so the 📎 chips light up
+  // in the order detail view.
+  var byDbId = {};
+  ORDERS.forEach(function(o){ byDbId[o._dbId] = o; });
+  var {data: atts} = await _sb.from('salesweb_order_attachments')
+    .select('order_id, file_name, file_url, file_type, file_size, created_at')
+    .in('order_id', ids)
+    .order('created_at', { ascending: true });
+  (atts||[]).forEach(function(a){
+    var o = byDbId[a.order_id];
+    if (!o) return;
+    o.attachments[attachmentStep(a.file_name)].push({
+      name: a.file_name || 'Document',
+      type: attTypeLabel(a),
+      size: fmtAttSize(a.file_size),
+      icon: attIcon(a),
+      url:  a.file_url || ''
+    });
+  });
 }
 
 const POINTS_DATA = { balance:3450, tier:'Gold', totalEarned:5200, redeemed:1200, expiringSoon:200, nextTier:{name:'Platinum',threshold:5000},
@@ -438,7 +493,10 @@ function openAttModal(orderId,stepKey,e){
   document.getElementById('att-modal-body').innerHTML=files.length?files.map(function(f){return '<div class="att-file" onclick="downloadFile('+JSON.stringify(f).replace(/"/g,'&quot;')+',\''+oid+'\')"><div class="att-file-icon">'+esc(f.icon)+'</div><div class="att-file-info"><strong>'+esc(f.name)+'</strong><span>'+esc(f.type)+' · '+esc(f.size)+'</span></div><div class="att-file-dl">⬇ Download</div></div>';}).join(''):'<p style="font-size:.84rem;color:var(--ink3);text-align:center;padding:1.5rem 0">No documents for this stage.</p>';
   document.getElementById('att-modal').classList.add('open');
 }
-function downloadFile(file,orderId){showToast('📥 Downloading '+file.name+'…');}
+function downloadFile(file,orderId){
+  if(file&&file.url){window.open(file.url,'_blank','noopener');showToast('📥 Opening '+file.name+'…');}
+  else showToast('⚠️ File unavailable');
+}
 function closeModal(id){document.getElementById(id).classList.remove('open');}
 
 // ══════════════════════════════════════════════

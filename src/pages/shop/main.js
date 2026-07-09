@@ -3364,7 +3364,10 @@ export function initShopMain() {
   // cards, cart rows, portal orders, calculator/quotation output, calendar
   // cells, billing cards — all wired with onclick="fn(...)" that resolves
   // against window at click time) depend on that. Re-expose everything.
-  [
+  // NOTE: must be an object literal (shorthand keys survive minification);
+  // `window[fn.name] = fn` breaks in the production build because the
+  // minifier renames local function identifiers, so fn.name !== 'showPage'.
+  Object.assign(window, {
     // page navigation / shared UI (static markup + generated HTML)
     showPage, scrollToSection, showPortalToast,
     // nav / logo
@@ -3403,5 +3406,5 @@ export function initShopMain() {
     // misc helpers referenced indirectly
     initPortal, pRenderOrders, pRenderHistory, loadCustomerOrders,
     setLoggedInUi, setLoggedOutUi, loadSupabaseSdk, sbFetch,
-  ].forEach(function (fn) { window[fn.name] = fn; });
+  });
 }

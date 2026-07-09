@@ -432,6 +432,7 @@ async function viewOrder(id){
   // monthly invoices so the per-month breakdown table can render.
   var creditCollections=[];
   var creditInvoicesByPeriod={};
+  var creditBills=[];   // new: per-order billing ledger (salesweb_credit_bills)
   if(order.payment_terms==='credit'){
     try{
       var{data:collRows}=await sb.from('salesweb_order_collections').select('collected_qty,collected_at,al_number').eq('order_id',id);
@@ -441,6 +442,10 @@ async function viewOrder(id){
       var{data:invRows}=await sb.from('salesweb_credit_invoices').select('id,invoice_number,billing_period,total_qty,total_amount,status,invoice_file_url,payment_proof_url,issued_at,due_date,paid_at').eq('customer_id',order.customer_id);
       (invRows||[]).forEach(function(inv){creditInvoicesByPeriod[inv.billing_period]=inv;});
     }
+    try{
+      var{data:billRows}=await sb.from('salesweb_credit_bills').select('id,bill_date,qty,amount,invoice_no,created_at').eq('order_id',id).order('bill_date',{ascending:true});
+      creditBills=billRows||[];
+    }catch(e){ creditBills=[]; /* migration not applied yet */ }
   }
 
   var shortId=order.order_number||order.id.substring(0,8).toUpperCase();
@@ -498,11 +503,13 @@ async function viewOrder(id){
   html+='<input class="form-input" id="mo-credit-period" type="text" value="'+esc(creditPeriod)+'" placeholder="2026-05" style="width:110px;font-size:12px;padding:6px 10px;">';
   if(billedAt){
     html+='<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;font-size:10px;">Billed '+fmtDate(billedAt)+'</span>';
-    html+='<button class="btn btn-outline btn-sm" onclick="setOrderCreditBilled(\''+id+'\',false)" style="font-size:10px;">Mark Unbilled</button>';
   } else {
     html+='<span class="badge badge-amber" style="font-size:10px;">Unbilled</span>';
-    html+='<button class="btn btn-outline btn-sm" onclick="setOrderCreditBilled(\''+id+'\',true)" style="font-size:10px;">Mark Billed</button>';
   }
+  // Per-order bill entries live below in the Monthly Invoice Breakdown
+  // block; the badge here just reflects whether the cumulative billed
+  // amount has hit the order total (managed by
+  // salesweb_refresh_credit_billed_flag).
   html+='</div></div>';
 
   html+='</div>'; // /grid
@@ -782,6 +789,41 @@ async function viewOrder(id){
     html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">';
     html+='<div style="font-size:13px;font-weight:600;color:#1d4ed8;">Credit — Monthly Invoice Breakdown</div>';
     html+='<span style="font-size:11px;color:var(--ink3);">Order placed '+fmtDate(order.created_at)+'</span>';
+    html+='</div>';
+
+    // ── Bill entries (per-order salesweb_credit_bills) ──
+    var billedSum = creditBills.reduce(function(s,b){return s+(Number(b.amount)||0);},0);
+    var orderTotal = Number(order.total)||0;
+    var billedFullPct = orderTotal>0 ? Math.min(100, (billedSum/orderTotal)*100) : 0;
+    html+='<div style="background:#fff;border:1px solid #dbeafe;border-radius:8px;padding:.6rem .8rem;margin-bottom:.6rem;">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem;">';
+    html+='<div style="font-size:12px;font-weight:600;color:var(--ink);">Billings ('+creditBills.length+' entr'+(creditBills.length===1?'y':'ies')+')</div>';
+    if(orderTotal > 0 && billedSum < orderTotal){
+      html+='<button class="btn btn-primary btn-sm" onclick="openCreditBillModal(\''+id+'\','+(orderTotal-billedSum).toFixed(2)+')" style="font-size:11px;padding:5px 10px;">+ Add Bill</button>';
+    } else if(orderTotal > 0){
+      html+='<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;font-size:10px;">Fully Billed</span>';
+    }
+    html+='</div>';
+    if(creditBills.length){
+      html+='<table class="data-table" style="font-size:12px;"><thead><tr><th>Date</th><th>Invoice No.</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Amount</th><th style="text-align:right;">Action</th></tr></thead><tbody>';
+      creditBills.forEach(function(b){
+        var bidJs=String(b.id||'').replace(/[\\'"<>]/g,'');
+        html+='<tr>'+
+          '<td>'+esc(String(b.bill_date||'').substring(0,10))+'</td>'+
+          '<td>'+esc(b.invoice_no||'—')+'</td>'+
+          '<td style="text-align:right;">'+(Number(b.qty)||0).toLocaleString()+'</td>'+
+          '<td style="text-align:right;font-weight:600;">RM '+fmtMYR(b.amount)+'</td>'+
+          '<td style="text-align:right;white-space:nowrap;">'+
+            '<button class="btn btn-outline btn-sm" onclick="openCreditBillModal(\''+id+'\',null,\''+bidJs+'\')" style="font-size:10px;padding:2px 6px;margin-right:.2rem;">Edit</button>'+
+            '<button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;color:var(--red);border-color:var(--red);" onclick="deleteCreditBill(\''+bidJs+'\',\''+id+'\')">✕</button>'+
+          '</td>'+
+        '</tr>';
+      });
+      html+='<tr style="background:#f8fafc;font-weight:700;"><td colspan="3" style="text-align:right;">Total billed</td><td style="text-align:right;">RM '+fmtMYR(billedSum)+'</td><td style="text-align:right;font-size:10px;color:var(--ink3);">'+billedFullPct.toFixed(1)+'%</td></tr>';
+      html+='</tbody></table>';
+    } else {
+      html+='<div style="font-size:12px;color:var(--ink4);padding:.3rem 0;">No bills yet. Click <strong>+ Add Bill</strong> to log the first one.</div>';
+    }
     html+='</div>';
     html+='<table class="data-table" style="font-size:12px;"><thead><tr><th>Month</th><th style="text-align:right;">Qty Collected</th><th>Invoice</th><th style="text-align:right;">Action</th></tr></thead><tbody>';
     periods.forEach(function(p){
@@ -3035,5 +3077,71 @@ async function deletePaymentEntry(paymentId, orderId){
   var{error} = await sb.from('salesweb_order_payments').delete().eq('id', paymentId);
   if(error){ toast('Delete failed: '+error.message,'error'); return; }
   toast('Payment entry deleted');
+  viewOrder(orderId);
+}
+
+// ═══════════════════════════════════════
+//  CREDIT BILL MODAL (Add / Edit)
+// ═══════════════════════════════════════
+// Repeatable per credit order. Each entry has date, invoice_no, qty,
+// amount. Rows saved via SECURITY DEFINER RPCs (bypass RLS but still
+// require admin-portal access). When cumulative billed amount ≥ order
+// total, save_credit_bill's helper flips credit_billed_at on the parent
+// order so downstream lists/badges reflect the "fully billed" state.
+
+async function openCreditBillModal(orderId, remainingBalanceHint, editBillId){
+  document.getElementById('cb-order-id').value = orderId;
+  document.getElementById('cb-bill-id').value = editBillId || '';
+  var isEdit = !!editBillId;
+  document.getElementById('cb-title').textContent = isEdit ? 'Edit Bill' : 'Add Bill';
+  document.getElementById('cb-submit').textContent = isEdit ? 'Update Bill' : 'Save Bill';
+  var helpEl = document.getElementById('cb-help');
+
+  if(isEdit){
+    var{data:b, error:e} = await sb.from('salesweb_credit_bills').select('*').eq('id', editBillId).single();
+    if(e || !b){ toast('Bill not found','error'); return; }
+    document.getElementById('cb-date').value    = String(b.bill_date||'').substring(0,10);
+    document.getElementById('cb-invoice').value = b.invoice_no || '';
+    document.getElementById('cb-qty').value     = b.qty ?? '';
+    document.getElementById('cb-amount').value  = b.amount ?? '';
+    helpEl.textContent = 'Edit this bill entry — cumulative billed amount and the Fully Billed flag will refresh on save.';
+  } else {
+    var today = new Date();
+    document.getElementById('cb-date').value    = today.getFullYear()+'-'+('0'+(today.getMonth()+1)).slice(-2)+'-'+('0'+today.getDate()).slice(-2);
+    document.getElementById('cb-invoice').value = '';
+    document.getElementById('cb-qty').value     = '';
+    document.getElementById('cb-amount').value  = '';
+    helpEl.textContent = remainingBalanceHint!=null ? ('Remaining to bill: RM '+fmtMYR(remainingBalanceHint)) : '';
+  }
+  openModal('modal-credit-bill');
+}
+
+async function submitCreditBill(){
+  var orderId  = document.getElementById('cb-order-id').value;
+  var billId   = document.getElementById('cb-bill-id').value;
+  var dateStr  = document.getElementById('cb-date').value;
+  var invNo    = (document.getElementById('cb-invoice').value||'').trim();
+  var qty      = parseFloat(document.getElementById('cb-qty').value);
+  var amount   = parseFloat(document.getElementById('cb-amount').value);
+  if(!dateStr){ toast('Pick a billing date','error'); return; }
+  if(!(qty >= 0)){ toast('Qty is required','error'); return; }
+  if(!(amount >= 0)){ toast('Amount is required','error'); return; }
+  var btn = document.getElementById('cb-submit');
+  btn.disabled = true; btn.textContent = billId ? 'Updating…' : 'Saving…';
+  var rpc = billId
+    ? await sb.rpc('update_credit_bill', {p_bill_id:billId, p_bill_date:dateStr, p_qty:qty, p_amount:amount, p_invoice_no:invNo})
+    : await sb.rpc('save_credit_bill',   {p_order_id:orderId, p_bill_date:dateStr, p_qty:qty, p_amount:amount, p_invoice_no:invNo});
+  btn.disabled = false; btn.textContent = billId ? 'Update Bill' : 'Save Bill';
+  if(rpc.error){ toast('Save failed: '+rpc.error.message,'error'); return; }
+  closeModal('modal-credit-bill');
+  toast(billId ? 'Bill updated' : 'Bill saved');
+  viewOrder(orderId);
+}
+
+async function deleteCreditBill(billId, orderId){
+  if(!confirm('Delete this bill entry? Total billed and Fully Billed status will recalculate.')) return;
+  var rpc = await sb.rpc('delete_credit_bill', {p_bill_id: billId});
+  if(rpc.error){ toast('Delete failed: '+rpc.error.message,'error'); return; }
+  toast('Bill deleted');
   viewOrder(orderId);
 }

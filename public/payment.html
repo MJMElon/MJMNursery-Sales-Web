@@ -1000,7 +1000,10 @@ async function placeOrder(){
   // Billing info
   var billingName='',billingTin='',billingMpob='',billingIc='',billingReg='',billingAddr='';
   if(selectedBillingId&&!showingNewForm){
-    // Using saved billing
+    // Using saved billing — pull ALL fields, including the address bits
+    // that were missing before. Without this, the "Billing Addr: …"
+    // segment never lands in customer_remark and the admin Billing
+    // card renders "—" for every returning-customer online-store order.
     var sb=savedBilling.find(function(b){return b.id===selectedBillingId;});
     if(sb){
       billingName=sb.name;
@@ -1008,6 +1011,7 @@ async function placeOrder(){
       billingMpob=sb.mpob_license||'';
       billingIc=sb.ic_number||'';
       billingReg=sb.company_reg||'';
+      billingAddr=[sb.billing_address, sb.city, sb.postcode, sb.state, sb.country].filter(Boolean).join(', ');
     }
   } else {
     // Using new billing form — validate all fields

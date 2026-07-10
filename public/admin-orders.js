@@ -1045,7 +1045,7 @@ async function updateOrderAmountPaid(orderId, totalAmount){
 // ═══════════════════════════════════════
 async function updateOrderStatus(orderId){
   var newStatus=document.getElementById('mo-status-select').value;
-  var{data:order}=await sb.from('salesweb_customer_orders').select('status,total,amount_paid,customer_name,billing_name,order_number,customer_email').eq('id',orderId).single();
+  var{data:order}=await sb.from('salesweb_customer_orders').select('status,total,amount_paid,customer_name,billing_name,order_number,customer_email,payment_terms').eq('id',orderId).single();
   if(!order)return;
   var oldStatus=order.status;
   if(newStatus===oldStatus){toast('Status unchanged');return;}
@@ -1074,6 +1074,33 @@ async function executeCancelOrStatusUpdate(orderId,oldStatus,newStatus,order){
     var _tot=Number(order.total)||0, _now=new Date().toISOString();
     var setRes=await sb.from('salesweb_customer_orders').update({amount_paid:_tot, amount_paid_at:_now}).eq('id',orderId);
     if(setRes.error){ await sb.from('salesweb_customer_orders').update({amount_paid:_tot}).eq('id',orderId); }
+
+    // For CASH-TERM orders, also drop a synthetic payment ledger row for
+    // the outstanding balance so the Payment Tracking Amount Paid tile
+    // (which sums paymentRows client-side) matches the row's
+    // amount_paid. Credit orders track payments per invoice under the
+    // Billings section instead.
+    if((order.payment_terms||'cash')!=='credit' && newStatus==='Paid'){
+      try{
+        var{data:existingPays}=await sb.from('salesweb_order_payments').select('amount').eq('order_id',orderId);
+        var alreadyPaid=(existingPays||[]).reduce(function(s,p){return s+(Number(p.amount)||0);},0);
+        var delta = _tot - alreadyPaid;
+        if(delta > 0.005){
+          var _session=await sb.auth.getSession();
+          var _user = _session?.data?.session?.user?.email || 'admin';
+          await sb.rpc('save_order_payment', {
+            p_order_id:        orderId,
+            p_paid_at:         _now,
+            p_amount:          Math.round(delta*100)/100,
+            p_note:            'Auto-recorded on status change to Paid',
+            p_attachment_url:  null,
+            p_attachment_name: null,
+            p_created_by:      _user,
+            p_bill_id:         null
+          });
+        }
+      }catch(e){ console.warn('[status→Paid] synthetic payment insert failed:', e); }
+    }
   }
 
   // Log to timeline

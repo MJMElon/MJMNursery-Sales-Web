@@ -521,25 +521,16 @@ async function viewOrder(id){
   html+='<span class="badge" style="font-size:11px;padding:4px 10px;'+(currentTerms==='credit'?'background:#fef3c7;color:#92400e;border:1px solid #fde68a;':'background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;')+'">'+(currentTerms==='credit'?'💳 Credit':'💵 Cash')+'</span>';
   html+='</div>';
   html+='<div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;">';
-  html+='<select id="mo-terms-select" class="form-input" style="flex:1;min-width:120px;font-size:12px;padding:6px 10px;" onchange="document.getElementById(\'mo-credit-period-row\').style.display=this.value===\'credit\'?\'flex\':\'none\';">';
+  html+='<select id="mo-terms-select" class="form-input" style="flex:1;min-width:120px;font-size:12px;padding:6px 10px;">';
   html+='<option value="cash"'+(currentTerms==='cash'?' selected':'')+'>💵 Cash</option>';
   html+='<option value="credit"'+(currentTerms==='credit'?' selected':'')+'>💳 Credit</option>';
   html+='</select>';
   html+='<button class="btn btn-primary btn-sm" onclick="updateOrderPaymentTerms(\''+id+'\')">Update</button>';
   html+='</div>';
-  html+='<div id="mo-credit-period-row" style="display:'+(currentTerms==='credit'?'flex':'none')+';gap:.4rem;align-items:center;flex-wrap:wrap;margin-top:.5rem;">';
-  html+='<label style="font-size:11px;color:var(--ink3);">Billing period:</label>';
-  html+='<input class="form-input" id="mo-credit-period" type="text" value="'+esc(creditPeriod)+'" placeholder="2026-05" style="width:110px;font-size:12px;padding:6px 10px;">';
-  if(billedAt){
-    html+='<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;font-size:10px;">Billed '+fmtDate(billedAt)+'</span>';
-  } else {
-    html+='<span class="badge badge-amber" style="font-size:10px;">Unbilled</span>';
-  }
-  // Per-order bill entries live below in the Monthly Invoice Breakdown
-  // block; the badge here just reflects whether the cumulative billed
-  // amount has hit the order total (managed by
-  // salesweb_refresh_credit_billed_flag).
-  html+='</div></div>';
+  // Billing period + Billed/Unbilled badge row was here — retired.
+  // Billing state is derived from the per-bill Billings ledger in the
+  // Credit — Monthly Invoice Breakdown block below.
+  html+='</div>';
 
   html+='</div>'; // /grid
 
@@ -1467,24 +1458,22 @@ async function markCreditInvoicePaid(invoiceId,orderId){
 // ═══════════════════════════════════════
 async function updateOrderPaymentTerms(orderId){
   var newTerms=document.getElementById('mo-terms-select').value;
-  var period=(document.getElementById('mo-credit-period')||{}).value||'';
-  period=period.trim();
+  // Billing period is no longer editable from this card — the per-bill
+  // ledger under Credit — Monthly Invoice Breakdown supersedes it.
   var{data:order}=await sb.from('salesweb_customer_orders').select('payment_terms,credit_billing_period,status').eq('id',orderId).single();
   if(!order){toast('Order not found','error');return;}
   var oldTerms=order.payment_terms==='credit'?'credit':'cash';
-  if(newTerms===oldTerms&&period===(order.credit_billing_period||'')){toast('No changes');return;}
+  if(newTerms===oldTerms){toast('No changes');return;}
   if(newTerms==='credit'&&oldTerms!=='credit'){
     if(!confirm('Switch this order to CREDIT terms?\n\nThe total will count toward credit outstanding until billed.'))return;
   }
   var update={payment_terms:newTerms,updated_at:new Date().toISOString()};
-  if(newTerms==='credit')update.credit_billing_period=period||null;
-  else{update.credit_billing_period=null;update.credit_billed_at=null;}
+  if(newTerms!=='credit'){update.credit_billing_period=null;update.credit_billed_at=null;}
   var{error}=await sb.from('salesweb_customer_orders').update(update).eq('id',orderId);
   if(error){toast('Error: '+error.message,'error');return;}
   var session=await sb.auth.getSession();
   var user=session?.data?.session?.user?.email||'admin';
   var note='Payment terms changed from '+oldTerms.toUpperCase()+' to '+newTerms.toUpperCase();
-  if(newTerms==='credit'&&period)note+=' (period: '+period+')';
   await sb.from('salesweb_order_timeline').insert([{order_id:orderId,status:order.status,note:note,changed_by:user}]);
 
   // Newly-credit orders proceed straight to collection (billed monthly),

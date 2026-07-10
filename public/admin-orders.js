@@ -409,6 +409,31 @@ async function viewOrder(id){
       if(prof && prof.phone) _parsed.phone = prof.phone;
     }catch(e){ /* non-fatal */ }
   }
+  // Historical online-store orders placed via a saved billing profile
+  // never persisted "Billing Addr: …" into the remark because the
+  // checkout only read that from the free-form form. Fall back to the
+  // customer's most recent salesweb_billing_info row and any e-Invoice
+  // fields (billAddr / billIc / billReg / billMpob) that are missing
+  // from the remark. Best-effort — silent on failure.
+  if(order.customer_id && (!_parsed.billAddr || !_parsed.billIc || !_parsed.billReg || !_parsed.billMpob)){
+    try{
+      var{data:_bi}=await sb.from('salesweb_billing_info')
+        .select('billing_address,city,postcode,state,country,ic_number,company_reg,mpob_license')
+        .eq('user_id',order.customer_id)
+        .order('created_at',{ascending:false})
+        .limit(1);
+      if(_bi && _bi.length){
+        var _b = _bi[0];
+        if(!_parsed.billAddr){
+          var _addr = [_b.billing_address, _b.city, _b.postcode, _b.state, _b.country].filter(Boolean).join(', ');
+          if(_addr) _parsed.billAddr = _addr;
+        }
+        if(!_parsed.billIc   && _b.ic_number)    _parsed.billIc   = _b.ic_number;
+        if(!_parsed.billReg  && _b.company_reg)  _parsed.billReg  = _b.company_reg;
+        if(!_parsed.billMpob && _b.mpob_license) _parsed.billMpob = _b.mpob_license;
+      }
+    }catch(e){ /* non-fatal */ }
+  }
 
   // Billplz payment outcome — read the most recent payment-related timeline
   // event. If the latest event is "Payment Failed" and the order has not

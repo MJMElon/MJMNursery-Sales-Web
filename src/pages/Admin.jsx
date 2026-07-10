@@ -152,6 +152,11 @@ export default function Admin() {
                       <label className="fd-check"><input type="checkbox" className="fd-pay" defaultValue="Refunded" /> Refunded</label>
                       </div>
                     <div className="fd-section">
+                      <div className="fd-title">Terms</div>
+                      <label className="fd-check"><input type="checkbox" className="fd-term" defaultValue="cash" /> Cash</label>
+                      <label className="fd-check"><input type="checkbox" className="fd-term" defaultValue="credit" /> Credit</label>
+                      </div>
+                    <div className="fd-section">
                       <div className="fd-title">Channel</div>
                       <label className="fd-check"><input type="checkbox" className="fd-channel" defaultValue="online_store" /> Online Store</label>
                       <label className="fd-check"><input type="checkbox" className="fd-channel" defaultValue="admin_panel" /> Admin Panel</label>

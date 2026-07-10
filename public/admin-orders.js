@@ -54,7 +54,7 @@ function orderFullyPaid(o){
 //  Persists the active filter state across re-renders. UI lives in
 //  admin.html (#orderFilterDrawer). loadOrders() reads from this state.
 // ═══════════════════════════════════════
-var ORDER_FILTERS = { dateFrom:'', dateTo:'', statuses:[], payments:[], channels:[], product:'' };
+var ORDER_FILTERS = { dateFrom:'', dateTo:'', statuses:[], payments:[], terms:[], channels:[], product:'' };
 
 function openOrderFilterDrawer(){
   // Sync UI inputs from current state before opening
@@ -62,6 +62,7 @@ function openOrderFilterDrawer(){
   document.getElementById('fd-date-to').value = ORDER_FILTERS.dateTo || '';
   document.querySelectorAll('.fd-status').forEach(function(cb){ cb.checked = ORDER_FILTERS.statuses.indexOf(cb.value) !== -1; });
   document.querySelectorAll('.fd-pay').forEach(function(cb){ cb.checked = ORDER_FILTERS.payments.indexOf(cb.value) !== -1; });
+  document.querySelectorAll('.fd-term').forEach(function(cb){ cb.checked = (ORDER_FILTERS.terms||[]).indexOf(cb.value) !== -1; });
   document.querySelectorAll('.fd-channel').forEach(function(cb){ cb.checked = ORDER_FILTERS.channels.indexOf(cb.value) !== -1; });
   document.getElementById('fd-product').value = ORDER_FILTERS.product || '';
   document.getElementById('orderFilterOverlay').classList.add('open');
@@ -83,6 +84,7 @@ function applyOrderFilters(){
   ORDER_FILTERS.dateTo   = document.getElementById('fd-date-to').value || '';
   ORDER_FILTERS.statuses = readCheckedValues('.fd-status');
   ORDER_FILTERS.payments = readCheckedValues('.fd-pay');
+  ORDER_FILTERS.terms    = readCheckedValues('.fd-term');
   ORDER_FILTERS.channels = readCheckedValues('.fd-channel');
   ORDER_FILTERS.product  = (document.getElementById('fd-product').value || '').trim();
   updateOrderFilterBadge();
@@ -90,10 +92,10 @@ function applyOrderFilters(){
   loadOrders();
 }
 function clearOrderFilters(){
-  ORDER_FILTERS = { dateFrom:'', dateTo:'', statuses:[], payments:[], channels:[], product:'' };
+  ORDER_FILTERS = { dateFrom:'', dateTo:'', statuses:[], payments:[], terms:[], channels:[], product:'' };
   document.getElementById('fd-date-from').value = '';
   document.getElementById('fd-date-to').value = '';
-  document.querySelectorAll('.fd-status, .fd-pay, .fd-channel').forEach(function(cb){ cb.checked = false; });
+  document.querySelectorAll('.fd-status, .fd-pay, .fd-term, .fd-channel').forEach(function(cb){ cb.checked = false; });
   document.getElementById('fd-product').value = '';
   updateOrderFilterBadge();
   loadOrders();
@@ -103,6 +105,7 @@ function countActiveOrderFilters(){
   if(ORDER_FILTERS.dateFrom || ORDER_FILTERS.dateTo) c++;
   if(ORDER_FILTERS.statuses.length) c++;
   if(ORDER_FILTERS.payments.length) c++;
+  if((ORDER_FILTERS.terms||[]).length) c++;
   if(ORDER_FILTERS.channels.length) c++;
   if(ORDER_FILTERS.product) c++;
   return c;
@@ -247,6 +250,15 @@ async function loadOrders(){
       if(f.payments.indexOf('Paid')           !== -1 && fullyPaid && !partiallyPaid) ok = true;
       if(f.payments.indexOf('Refunded')       !== -1 && s === 'Refunded') ok = true;
       return ok;
+    });
+  }
+  // ── Terms filter ── ('cash' | 'credit'). null / missing payment_terms is
+  // treated as 'cash' since the checkout defaults to cash when nothing is
+  // set explicitly.
+  if(f.terms && f.terms.length){
+    orders = orders.filter(function(o){
+      var t = (o.payment_terms === 'credit') ? 'credit' : 'cash';
+      return f.terms.indexOf(t) !== -1;
     });
   }
   // ── Channel filter ── (channel captured at order creation: 'online_store',

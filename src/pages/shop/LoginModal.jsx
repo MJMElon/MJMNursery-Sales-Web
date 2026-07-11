@@ -5,8 +5,22 @@ import { css } from './css.js';
 // intentionally absent (hidden until a phone sender is registered with
 // Twilio), exactly as in the legacy page.
 export default function LoginModal() {
+  // Track whether the mousedown started on the overlay itself (not on
+  // an input inside the card). If the customer drags to select text
+  // inside the email input and releases outside the card, the browser
+  // still fires a click on the overlay — closing the modal mid-edit.
+  // Only close when BOTH mousedown and click land on the overlay.
+  const overlayMouseDownRef = React.useRef(false);
   return (
-    <div className="login-modal-overlay" id="login-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) window.closeLoginModal(); }}>
+    <div
+      className="login-modal-overlay"
+      id="login-modal-overlay"
+      onMouseDown={(e) => { overlayMouseDownRef.current = (e.target === e.currentTarget); }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && overlayMouseDownRef.current) window.closeLoginModal();
+        overlayMouseDownRef.current = false;
+      }}
+    >
       <div className="login-modal-card" id="login-modal-card">
         <button className="login-modal-close" onClick={() => window.closeLoginModal()} aria-label="Close">✕</button>
 

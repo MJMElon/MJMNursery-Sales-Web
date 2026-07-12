@@ -414,25 +414,37 @@ async function viewOrder(id){
   // checkout only read that from the free-form form. Fall back to the
   // customer's most recent salesweb_billing_info row and any e-Invoice
   // fields (billAddr / billIc / billReg / billMpob) that are missing
-  // from the remark. Best-effort — silent on failure.
+  // from the remark.
+  //
+  // The salesweb_billing_info RLS policy is scoped to user_id =
+  // auth.uid(), so a direct SELECT from the admin's session returns 0
+  // rows even though the row exists. Route through the SECURITY DEFINER
+  // RPC get_customer_billing_info; fall back to a direct SELECT for
+  // Supabase instances that haven't run the RPC migration yet.
   if(order.customer_id && (!_parsed.billAddr || !_parsed.billIc || !_parsed.billReg || !_parsed.billMpob)){
+    var _b = null;
     try{
-      var{data:_bi}=await sb.from('salesweb_billing_info')
-        .select('billing_address,city,postcode,state,country,ic_number,company_reg,mpob_license')
-        .eq('user_id',order.customer_id)
-        .order('created_at',{ascending:false})
-        .limit(1);
-      if(_bi && _bi.length){
-        var _b = _bi[0];
-        if(!_parsed.billAddr){
-          var _addr = [_b.billing_address, _b.city, _b.postcode, _b.state, _b.country].filter(Boolean).join(', ');
-          if(_addr) _parsed.billAddr = _addr;
-        }
-        if(!_parsed.billIc   && _b.ic_number)    _parsed.billIc   = _b.ic_number;
-        if(!_parsed.billReg  && _b.company_reg)  _parsed.billReg  = _b.company_reg;
-        if(!_parsed.billMpob && _b.mpob_license) _parsed.billMpob = _b.mpob_license;
+      var _rpc = await sb.rpc('get_customer_billing_info', { p_user_id: order.customer_id });
+      if(!_rpc.error && _rpc.data && _rpc.data.length){ _b = _rpc.data[0]; }
+      else if(_rpc.error){
+        console.warn('[viewOrder] get_customer_billing_info RPC unavailable, falling back:', _rpc.error.message);
+        var{data:_bi}=await sb.from('salesweb_billing_info')
+          .select('billing_address,city,postcode,state,country,ic_number,company_reg,mpob_license')
+          .eq('user_id',order.customer_id)
+          .order('created_at',{ascending:false})
+          .limit(1);
+        if(_bi && _bi.length) _b = _bi[0];
       }
     }catch(e){ /* non-fatal */ }
+    if(_b){
+      if(!_parsed.billAddr){
+        var _addr = [_b.billing_address, _b.city, _b.postcode, _b.state, _b.country].filter(Boolean).join(', ');
+        if(_addr) _parsed.billAddr = _addr;
+      }
+      if(!_parsed.billIc   && _b.ic_number)    _parsed.billIc   = _b.ic_number;
+      if(!_parsed.billReg  && _b.company_reg)  _parsed.billReg  = _b.company_reg;
+      if(!_parsed.billMpob && _b.mpob_license) _parsed.billMpob = _b.mpob_license;
+    }
   }
 
   // Billplz payment outcome — read the most recent payment-related timeline

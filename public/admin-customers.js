@@ -41,6 +41,21 @@ function isOperationStaff(perms){
 // ═══════════════════════════════════════
 var CUSTOMER_FILTERS = { joinedFrom:'', joinedTo:'', tiers:[], terms:[], paid:'', statuses:[], purchase:[], spendOp:'', spendAmt:'', pointsOp:'', pointsAmt:'', creditOp:'', creditAmt:'' };
 
+// Sidebar "Credit Center" entry-point: apply the Credit-only terms filter,
+// reload the Customer List, and scroll to it. This gives the admin a single-
+// click "show me only my credit customers" view without them having to open
+// the filter drawer and tick the checkbox each time. Terms toggle + credit-
+// limit editing still happen inline on each row (existing UI).
+window.openCreditCenter = function(){
+  CUSTOMER_FILTERS.terms = ['credit'];
+  try { updateCustomerFilterBadge(); } catch(e) {}
+  try { loadCustomers(); } catch(e) {}
+  try {
+    var el = document.getElementById('customers-table');
+    if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch(e) {}
+};
+
 async function openCustomerFilterDrawer(){
   document.getElementById('cf-date-from').value = CUSTOMER_FILTERS.joinedFrom || '';
   document.getElementById('cf-date-to').value = CUSTOMER_FILTERS.joinedTo || '';

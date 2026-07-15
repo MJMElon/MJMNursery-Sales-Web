@@ -1091,6 +1091,18 @@ async function placeOrder(){
     return out + Math.floor(Math.random()*10).toString();
   }
 
+  // Look up the customer's default payment terms. Admin can flag a
+  // customer as "credit" via the admin panel's Credit Center — those
+  // customers place orders on credit (no upfront payment; billed
+  // monthly) and their AL is auto-created via the DB trigger on
+  // payment_terms='credit'. Everyone else defaults to 'cash'.
+  var _custTerms = 'cash';
+  try{
+    var {data:_termsProf} = await _sb.from('shared_profiles')
+      .select('payment_terms').eq('id', userId).maybeSingle();
+    if(_termsProf && _termsProf.payment_terms === 'credit') _custTerms = 'credit';
+  }catch(_e){ /* fall back to cash */ }
+
   // Try up to 5 times in case of duplicate
   var order=null,error=null,orderNum='';
   for(var attempt=0;attempt<5;attempt++){
@@ -1103,8 +1115,12 @@ async function placeOrder(){
       customer_id:userId,
       customer_name:contactName,
       customer_email:email,
+      payment_terms:_custTerms,
       // Zero-total orders (voucher/points covered the whole bill) skip the
-      // payment step and land as Paid immediately.
+      // payment step and land as Paid immediately. Credit-term customers
+      // stay at 'Pending Payment' — they haven't paid yet — but the AL is
+      // still auto-created via ensure_al_for_order right after this insert
+      // because payment_terms='credit' unlocks it.
       status:(Number(finalTotal)||0)<=0 ? 'Paid' : 'Pending Payment',
       total:finalTotal,
       // Persist voucher + flat-discount fields on the row so any later
@@ -1154,6 +1170,16 @@ async function placeOrder(){
     Promise.all(stockHolds)
   ]);
 
+  // Credit-term orders + zero-total orders (already Paid) → ensure the AL
+  // is created server-side right after items land. The DB trigger on
+  // salesweb_customer_orders fires on UPDATE only (items aren't inserted
+  // at trigger time), so this explicit RPC call covers the fresh-INSERT
+  // path. Idempotent + SECURITY DEFINER: creates the AL only when the
+  // order is eligible (payment_terms='credit' OR settled status) and
+  // hasn't already got one.
+  try { await _sb.rpc('ensure_al_for_order', { _order_id: order.id }); }
+  catch(_e){ console.warn('[checkout] ensure_al_for_order failed:', _e); }
+
   // Record voucher redemption: bumps usage_count and writes the redemption
   // ledger row atomically. RPC is idempotent on (order_id, coupon_id) so a
   // back-navigation re-submit won't double-count. Errors here shouldn't
@@ -1186,7 +1212,17 @@ async function placeOrder(){
   // a second order being placed against the same points).
   try{ sessionStorage.removeItem('mjm_cart'); }catch(e){}
 
-  if(selectedPayMethod==='offline'){
+  if(_custTerms === 'credit'){
+    // Credit-term customer: no upfront payment. AL is already created by
+    // ensure_al_for_order above. Confirm the order in-place and send them
+    // to their customer portal to view it — they'll be billed on the
+    // monthly credit invoice run.
+    sessionStorage.setItem('mjm_pay_order_id',order.id);
+    sessionStorage.setItem('mjm_pay_order_total',finalTotal);
+    sessionStorage.setItem('mjm_pay_order_number',orderNum);
+    showToast('✅ Order placed on credit — will be billed on your monthly statement.');
+    setTimeout(function(){ window.location.href='customer-portal.html'; }, 1500);
+  } else if(selectedPayMethod==='offline'){
     // Redirect to payment proof page
     sessionStorage.setItem('mjm_pay_order_id',order.id);
     sessionStorage.setItem('mjm_pay_order_total',finalTotal);

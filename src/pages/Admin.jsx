@@ -50,6 +50,7 @@ export default function Admin() {
                     </div>
                   <div className="sb-sub" id="sb-sub-customers">
                     <div className="sb-sub-item active" onClick={(e) => { switchTab('customers',document.getElementById('sb-customers-parent'));window.showCustSubTab('list'); }}>Customer List</div>
+                    <div className="sb-sub-item" onClick={(e) => { switchTab('customers',document.getElementById('sb-customers-parent'));window.showCustSubTab('list'); window.openCreditCenter && window.openCreditCenter(); }}>Credit Center</div>
                     <div className="sb-sub-item" onClick={(e) => { switchTab('customers',document.getElementById('sb-customers-parent'));window.showCustSubTab('points'); }}>Points & Membership</div>
                     </div>
                   <div className="sb-item" id="sb-products-item" onClick={(e) => { switchTab('products',e.currentTarget); }}>

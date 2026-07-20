@@ -462,13 +462,22 @@ async function loadPointsBalance(){
   //    unpaid orders. pending_redeemed is exposed so we can tell the
   //    customer *why* their balance dropped.
   try{
-    var{data:bal}=await _sb.from('salesweb_customer_points_balance')
+    // Prefer the newer balance view that exposes pending_redeemed. On
+    // installs where points_pending_balance.sql hasn't been applied
+    // (the older view lacks that column and the .select errors),
+    // fall back to reading just `balance` so points still work.
+    var balRes = await _sb.from('salesweb_customer_points_balance')
       .select('balance,pending_redeemed').eq('user_id',userId).maybeSingle();
+    if(balRes.error && /pending_redeemed/i.test(balRes.error.message||'')){
+      balRes = await _sb.from('salesweb_customer_points_balance')
+        .select('balance').eq('user_id',userId).maybeSingle();
+    }
+    var bal = balRes && balRes.data;
     if(bal){
       pointsBalance=Math.max(0, Number(bal.balance)||0);
       pointsPendingHold=Number(bal.pending_redeemed)||0;
     }
-  }catch(e){}
+  }catch(e){ console.warn('[points] balance fetch failed:', e); }
 
   // 2. Live redeem ratio so checkout discount uses whatever the admin set.
   try{

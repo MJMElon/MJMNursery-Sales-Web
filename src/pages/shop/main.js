@@ -2698,12 +2698,9 @@ export function initShopMain() {
     }catch(e){}
 
     // Single source of truth: the points ledger (via balance view).
-    // Falls back to summing per-order points_issued only when the view
-    // returns no earned rows (issuePoints never fired). In that case a
-    // Redeemed ledger row without a matching Earned row can push the
-    // view's balance NEGATIVE — the fallback re-derives balance from
-    // orders and clamps to 0 so customers see 0 after a full redemption,
-    // never a "-1,532 pts" display.
+    // Falls back to computing from the orders table when the view lacks
+    // Earned rows (issuePoints never fired) so a redemption that would
+    // otherwise push view balance negative still shows the right number.
     var balance=0,totalEarned=0,redeemed=0;
     try{
       var{data:bal}=await _sb.from('salesweb_customer_points_balance')
@@ -2716,12 +2713,27 @@ export function initShopMain() {
       }
     }catch(e){}
     if(!totalEarned){
-      var{data:orders}=await _sb.from('salesweb_customer_orders').select('points_issued').eq('customer_id',uid);
-      if(orders)orders.forEach(function(o){totalEarned+=(o.points_issued||0);});
-      // Recompute balance whenever the view lacks Earned rows (regardless
-      // of whether balance is already truthy — a negative number means
-      // the view is definitely wrong).
-      balance = Math.max(0, totalEarned - redeemed);
+      // Recompute from the orders table: EVERY non-cancelled order counts
+      // for both earned (points_issued) and redeemed (points_redeemed).
+      // Redeemed picks up BOTH committed (order status → Paid → ledger
+      // row) and pending (still Pending Payment, no ledger row yet)
+      // redemptions in one pass. Cancelled orders don't contribute to
+      // either side.
+      var{data:orders}=await _sb.from('salesweb_customer_orders')
+        .select('points_issued,points_redeemed,status')
+        .eq('customer_id',uid);
+      var totalRedeemedFromOrders = 0;
+      (orders||[]).forEach(function(o){
+        if(o.status === 'Cancelled') return;
+        totalEarned            += Number(o.points_issued  )||0;
+        totalRedeemedFromOrders += Number(o.points_redeemed)||0;
+      });
+      // Prefer the higher of the two redemption totals — covers customers
+      // whose ledger already carries a Redeemed row (redeemed > 0) and
+      // customers whose redemption is still tracked only on the order
+      // row (totalRedeemedFromOrders > 0). Avoids double-counting.
+      redeemed = Math.max(redeemed, totalRedeemedFromOrders);
+      balance  = Math.max(0, totalEarned - redeemed);
     }
 
     // Determine tier from lifetime earned (not current balance — spending

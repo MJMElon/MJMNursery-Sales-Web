@@ -491,20 +491,32 @@ async function loadPointsBalance(){
     // what makes the customer portal say "1,532 pts" while a plain
     // view read says 0.
     if(pointsBalance <= 0){
-      var totalEarned=0, totalRedeemed=0;
+      // Recompute from the orders table: every non-cancelled order
+      // contributes to both earned (points_issued) and redeemed
+      // (points_redeemed). Redeemed covers both committed (Paid) and
+      // still-pending redemptions in one pass, so a customer who's
+      // used all their points on a Pending Payment order sees 0
+      // available, not the original earned total.
+      var totalEarned=0, totalRedeemedOrders=0, totalRedeemedLedger=0;
       try{
         var{data:orders}=await _sb.from('salesweb_customer_orders')
-          .select('points_issued').eq('customer_id',userId);
-        (orders||[]).forEach(function(o){ totalEarned += Number(o.points_issued)||0; });
+          .select('points_issued,points_redeemed,status').eq('customer_id',userId);
+        (orders||[]).forEach(function(o){
+          if(o.status === 'Cancelled') return;
+          totalEarned          += Number(o.points_issued)  ||0;
+          totalRedeemedOrders  += Number(o.points_redeemed)||0;
+        });
       }catch(_){}
       try{
         var{data:redRows}=await _sb.from('salesweb_points_ledger')
           .select('change').eq('user_id',userId).lt('change',0);
-        (redRows||[]).forEach(function(r){ totalRedeemed += Math.abs(Number(r.change)||0); });
+        (redRows||[]).forEach(function(r){ totalRedeemedLedger += Math.abs(Number(r.change)||0); });
       }catch(_){}
-      var derived = Math.max(0, totalEarned - totalRedeemed - pointsPendingHold);
-      console.log('[points] fallback', {totalEarned:totalEarned, totalRedeemed:totalRedeemed, pendingHold:pointsPendingHold, derived:derived, userId:userId});
-      if(derived > 0) pointsBalance = derived;
+      var totalRedeemed = Math.max(totalRedeemedOrders, totalRedeemedLedger);
+      var derived = Math.max(0, totalEarned - totalRedeemed);
+      console.log('[points] fallback', {totalEarned:totalEarned, totalRedeemedOrders:totalRedeemedOrders, totalRedeemedLedger:totalRedeemedLedger, derived:derived, userId:userId});
+      pointsBalance = derived;
+      pointsPendingHold = 0; // already baked into totalRedeemed via non-cancelled orders
     }
   }catch(e){ console.warn('[points] balance fetch failed:', e); }
   console.log('[points] final pointsBalance =', pointsBalance);
@@ -1142,20 +1154,25 @@ async function placeOrder(){
         .select('balance').eq('user_id',userId).maybeSingle();
       var available = freshBal && Number(freshBal.balance) || 0;
       if(available <= 0){
-        // Fallback: sum points_issued on orders and subtract any negative
-        // ledger rows. Mirrors what loadPointsBalance() does client-side.
-        var _te = 0, _tr = 0;
+        // Fallback: sum points_issued and points_redeemed on every
+        // non-cancelled order for this customer, and cross-check
+        // against negative ledger rows. Mirrors loadPointsBalance().
+        var _te = 0, _tro = 0, _trl = 0;
         try{
           var{data:_ords}=await _sb.from('salesweb_customer_orders')
-            .select('points_issued').eq('customer_id',userId);
-          (_ords||[]).forEach(function(o){ _te += Number(o.points_issued)||0; });
+            .select('points_issued,points_redeemed,status').eq('customer_id',userId);
+          (_ords||[]).forEach(function(o){
+            if(o.status === 'Cancelled') return;
+            _te  += Number(o.points_issued)  ||0;
+            _tro += Number(o.points_redeemed)||0;
+          });
         }catch(_){}
         try{
           var{data:_neg}=await _sb.from('salesweb_points_ledger')
             .select('change').eq('user_id',userId).lt('change',0);
-          (_neg||[]).forEach(function(r){ _tr += Math.abs(Number(r.change)||0); });
+          (_neg||[]).forEach(function(r){ _trl += Math.abs(Number(r.change)||0); });
         }catch(_){}
-        available = Math.max(0, _te - _tr);
+        available = Math.max(0, _te - Math.max(_tro, _trl));
       }
       if(pointsUsed>available){
         showToast('Not enough points — only '+available.toLocaleString()+' available');

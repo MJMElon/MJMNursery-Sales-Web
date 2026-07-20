@@ -10,6 +10,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Force browsers / CDNs to always re-check with origin. Inline JS in
+     this file changes often; without these headers customers keep
+     loading a stale checkout for hours after a deploy. -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -477,6 +483,7 @@ async function loadPointsBalance(){
       pointsBalance=Math.max(0, Number(bal.balance)||0);
       pointsPendingHold=Number(bal.pending_redeemed)||0;
     }
+    console.log('[points] view read', {balance:pointsBalance, pending:pointsPendingHold, raw:bal, err:balRes && balRes.error});
     // Mirror the customer portal's fallback: when the ledger view
     // returns 0 (e.g. issuePoints never inserted a Earned row for
     // historical orders) sum points_issued directly from the customer's
@@ -496,9 +503,11 @@ async function loadPointsBalance(){
         (redRows||[]).forEach(function(r){ totalRedeemed += Math.abs(Number(r.change)||0); });
       }catch(_){}
       var derived = Math.max(0, totalEarned - totalRedeemed - pointsPendingHold);
+      console.log('[points] fallback', {totalEarned:totalEarned, totalRedeemed:totalRedeemed, pendingHold:pointsPendingHold, derived:derived, userId:userId});
       if(derived > 0) pointsBalance = derived;
     }
   }catch(e){ console.warn('[points] balance fetch failed:', e); }
+  console.log('[points] final pointsBalance =', pointsBalance);
 
   // 2. Live redeem ratio so checkout discount uses whatever the admin set.
   try{

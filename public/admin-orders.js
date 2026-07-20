@@ -408,7 +408,9 @@ window.mjmRenderPagination = function(currentPage, totalPages, handlerName, tota
   });
 
   var btnBase = 'display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:32px;padding:0 .55rem;border:1px solid var(--border);border-radius:6px;font-size:12px;font-weight:500;background:#fff;color:var(--ink2);cursor:pointer;';
-  var btnActive = 'background:#2563eb;color:#fff;border-color:#2563eb;font-weight:700;';
+  // Active page in the admin's purple accent so pagination reads as part
+  // of the portal theme (matches the purple MJM favicon).
+  var btnActive = 'background:#7c5cbf;color:#fff;border-color:#7c5cbf;font-weight:700;';
   var btnDisabled = 'opacity:.4;cursor:not-allowed;';
   var btnEllipsis = 'display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:32px;color:var(--ink4);font-size:12px;';
 

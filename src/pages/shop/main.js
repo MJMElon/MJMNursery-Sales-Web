@@ -1305,6 +1305,15 @@ export function initShopMain() {
         variety:variety,
         qty:totalQty,
         total:o.total,
+        // Break the total-discount lump into its parts so the order
+        // detail modal can render Voucher and Points on separate lines
+        // instead of a single "Discount / Voucher" row.
+        couponCode:       o.coupon_code||'',
+        couponDiscount:   Number(o.coupon_discount)||0,
+        discountAmount:   Number(o.discount_amount)||0,
+        discountNote:     o.discount_note||'',
+        pointsRedeemed:   Number(o.points_redeemed)||0,
+        pointsDiscountRm: Number(o.points_discount_rm)||0,
         orderDate:orderDate,
         collDate:o.collection_date||'TBC',
         completedDate:o.completed_at?o.completed_at.substring(0,10):null,
@@ -2118,8 +2127,35 @@ export function initShopMain() {
     h+='<div style="border-top:2px solid var(--green-pale);margin-top:.4rem;padding-top:.4rem;">';
     if(subtotal!==o.total){
       h+='<div style="display:flex;justify-content:space-between;font-size:12px;padding:.15rem 0;"><span style="color:var(--text-light);">Subtotal</span><span>RM '+subtotal.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</span></div>';
-      var disc=subtotal-o.total;
-      if(disc>0)h+='<div style="display:flex;justify-content:space-between;font-size:12px;padding:.15rem 0;color:#dc2626;"><span>Discount / Voucher</span><span>-RM '+disc.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</span></div>';
+      // Break the total discount into its named components so the
+      // customer sees exactly what came off. Falls back to a single
+      // "Discount / Voucher" row for legacy orders where none of the
+      // per-source fields were captured.
+      var fmt = function(n){return n.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});};
+      var namedTotal = (o.couponDiscount||0) + (o.discountAmount||0) + (o.pointsDiscountRm||0);
+      var totalDisc  = subtotal - o.total;
+      if(namedTotal > 0.001){
+        if(o.couponDiscount > 0){
+          var codeLabel = o.couponCode ? ' ('+esc(o.couponCode)+')' : '';
+          h+='<div style="display:flex;justify-content:space-between;font-size:12px;padding:.15rem 0;color:#dc2626;"><span>Voucher'+codeLabel+'</span><span>-RM '+fmt(o.couponDiscount)+'</span></div>';
+        }
+        if(o.discountAmount > 0){
+          var noteLabel = o.discountNote ? ' <span style="color:#9ca3af;font-weight:400;font-style:italic;">('+esc(o.discountNote)+')</span>' : '';
+          h+='<div style="display:flex;justify-content:space-between;font-size:12px;padding:.15rem 0;color:#dc2626;"><span>Discount'+noteLabel+'</span><span>-RM '+fmt(o.discountAmount)+'</span></div>';
+        }
+        if(o.pointsDiscountRm > 0){
+          var ptsLabel = o.pointsRedeemed ? ' ('+o.pointsRedeemed.toLocaleString()+' pts)' : '';
+          h+='<div style="display:flex;justify-content:space-between;font-size:12px;padding:.15rem 0;color:#dc2626;"><span>Points'+ptsLabel+'</span><span>-RM '+fmt(o.pointsDiscountRm)+'</span></div>';
+        }
+        // Any residual discount not captured by the named fields (rare —
+        // covers legacy admin discounts that predate discount_amount).
+        var residual = totalDisc - namedTotal;
+        if(residual > 0.005){
+          h+='<div style="display:flex;justify-content:space-between;font-size:12px;padding:.15rem 0;color:#dc2626;"><span>Other adjustment</span><span>-RM '+fmt(residual)+'</span></div>';
+        }
+      } else if(totalDisc > 0){
+        h+='<div style="display:flex;justify-content:space-between;font-size:12px;padding:.15rem 0;color:#dc2626;"><span>Discount / Voucher</span><span>-RM '+fmt(totalDisc)+'</span></div>';
+      }
     }
     h+='<div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;padding:.2rem 0;"><span>Total</span><span>RM '+o.total.toLocaleString('en-MY',{minimumFractionDigits:2})+'</span></div>';
     h+='</div>';
@@ -2463,9 +2499,27 @@ export function initShopMain() {
     var subRow='', discRow='';
     if(Math.abs(subtotal - (Number(o.total)||0)) > 0.001){
       subRow = '<tr><td colspan="3" style="padding:6px 8px;text-align:right;color:#8AAB8C;">Subtotal</td><td style="padding:6px 8px;text-align:right;">RM '+subtotal.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td></tr>';
+      var fmt = function(n){return n.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});};
+      var namedTotal = (o.couponDiscount||0) + (o.discountAmount||0) + (o.pointsDiscountRm||0);
       var disc = subtotal - (Number(o.total)||0);
-      if(disc > 0){
-        discRow = '<tr><td colspan="3" style="padding:6px 8px;text-align:right;color:#dc2626;">Discount / Voucher</td><td style="padding:6px 8px;text-align:right;color:#dc2626;">-RM '+disc.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td></tr>';
+      if(namedTotal > 0.001){
+        if(o.couponDiscount > 0){
+          var codeLabel = o.couponCode ? ' ('+esc(o.couponCode)+')' : '';
+          discRow += '<tr><td colspan="3" style="padding:6px 8px;text-align:right;color:#dc2626;">Voucher'+codeLabel+'</td><td style="padding:6px 8px;text-align:right;color:#dc2626;">-RM '+fmt(o.couponDiscount)+'</td></tr>';
+        }
+        if(o.discountAmount > 0){
+          discRow += '<tr><td colspan="3" style="padding:6px 8px;text-align:right;color:#dc2626;">Discount'+(o.discountNote?' ('+esc(o.discountNote)+')':'')+'</td><td style="padding:6px 8px;text-align:right;color:#dc2626;">-RM '+fmt(o.discountAmount)+'</td></tr>';
+        }
+        if(o.pointsDiscountRm > 0){
+          var ptsLabel = o.pointsRedeemed ? ' ('+o.pointsRedeemed.toLocaleString()+' pts)' : '';
+          discRow += '<tr><td colspan="3" style="padding:6px 8px;text-align:right;color:#dc2626;">Points'+ptsLabel+'</td><td style="padding:6px 8px;text-align:right;color:#dc2626;">-RM '+fmt(o.pointsDiscountRm)+'</td></tr>';
+        }
+        var residual = disc - namedTotal;
+        if(residual > 0.005){
+          discRow += '<tr><td colspan="3" style="padding:6px 8px;text-align:right;color:#dc2626;">Other adjustment</td><td style="padding:6px 8px;text-align:right;color:#dc2626;">-RM '+fmt(residual)+'</td></tr>';
+        }
+      } else if(disc > 0){
+        discRow = '<tr><td colspan="3" style="padding:6px 8px;text-align:right;color:#dc2626;">Discount / Voucher</td><td style="padding:6px 8px;text-align:right;color:#dc2626;">-RM '+fmt(disc)+'</td></tr>';
       }
     }
 

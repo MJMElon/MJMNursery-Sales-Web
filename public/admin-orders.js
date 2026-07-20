@@ -642,12 +642,22 @@ async function viewOrder(id){
   // Totals breakdown stays in the same card
   html+='<div style="margin-top:.8rem;padding-top:.8rem;border-top:1px solid var(--border);">';
   html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;"><span>Subtotal</span><span>RM '+fmtMYR(subtotal)+'</span></div>';
+  // Discount / Voucher / Points on their own labeled rows so the admin
+  // sees exactly which source came off subtotal — matches the customer
+  // portal's per-source breakdown.
+  if(order.coupon_code || Number(order.coupon_discount||0) > 0){
+    var codeLabel = order.coupon_code ? ' ('+esc(order.coupon_code)+')' : '';
+    html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;color:var(--red);"><span>Voucher'+codeLabel+'</span><span>-RM '+fmtMYR(order.coupon_discount||0)+'</span></div>';
+  }
   if(order.discount_amount>0){
     var discLabel = 'Discount';
     if(order.discount_note) discLabel += ' <span style="color:var(--ink3);font-weight:400;font-style:italic;">('+esc(order.discount_note)+')</span>';
     html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;color:var(--red);gap:.5rem;"><span style="min-width:0;">'+discLabel+'</span><span style="white-space:nowrap;">-RM '+fmtMYR(order.discount_amount)+'</span></div>';
   }
-  if(order.coupon_code)html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;color:var(--red);"><span>Coupon ('+esc(order.coupon_code)+')</span><span>-RM '+fmtMYR(order.coupon_discount)+'</span></div>';
+  if(Number(order.points_discount_rm||0) > 0){
+    var ptsLabel = order.points_redeemed ? ' ('+Number(order.points_redeemed).toLocaleString()+' pts)' : '';
+    html+='<div style="display:flex;justify-content:space-between;padding:.2rem 0;font-size:13px;color:var(--red);"><span>Points'+ptsLabel+'</span><span>-RM '+fmtMYR(order.points_discount_rm)+'</span></div>';
+  }
   html+='<div style="display:flex;justify-content:space-between;padding:.4rem 0;border-top:1.5px solid var(--border);margin-top:.3rem;font-size:15px;font-weight:700;"><span>Total</span><span>RM '+fmtMYR(order.total)+'</span></div>';
   html+='</div>';
   html+='</div>'; // /Order Items card
@@ -2941,8 +2951,15 @@ async function openProformaInvoice(orderId){
 
   html+='<div style="display:flex;justify-content:flex-end;margin-bottom:1rem;"><table style="font-size:12px;min-width:240px;">';
   html+='<tr><td style="padding:.2rem .5rem;">Subtotal</td><td style="padding:.2rem .5rem;text-align:right;">RM '+fmtMYR(subtotal)+'</td></tr>';
-  if(order.discount_amount>0) html+='<tr><td style="padding:.2rem .5rem;color:#b91c1c;">Discount</td><td style="padding:.2rem .5rem;text-align:right;color:#b91c1c;">-RM '+fmtMYR(order.discount_amount)+'</td></tr>';
-  if(order.coupon_code)       html+='<tr><td style="padding:.2rem .5rem;color:#b91c1c;">Coupon ('+esc(order.coupon_code)+')</td><td style="padding:.2rem .5rem;text-align:right;color:#b91c1c;">-RM '+fmtMYR(order.coupon_discount)+'</td></tr>';
+  if(order.coupon_code || Number(order.coupon_discount||0) > 0){
+    var _codeLbl = order.coupon_code ? ' ('+esc(order.coupon_code)+')' : '';
+    html+='<tr><td style="padding:.2rem .5rem;color:#b91c1c;">Voucher'+_codeLbl+'</td><td style="padding:.2rem .5rem;text-align:right;color:#b91c1c;">-RM '+fmtMYR(order.coupon_discount||0)+'</td></tr>';
+  }
+  if(order.discount_amount>0) html+='<tr><td style="padding:.2rem .5rem;color:#b91c1c;">Discount'+(order.discount_note?' ('+esc(order.discount_note)+')':'')+'</td><td style="padding:.2rem .5rem;text-align:right;color:#b91c1c;">-RM '+fmtMYR(order.discount_amount)+'</td></tr>';
+  if(Number(order.points_discount_rm||0) > 0){
+    var _ptsLbl = order.points_redeemed ? ' ('+Number(order.points_redeemed).toLocaleString()+' pts)' : '';
+    html+='<tr><td style="padding:.2rem .5rem;color:#b91c1c;">Points'+_ptsLbl+'</td><td style="padding:.2rem .5rem;text-align:right;color:#b91c1c;">-RM '+fmtMYR(order.points_discount_rm)+'</td></tr>';
+  }
   html+='<tr style="border-top:2px solid #111;"><td style="padding:.4rem .5rem;font-weight:800;font-size:14px;">Total Due</td><td style="padding:.4rem .5rem;text-align:right;font-weight:800;font-size:14px;">RM '+fmtMYR(order.total)+'</td></tr>';
   html+='</table></div>';
 

@@ -257,8 +257,15 @@ async function loadCustomers(){
     '<div class="stat-box"><div class="stat-label">Has Paid Order</div><div class="stat-val" style="color:#059669;">'+paidCount+'</div></div>'+
     '<div class="stat-box"><div class="stat-label">Credit Customers</div><div class="stat-val" style="color:#a16207;">'+creditCount+'</div></div>';
 
+  // Paginate — 50 per page. Snap back to page 1 if a stricter filter
+  // shrank the result below the current window.
+  var pageSize = 50;
+  var totalPages = Math.max(1, Math.ceil(custs.length / pageSize));
+  if(!window._customersPage || window._customersPage < 1) window._customersPage = 1;
+  if(window._customersPage > totalPages) window._customersPage = 1;
+  var pageCusts = custs.slice((window._customersPage - 1) * pageSize, window._customersPage * pageSize);
   var html='<table class="data-table"><thead><tr><th></th><th>Name</th><th>Email</th><th>Phone</th><th>Membership</th><th style="text-align:right;">Total Spent</th><th>Terms</th><th>Joined</th><th>Action</th></tr></thead><tbody>';
-  custs.forEach(function(c){
+  pageCusts.forEach(function(c){
     var terms=c.payment_terms==='credit'?'credit':'cash';
     var termsBadge=terms==='credit'
       ? '<span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;">💳 Credit</span>'
@@ -282,8 +289,18 @@ async function loadCustomers(){
     '</tr>';
   });
   html+='</tbody></table>';
+  if(typeof window.mjmRenderPagination === 'function'){
+    html += window.mjmRenderPagination(window._customersPage, totalPages, 'changeCustomersPage', custs.length, pageSize);
+  }
   document.getElementById('customers-table').innerHTML=html;
 }
+
+function changeCustomersPage(n){
+  window._customersPage = Math.max(1, Number(n)||1);
+  loadCustomers();
+  try{ window.scrollTo({top:0, behavior:'smooth'}); }catch(_){}
+}
+window.changeCustomersPage = changeCustomersPage;
 
 // ── Membership tier helpers ──
 var _custTiers=null;

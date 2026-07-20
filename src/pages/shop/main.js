@@ -2644,8 +2644,12 @@ export function initShopMain() {
     }catch(e){}
 
     // Single source of truth: the points ledger (via balance view).
-    // Falls back to summing per-order points_issued only if the view returns
-    // nothing — covers the edge case where the migration hasn't been run yet.
+    // Falls back to summing per-order points_issued only when the view
+    // returns no earned rows (issuePoints never fired). In that case a
+    // Redeemed ledger row without a matching Earned row can push the
+    // view's balance NEGATIVE — the fallback re-derives balance from
+    // orders and clamps to 0 so customers see 0 after a full redemption,
+    // never a "-1,532 pts" display.
     var balance=0,totalEarned=0,redeemed=0;
     try{
       var{data:bal}=await _sb.from('salesweb_customer_points_balance')
@@ -2660,7 +2664,10 @@ export function initShopMain() {
     if(!totalEarned){
       var{data:orders}=await _sb.from('salesweb_customer_orders').select('points_issued').eq('customer_id',uid);
       if(orders)orders.forEach(function(o){totalEarned+=(o.points_issued||0);});
-      if(!balance)balance=totalEarned-redeemed;
+      // Recompute balance whenever the view lacks Earned rows (regardless
+      // of whether balance is already truthy — a negative number means
+      // the view is definitely wrong).
+      balance = Math.max(0, totalEarned - redeemed);
     }
 
     // Determine tier from lifetime earned (not current balance — spending

@@ -42,11 +42,13 @@ WITH ledger_totals AS (
   GROUP BY user_id
 ),
 pending_redemptions AS (
+  -- The order table uses a single `status` column, not separate
+  -- payment_status / order_status. Include every Pending-Payment order
+  -- whose customer had points snapshotted on the row.
   SELECT customer_id                                AS user_id,
          COALESCE(SUM(points_redeemed), 0)::INTEGER AS pending_redeemed
   FROM salesweb_customer_orders
-  WHERE payment_status = 'Pending Payment'
-    AND COALESCE(order_status, '') <> 'Cancelled'
+  WHERE status = 'Pending Payment'
     AND points_redeemed > 0
     AND customer_id IS NOT NULL
   GROUP BY customer_id

@@ -477,6 +477,27 @@ async function loadPointsBalance(){
       pointsBalance=Math.max(0, Number(bal.balance)||0);
       pointsPendingHold=Number(bal.pending_redeemed)||0;
     }
+    // Mirror the customer portal's fallback: when the ledger view
+    // returns 0 (e.g. issuePoints never inserted a Earned row for
+    // historical orders) sum points_issued directly from the customer's
+    // orders, then subtract redeemed rows from the ledger. This is
+    // what makes the customer portal say "1,532 pts" while a plain
+    // view read says 0.
+    if(pointsBalance <= 0){
+      var totalEarned=0, totalRedeemed=0;
+      try{
+        var{data:orders}=await _sb.from('salesweb_customer_orders')
+          .select('points_issued').eq('customer_id',userId);
+        (orders||[]).forEach(function(o){ totalEarned += Number(o.points_issued)||0; });
+      }catch(_){}
+      try{
+        var{data:redRows}=await _sb.from('salesweb_points_ledger')
+          .select('change').eq('user_id',userId).lt('change',0);
+        (redRows||[]).forEach(function(r){ totalRedeemed += Math.abs(Number(r.change)||0); });
+      }catch(_){}
+      var derived = Math.max(0, totalEarned - totalRedeemed - pointsPendingHold);
+      if(derived > 0) pointsBalance = derived;
+    }
   }catch(e){ console.warn('[points] balance fetch failed:', e); }
 
   // 2. Live redeem ratio so checkout discount uses whatever the admin set.

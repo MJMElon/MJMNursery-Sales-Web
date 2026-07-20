@@ -303,8 +303,15 @@ async function loadOrders(){
   }
 
   if(!orders.length){document.getElementById('orders-table').innerHTML='<div class="loading">No orders found</div>';clearOrderSelection();return;}
+  // Paginate — 50 per page. If the current page has slid past the end
+  // (e.g. a stricter filter shrank the result), snap back to page 1.
+  var pageSize = 50;
+  var totalPages = Math.max(1, Math.ceil(orders.length / pageSize));
+  if(!window._ordersPage || window._ordersPage < 1) window._ordersPage = 1;
+  if(window._ordersPage > totalPages) window._ordersPage = 1;
+  var pageOrders = orders.slice((window._ordersPage - 1) * pageSize, window._ordersPage * pageSize);
   var html='<table class="data-table"><thead><tr><th style="width:34px;text-align:center;"><input type="checkbox" id="order-select-all" onclick="toggleSelectAllOrders(this)" title="Select all"></th><th>Order</th><th>Date</th><th>Customer</th><th>Terms</th><th>Status</th><th>Total</th><th>Action</th></tr></thead><tbody>';
-  orders.forEach(function(o){
+  pageOrders.forEach(function(o){
     var statusCls=orderBadgeCls(o.status);
     var shortId=o.order_number||o.id.substring(0,8).toUpperCase();
     var idJs=String(o.id||'').replace(/[\\'"<>]/g,'');
@@ -358,8 +365,72 @@ async function loadOrders(){
     '</tr>';
   });
   html+='</tbody></table>';
+  html += mjmRenderPagination(window._ordersPage, totalPages, 'changeOrdersPage', orders.length, pageSize);
   document.getElementById('orders-table').innerHTML=html;
 }
+
+function changeOrdersPage(n){
+  window._ordersPage = Math.max(1, Number(n)||1);
+  loadOrders();
+  try{ window.scrollTo({top:0, behavior:'smooth'}); }catch(_){}
+}
+window.changeOrdersPage = changeOrdersPage;
+
+// ─────────────────────────────────────────────────────────────────────
+//  SHARED PAGINATION CONTROL
+//  Renders Prev · numbered pages (with ellipsis for large ranges) · Next.
+//  Callers pass the current page, total pages, and the NAME of the
+//  window-scoped handler to invoke on click. Also shows a small
+//  "Showing X–Y of Z" label so the admin knows the range in view.
+// ─────────────────────────────────────────────────────────────────────
+window.mjmRenderPagination = function(currentPage, totalPages, handlerName, totalCount, pageSize){
+  if(totalPages <= 1){
+    return '<div style="text-align:right;font-size:11px;color:var(--ink4);padding:.5rem 0;">Showing '+totalCount+' of '+totalCount+'</div>';
+  }
+  var pages = [];
+  // Always show first page.
+  pages.push(1);
+  // Left ellipsis if the current window is far from the start.
+  if(currentPage - 2 > 2) pages.push('…');
+  // Window around current.
+  for(var i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++){
+    pages.push(i);
+  }
+  // Right ellipsis if the current window is far from the end.
+  if(currentPage + 2 < totalPages - 1) pages.push('…');
+  // Always show last page (if there IS a last page > 1).
+  if(totalPages > 1) pages.push(totalPages);
+  // De-dupe (small ranges can double-push 1 or totalPages).
+  var seen = {}, uniqPages = [];
+  pages.forEach(function(p){
+    var k = String(p);
+    if(!seen[k]){ seen[k] = 1; uniqPages.push(p); }
+  });
+
+  var btnBase = 'display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:32px;padding:0 .55rem;border:1px solid var(--border);border-radius:6px;font-size:12px;font-weight:500;background:#fff;color:var(--ink2);cursor:pointer;';
+  var btnActive = 'background:#2563eb;color:#fff;border-color:#2563eb;font-weight:700;';
+  var btnDisabled = 'opacity:.4;cursor:not-allowed;';
+  var btnEllipsis = 'display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:32px;color:var(--ink4);font-size:12px;';
+
+  var startIdx = (currentPage - 1) * pageSize + 1;
+  var endIdx   = Math.min(currentPage * pageSize, totalCount);
+
+  var html = '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;padding:.7rem 0;">';
+  html += '<div style="font-size:11px;color:var(--ink4);">Showing '+startIdx+'–'+endIdx+' of '+totalCount+'</div>';
+  html += '<div style="display:flex;gap:.3rem;align-items:center;flex-wrap:wrap;">';
+  html += '<button style="'+btnBase+(currentPage<=1?btnDisabled:'')+'"'+(currentPage<=1?' disabled':' onclick="'+handlerName+'('+(currentPage-1)+')"')+'>← Prev</button>';
+  uniqPages.forEach(function(p){
+    if(p === '…'){
+      html += '<span style="'+btnEllipsis+'">…</span>';
+    } else {
+      var isActive = (p === currentPage);
+      html += '<button style="'+btnBase+(isActive?btnActive:'')+'" onclick="'+handlerName+'('+p+')">'+p+'</button>';
+    }
+  });
+  html += '<button style="'+btnBase+(currentPage>=totalPages?btnDisabled:'')+'"'+(currentPage>=totalPages?' disabled':' onclick="'+handlerName+'('+(currentPage+1)+')"')+'>Next →</button>';
+  html += '</div></div>';
+  return html;
+};
 
 function orderBadgeCls(s){
   return{'Pending Payment':'badge-amber','Partially Paid':'badge-amber','Paid':'badge-blue','Ready for Collection':'badge-green','Completed':'badge-grey','Cancelled':'badge-red','Refunded':'badge-red'}[s]||'badge-grey';

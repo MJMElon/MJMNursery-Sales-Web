@@ -713,8 +713,12 @@ function applyPoints(){
   var below_min = (raw > 0 && rm < 0.01);
   if(below_min){ raw = 0; rm = 0; }
 
-  input.value=raw;
-  pointsUsed =raw;
+  pointsUsed = raw;
+  // Reset the entry field to 0 after a committed redemption — the summary
+  // chip below carries the amount, and the balance label reflects the
+  // reduced state. Prevents customers from re-clicking Redeem and thinking
+  // it's a stale value.
+  input.value = raw > 0 ? 0 : raw;
 
   if(below_min){
     var minPts = Math.ceil(0.01 * redeemPtsPerRm / redeemRmPerUnit);
@@ -1129,12 +1133,30 @@ async function placeOrder(){
 
   // Server-side re-check: refuse to place the order if the user has somehow
   // tried to spend more points than they actually have (e.g. by editing the
-  // input via devtools or by racing two pending orders).
+  // input via devtools or by racing two pending orders). Uses the same
+  // orders.points_issued fallback loadPointsBalance() uses so the check
+  // agrees with what we already showed the customer as their balance.
   if(pointsUsed>0 && userId){
     try{
       var{data:freshBal}=await _sb.from('salesweb_customer_points_balance')
         .select('balance').eq('user_id',userId).maybeSingle();
       var available = freshBal && Number(freshBal.balance) || 0;
+      if(available <= 0){
+        // Fallback: sum points_issued on orders and subtract any negative
+        // ledger rows. Mirrors what loadPointsBalance() does client-side.
+        var _te = 0, _tr = 0;
+        try{
+          var{data:_ords}=await _sb.from('salesweb_customer_orders')
+            .select('points_issued').eq('customer_id',userId);
+          (_ords||[]).forEach(function(o){ _te += Number(o.points_issued)||0; });
+        }catch(_){}
+        try{
+          var{data:_neg}=await _sb.from('salesweb_points_ledger')
+            .select('change').eq('user_id',userId).lt('change',0);
+          (_neg||[]).forEach(function(r){ _tr += Math.abs(Number(r.change)||0); });
+        }catch(_){}
+        available = Math.max(0, _te - _tr);
+      }
       if(pointsUsed>available){
         showToast('Not enough points — only '+available.toLocaleString()+' available');
         btn.disabled=false;btn.textContent='Place Order';

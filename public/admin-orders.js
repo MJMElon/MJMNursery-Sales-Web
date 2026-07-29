@@ -2931,10 +2931,6 @@ async function submitNewOrder(){
       customer_remark:remarkParts.join(' | '),
       billing_name:billingName||name,
       billing_tax_id:billingTin||null,
-      // Persist the type the admin actually picked in the Add Order
-      // modal so the E-Invoice UI doesn't fall back to the buggy
-      // "has a TIN?" heuristic later. See supabase/migrations/order_billing_type.sql.
-      billing_type:(billingType==='company'?'company':'personal'),
       payment_terms:terms,
       discount_amount:discount,
       points_redeemed:0,
@@ -2955,6 +2951,16 @@ async function submitNewOrder(){
     btn.disabled=false; btn.textContent='Create Order';
     return;
   }
+
+  // Persist billing_type as a follow-up patch so a stale PostgREST
+  // schema cache (or a missing migration) can never block the order
+  // insert. If the column doesn't exist yet the update no-ops and
+  // downstream E-Invoice logic falls back to the TIN heuristic.
+  try{
+    await sb.from('salesweb_customer_orders')
+      .update({billing_type:(billingType==='company'?'company':'personal')})
+      .eq('id', order.id);
+  }catch(_e){ /* column absent / cache stale — heuristic will cover it */ }
 
   // Insert items
   var itemRows=validItems.map(function(it){

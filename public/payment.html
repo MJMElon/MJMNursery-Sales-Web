@@ -1312,10 +1312,6 @@ async function placeOrder(){
       customer_remark:remarkParts.join(' | '),
       billing_name:billingName,
       billing_tax_id:billingTin||null,
-      // Persist the type the customer actually picked at checkout so
-      // downstream E-Invoice logic doesn't have to guess. See
-      // supabase/migrations/order_billing_type.sql.
-      billing_type:(billingType==='company'?'company':'personal'),
       // Redemption snapshot — used by issuePoints()/billplz-webhook to insert
       // the negative ledger row when the order flips to Paid. Defaults to 0
       // when no points were applied.
@@ -1328,6 +1324,17 @@ async function placeOrder(){
   }
 
   if(error){showToast('Error: '+error.message);btn.disabled=false;btn.textContent='Place Order';return;}
+
+  // Persist billing_type as a follow-up patch so a stale PostgREST
+  // schema cache (or a missing migration) can never block the actual
+  // order insert. If the column doesn't exist or the cache hasn't
+  // reloaded yet, the update no-ops and downstream E-Invoice logic
+  // falls back to the TIN heuristic — the order still goes through.
+  try{
+    await _sb.from('salesweb_customer_orders')
+      .update({billing_type:(billingType==='company'?'company':'personal')})
+      .eq('id', order.id);
+  }catch(_e){ /* column absent / cache stale — heuristic will cover it */ }
 
   // Create order items & hold stock in PARALLEL
   var items=cart.map(function(c){

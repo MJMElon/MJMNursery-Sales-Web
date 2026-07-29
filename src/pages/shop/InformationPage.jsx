@@ -28,6 +28,7 @@ export default function InformationPage() {
             <button className="policy-tab" onClick={(e) => window.switchPolicyTab('privacy', e.currentTarget)}>Privacy Policy</button>
             <button className="policy-tab" onClick={(e) => window.switchPolicyTab('refund', e.currentTarget)}>Non Refund Policy</button>
             <button className="policy-tab" onClick={(e) => window.switchPolicyTab('collection', e.currentTarget)}>Customer Collection Policy</button>
+            <button className="policy-tab" onClick={(e) => window.switchPolicyTab('einvoice', e.currentTarget)}>E-Invoice Policy</button>
           </div>
 
           {/* Terms & Conditions */}
@@ -142,6 +143,42 @@ export default function InformationPage() {
               <p>Post-signature of the DO, the company is absolved of all liability regarding seedling health, replacement, or exchange.</p>
               <h3 style={css(h3Next)}>5. Administrative Accuracy</h3>
               <p>Upon completion, the Borang Akuan (L3) must be checked. Any administrative errors must be corrected at the site office immediately prior to departure.</p>
+            </div>
+          </div>
+
+          {/* E-Invoice Policy */}
+          <div className="policy-content" id="pol-einvoice">
+            <div style={css(cardStyle)}>
+              <p style={css('background:var(--green-pale);color:var(--green-dark);padding:1rem 1.5rem;border-radius:10px;font-weight:500;margin-bottom:1.5rem;')}>Please review the following guidelines regarding invoicing, receipts, and Malaysian LHDN E-Invoice compliance before placing your order.</p>
+
+              <h3 style={css(h3First)}>1. Proforma Invoicing &amp; Receipts</h3>
+              <p><strong>1.1 Automatic Issuance:</strong> For orders placed under a personal name with a total value below RM10,000, the system automatically generates a Proforma Invoice at checkout, followed by a Receipt upon confirmation of payment. No standard invoice is issued for these orders.</p>
+
+              <h3 style={css(h3Next)}>2. Automatic E-Invoice Processing</h3>
+              <p><strong>2.1 Company &amp; High-Value Orders:</strong> Official E-Invoices (compliant with LHDN guidelines) will be generated and submitted to LHDN automatically for:</p>
+              <ul style={css('margin:.5rem 0 .5rem 1.4rem;padding:0;')}>
+                <li>Orders placed under a registered Company / Corporate Name.</li>
+                <li>Orders with a total value of RM 10,000.00 and above.</li>
+              </ul>
+
+              <h3 style={css(h3Next)}>3. Personal Orders &amp; Request Window</h3>
+              <p><strong>3.1 Manual Request Requirement:</strong> For individual / personal purchases under RM 10,000.00, an official E-Invoice is not generated automatically. Customers requiring an E-Invoice must submit an explicit request via the active order portal.</p>
+              <p><strong>3.2 5-Calendar-Day Rule:</strong> E-Invoice requests must be submitted within <strong>five (5) calendar days</strong> from the order date.</p>
+              <p><strong>3.3 Strict Cutoff:</strong> Requests submitted after the 5-calendar-day window will be automatically declined by the system and will not be entertained under any circumstances.</p>
+              <p><strong>3.4 Consolidated Reporting:</strong> Unrequested individual orders will be aggregated and submitted as a consolidated E-Invoice to LHDN in accordance with regulatory guidelines.</p>
+
+              <h3 style={css(h3Next)}>4. Customer Responsibility &amp; Tax Data Accuracy</h3>
+              <p><strong>4.1 Accurate Information:</strong> Customers requesting an E-Invoice are solely responsible for providing complete and accurate tax details, including but not limited to:</p>
+              <ul style={css('margin:.5rem 0 .5rem 1.4rem;padding:0;')}>
+                <li>Full Tax Identification Number (TIN);</li>
+                <li>NRIC / Passport Number / Business Registration Number;</li>
+                <li>SST Registration Number (if applicable);</li>
+                <li>Valid Email Address &amp; Contact Information.</li>
+              </ul>
+              <p><strong>4.2 Rejection of Incomplete Data:</strong> Requests with missing, mismatched, or invalid details will be rejected by Accounts. Any re-submission must still take place within the original 5-calendar-day window.</p>
+
+              <h3 style={css(h3Next)}>5. Finality &amp; Non-Amendability</h3>
+              <p><strong>5.1 Irrevocability:</strong> A validated E-Invoice is final. No modification, cancellation, or re-issuance under a different name / TIN is allowed, by any means — system or otherwise. Errors must be corrected via a Credit Note, Debit Note, or replacement E-Invoice per LHDN guidelines.</p>
             </div>
           </div>
         </div>

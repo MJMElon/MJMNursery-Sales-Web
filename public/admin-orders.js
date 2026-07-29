@@ -2937,10 +2937,6 @@ async function submitNewOrder(){
       customer_remark:remarkParts.join(' | '),
       billing_name:billingName||name,
       billing_tax_id:billingTin||null,
-      // Persist the type the admin actually picked in the Add Order
-      // modal so the E-Invoice UI doesn't fall back to the buggy
-      // "has a TIN?" heuristic later. See supabase/migrations/order_billing_type.sql.
-      billing_type:(billingType==='company'?'company':'personal'),
       payment_terms:terms,
       discount_amount:discount,
       points_redeemed:0,

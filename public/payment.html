@@ -1312,10 +1312,6 @@ async function placeOrder(){
       customer_remark:remarkParts.join(' | '),
       billing_name:billingName,
       billing_tax_id:billingTin||null,
-      // Persist the type the customer actually picked at checkout so
-      // downstream E-Invoice logic doesn't have to guess. See
-      // supabase/migrations/order_billing_type.sql.
-      billing_type:(billingType==='company'?'company':'personal'),
       // Redemption snapshot — used by issuePoints()/billplz-webhook to insert
       // the negative ledger row when the order flips to Paid. Defaults to 0
       // when no points were applied.

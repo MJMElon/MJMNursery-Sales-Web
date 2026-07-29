@@ -1350,7 +1350,14 @@ export function initShopMain() {
         einvoiceUrl:         o.einvoice_url  || '',
         einvoiceName:        o.einvoice_name || '',
         createdAt:           o.created_at || null,
-        billingType:         (o.billing_name && o.billing_tax_id) ? 'company' : 'personal',
+        // Prefer the type the customer actually picked at checkout
+        // (persisted via order_billing_type.sql). Fall back to the old
+        // heuristic only for historical rows placed before that column
+        // existed — that heuristic misclassifies personal-with-TIN as
+        // company, which is exactly the bug billing_type fixes.
+        billingType:         (o.billing_type==='company'||o.billing_type==='personal')
+                              ? o.billing_type
+                              : ((o.billing_name && o.billing_tax_id) ? 'company' : 'personal'),
         orderDate:orderDate,
         collDate:o.collection_date||'TBC',
         completedDate:o.completed_at?o.completed_at.substring(0,10):null,

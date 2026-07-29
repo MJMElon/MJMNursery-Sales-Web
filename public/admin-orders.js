@@ -692,7 +692,13 @@ async function viewOrder(id){
   // Auto-issue path (company or ≥RM10k) shows a green info line and
   // no button. Request path shows either "Requested (waiting upload)"
   // with an Upload button, or "Not requested — window open/closed".
-  var _isCompany = !!order.billing_tax_id;
+  // Prefer the type persisted at checkout (billing_type column). Fall
+  // back to the "has a TIN?" heuristic only for pre-migration rows —
+  // that heuristic misclassifies personal orders that filled in a TIN
+  // as company, which flipped this admin panel into the "auto-issued"
+  // state and hid the E-Invoice controls the customer needs.
+  var _isCompany = (order.billing_type==='company') ||
+                   (!order.billing_type && !!order.billing_tax_id);
   var _isHiValue = (Number(order.total)||0) >= 10000;
   var _autoIssue = _isCompany || _isHiValue;
   var _reqAt = order.einvoice_requested_at;
@@ -2925,6 +2931,10 @@ async function submitNewOrder(){
       customer_remark:remarkParts.join(' | '),
       billing_name:billingName||name,
       billing_tax_id:billingTin||null,
+      // Persist the type the admin actually picked in the Add Order
+      // modal so the E-Invoice UI doesn't fall back to the buggy
+      // "has a TIN?" heuristic later. See supabase/migrations/order_billing_type.sql.
+      billing_type:(billingType==='company'?'company':'personal'),
       payment_terms:terms,
       discount_amount:discount,
       points_redeemed:0,

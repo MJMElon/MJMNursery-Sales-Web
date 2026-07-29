@@ -2705,20 +2705,36 @@ export function initShopMain() {
   }
 
   // Flow held stock back to products when an order is cancelled. Stock is
-  // held at order creation; cancelling returns each item's quantity. Mirrors
-  // the direct stock_qty adjustment used as the checkout hold fallback.
+  // held at order creation; cancelling returns each item's quantity via
+  // a SECURITY DEFINER RPC. Customers can't UPDATE salesweb_products
+  // directly (RLS is admin-only), so the previous client-side update
+  // silently no-op'd and stock never flowed back.
   async function pRestoreOrderStock(ord){
-    var items=(ord && ord.items)||[];
-    await Promise.all(items.map(async function(it){
-      var pid=it.product_id, qty=Number(it.quantity)||0;
-      if(!pid || qty<=0) return;
-      try{
-        var{data:prod}=await _sb.from('salesweb_products').select('stock_qty').eq('id',pid).maybeSingle();
-        if(prod){
-          await _sb.from('salesweb_products').update({stock_qty:(prod.stock_qty||0)+qty,updated_at:new Date().toISOString()}).eq('id',pid);
-        }
-      }catch(e){ console.error('stock restore failed for',pid,e); }
-    }));
+    var fullId = ord && (ord.fullId || ord.id);
+    if(!fullId) return;
+    try{
+      var res = await _sb.rpc('restore_order_stock', { p_order_id: fullId });
+      if(res && res.error){
+        console.error('[restore_order_stock] rpc failed:', res.error.message||res.error);
+        // Fallback: attempt the old direct update in case the RPC
+        // isn't installed yet on this Supabase. Will still silently
+        // fail if RLS blocks the write, but preserves the previous
+        // behaviour.
+        var items=(ord && ord.items)||[];
+        await Promise.all(items.map(async function(it){
+          var pid=it.product_id, qty=Number(it.quantity)||0;
+          if(!pid || qty<=0) return;
+          try{
+            var{data:prod}=await _sb.from('salesweb_products').select('stock_qty').eq('id',pid).maybeSingle();
+            if(prod){
+              await _sb.from('salesweb_products').update({stock_qty:(prod.stock_qty||0)+qty,updated_at:new Date().toISOString()}).eq('id',pid);
+            }
+          }catch(e){ console.error('stock restore fallback failed for',pid,e); }
+        }));
+      } else {
+        console.log('[restore_order_stock] restored', res && res.data, 'units');
+      }
+    }catch(e){ console.error('stock restore threw:', e); }
   }
 
   // Customer-initiated order cancel. Allowed only while status === 'Pending Payment'.

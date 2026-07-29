@@ -864,6 +864,14 @@ function selectBilling(id){
   selectedBillingId=id;
   showingNewForm=false;
   editingBillingId=null;
+  // Sync billingType off the picked profile — it's the source of truth
+  // for E-Invoice routing (personal < RM10k pops the request modal;
+  // company / high-value skip straight to placeOrder). Without this,
+  // billingType stays at whatever the last tab click set it to (often
+  // the default 'personal') and a company order still triggers the popup.
+  var picked=savedBilling.find(function(b){return b.id===id;});
+  if(picked&&picked.type==='company'){billingType='company';}
+  else if(picked){billingType='personal';}
   document.getElementById('billing-new-form').style.display='none';
   document.getElementById('billing-edit-banner').style.display='none';
   document.getElementById('btn-new-billing').textContent='+ Create New Billing Info';
@@ -1304,6 +1312,10 @@ async function placeOrder(){
       customer_remark:remarkParts.join(' | '),
       billing_name:billingName,
       billing_tax_id:billingTin||null,
+      // Persist the type the customer actually picked at checkout so
+      // downstream E-Invoice logic doesn't have to guess. See
+      // supabase/migrations/order_billing_type.sql.
+      billing_type:(billingType==='company'?'company':'personal'),
       // Redemption snapshot — used by issuePoints()/billplz-webhook to insert
       // the negative ledger row when the order flips to Paid. Defaults to 0
       // when no points were applied.

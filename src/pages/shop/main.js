@@ -490,13 +490,42 @@ export function initShopMain() {
   }
 
   // ── POLICY TABS ──
+  // Callers pass either a button element (from the click) or nothing at
+  // all (when we're auto-selecting from a URL query param). Falls back
+  // to matching the tab button by its onclick binding so deep-links
+  // like /index.html?policy=einvoice highlight the right chip too.
   function switchPolicyTab(tab, btn) {
     document.querySelectorAll('.policy-tab').forEach(function(t) { t.classList.remove('active'); });
     document.querySelectorAll('.policy-content').forEach(function(c) { c.classList.remove('active'); });
-    btn.classList.add('active');
+    var target = btn;
+    if (!target) {
+      var tabs = document.querySelectorAll('.policy-tab');
+      for (var i = 0; i < tabs.length; i++) {
+        var attr = tabs[i].getAttribute('onclick') || '';
+        if (attr.indexOf("'"+tab+"'") !== -1 || (tabs[i].textContent || '').toLowerCase().indexOf(tab) !== -1) {
+          target = tabs[i]; break;
+        }
+      }
+    }
+    if (target && target.classList) target.classList.add('active');
     var el = document.getElementById('pol-' + tab);
     if (el) el.classList.add('active');
   }
+
+  // Deep-link handler: /index.html?policy=<key> auto-navigates to the
+  // Information page and opens the requested tab. Used by the checkout
+  // E-Invoice modal's "E-Invoice Policy" link so customers land on the
+  // right section, not a generic policies page.
+  function applyPolicyDeepLink(){
+    try{
+      var params = new URLSearchParams(window.location.search);
+      var policy = params.get('policy');
+      if(!policy) return;
+      showPage('information');
+      setTimeout(function(){ switchPolicyTab(policy); }, 40);
+    }catch(_){}
+  }
+  setTimeout(applyPolicyDeepLink, 0);
 
   // ── PRODUCTS ──
   let products = [];
@@ -1471,13 +1500,16 @@ export function initShopMain() {
     '</div>';
   }
 
-  // Renders the per-order E-Invoice strip; empty string when the order
-  // isn't eligible (company or ≥RM10k → auto-invoiced elsewhere).
+  // Renders the per-order E-Invoice strip. Every order gets a strip so
+  // customers see the E-Invoice status at a glance — company orders and
+  // orders ≥RM10k show an "auto-generated" confirmation; personal
+  // orders under RM10k get the manual Request E-Invoice button + 5-day
+  // countdown.
   function pEInvoiceStrip(o){
     if(!o.createdAt) return '';
     var HIGH_VALUE = 10000;
-    var eligible = (o.billingType !== 'company') && (Number(o.total)||0) < HIGH_VALUE;
-    if(!eligible) return '';
+    var isCompany  = (o.billingType === 'company');
+    var isHighVal  = (Number(o.total)||0) >= HIGH_VALUE;
     var idJs = String(o.fullId || o.id || '').replace(/[\\'"<>]/g,'');
 
     // Uploaded state — clickable link to the E-Invoice PDF.
@@ -1487,13 +1519,22 @@ export function initShopMain() {
                '<a href="'+esc(o.einvoiceUrl)+'" target="_blank" rel="noopener" onclick="event.stopPropagation();" style="color:#15803d;font-weight:600;text-decoration:underline;">View E-Invoice</a>'+
              '</div>';
     }
+    // Company OR ≥RM10k — auto-generated per policy. Positive
+    // confirmation instead of hiding the strip so customers know it's
+    // handled without a button click.
+    if(isCompany || isHighVal){
+      var reason = isCompany ? 'company / corporate order' : 'order value ≥ RM 10,000';
+      return '<div style="padding:.55rem .8rem;border-top:1px solid #f0f0ec;background:#eff6ff;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#1e40af;">'+
+               '<div>✓ <strong>E-Invoice auto-generated</strong> — submitted to LHDN ('+reason+').</div>'+
+             '</div>';
+    }
     // Requested but not uploaded yet.
     if(o.einvoiceRequestedAt){
       return '<div style="padding:.55rem .8rem;border-top:1px solid #f0f0ec;background:#fef3c7;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#78350f;">'+
                '<div>⏳ <strong>E-Invoice requested</strong> — waiting for accounts to issue.</div>'+
              '</div>';
     }
-    // Not requested yet — compute days remaining from order date.
+    // Personal < RM10k, no request yet — show button + countdown.
     var ordered = new Date(o.createdAt).getTime();
     var deadline = ordered + 5*24*60*60*1000;
     var msLeft = deadline - Date.now();
@@ -1504,7 +1545,7 @@ export function initShopMain() {
                '<button disabled style="background:#e5e7eb;color:#9ca3af;border:none;border-radius:8px;font-size:11px;padding:.4rem .8rem;cursor:not-allowed;">Request E-Invoice</button>'+
              '</div>';
     }
-    return '<div style="padding:.55rem .8rem;border-top:1px solid #f0f0ec;background:#fffbeb;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#78350f;">'+
+    return '<div style="padding:.55rem .8rem;border-top:1px solid #f0f0ec;background:#fffbeb;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#78350f;gap:.5rem;flex-wrap:wrap;">'+
              '<div><strong>Need an E-Invoice?</strong> '+daysLeft+' day'+(daysLeft===1?'':'s')+' left to request.</div>'+
              '<button onclick="event.stopPropagation();pRequestEInvoice(\''+idJs+'\')" class="p-btn" style="background:var(--green-dark);color:#fff;font-size:11px;padding:.4rem .8rem;">Request E-Invoice</button>'+
            '</div>';

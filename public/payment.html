@@ -1329,6 +1329,17 @@ async function placeOrder(){
 
   if(error){showToast('Error: '+error.message);btn.disabled=false;btn.textContent='Place Order';return;}
 
+  // Persist billing_type as a follow-up patch so a stale PostgREST
+  // schema cache (or a missing migration) can never block the actual
+  // order insert. If the column doesn't exist or the cache hasn't
+  // reloaded yet, the update no-ops and downstream E-Invoice logic
+  // falls back to the TIN heuristic — the order still goes through.
+  try{
+    await _sb.from('salesweb_customer_orders')
+      .update({billing_type:(billingType==='company'?'company':'personal')})
+      .eq('id', order.id);
+  }catch(_e){ /* column absent / cache stale — heuristic will cover it */ }
+
   // Create order items & hold stock in PARALLEL
   var items=cart.map(function(c){
     return{order_id:order.id,product_id:c.id,product_name:c.name+(c.month?' — '+c.month:''),quantity:c.qty,unit_price:c.price,subtotal:c.price*c.qty};

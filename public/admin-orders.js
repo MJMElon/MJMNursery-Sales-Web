@@ -2956,6 +2956,16 @@ async function submitNewOrder(){
     return;
   }
 
+  // Persist billing_type as a follow-up patch so a stale PostgREST
+  // schema cache (or a missing migration) can never block the order
+  // insert. If the column doesn't exist yet the update no-ops and
+  // downstream E-Invoice logic falls back to the TIN heuristic.
+  try{
+    await sb.from('salesweb_customer_orders')
+      .update({billing_type:(billingType==='company'?'company':'personal')})
+      .eq('id', order.id);
+  }catch(_e){ /* column absent / cache stale — heuristic will cover it */ }
+
   // Insert items
   var itemRows=validItems.map(function(it){
     var qty=Number(it.quantity)||0, up=Number(it.unit_price)||0;

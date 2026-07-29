@@ -391,8 +391,28 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-d
         </div>
       </div>
 
-      <button class="btn-pay" id="btn-pay" onclick="placeOrder()">Place Order</button>
+      <button class="btn-pay" id="btn-pay" onclick="clickPlaceOrder()">Place Order</button>
       <div style="text-align:center;margin-top:.6rem;font-size:10px;color:var(--text-light);line-height:1.5;">By placing order, I agree to the MJM Nursery | MPOB Certified Oil Palm Seedlings's Terms of Service, Privacy Policy and Refund Policy.</div>
+    </div>
+  </div>
+</div>
+
+<!-- E-Invoice request confirmation modal — shown ONLY for personal
+     orders below RM 10,000 before the order is placed. Company orders
+     and orders ≥ RM 10,000 auto-issue an e-invoice per policy and
+     never see this modal. -->
+<div id="einv-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center;padding:1rem;">
+  <div style="background:#fff;border-radius:16px;max-width:460px;width:100%;padding:1.75rem 1.75rem 1.5rem;box-shadow:0 24px 60px rgba(0,0,0,.35);">
+    <div style="font-family:'Cormorant Garamond',serif;font-size:1.5rem;color:var(--green-dark);margin-bottom:.4rem;">E-Invoice Request</div>
+    <div style="font-size:13px;color:var(--text-mid);line-height:1.55;margin-bottom:1rem;">Do you need an official LHDN-compliant E-Invoice for this order?</div>
+    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:.7rem .9rem;font-size:12px;color:#78350f;line-height:1.55;margin-bottom:1.2rem;">
+      Requests must be submitted within <strong>5 calendar days</strong> from the order date. After that, the request window closes automatically.
+      <br><br>
+      For details, see the <a href="index.html?policy=einvoice" target="_blank" rel="noopener" style="color:var(--green-dark);font-weight:600;text-decoration:underline;">E-Invoice Policy</a>.
+    </div>
+    <div style="display:flex;gap:.6rem;">
+      <button id="einv-btn-no"  class="btn-pay" style="flex:1;background:#fff;color:var(--green-dark);border:1.5px solid var(--green-pale);margin:0;" onclick="confirmPlaceOrder(false)">No, Continue</button>
+      <button id="einv-btn-yes" class="btn-pay" style="flex:1;margin:0;" onclick="confirmPlaceOrder(true)">Request E-Invoice</button>
     </div>
   </div>
 </div>
@@ -1084,6 +1104,32 @@ function validateBillingFields(){
   return true;
 }
 
+// ── E-Invoice request intent (set by the confirmation modal) ──
+// Per policy: personal orders < RM10k are NOT auto-invoiced. We ask
+// the customer at Place Order whether to file an E-Invoice request.
+// Company orders + orders ≥ RM10k auto-issue and skip the modal.
+var einvoiceRequestOnPlace = false;
+
+function clickPlaceOrder(){
+  if(!cart.length){showToast('Cart is empty');return;}
+  var subtotal = cart.reduce(function(s,c){return s+(c.price*c.qty);},0);
+  var HIGH_VALUE = 10000;
+  // Auto-issue path: skip the modal, no request needed.
+  if(billingType === 'company' || subtotal >= HIGH_VALUE){
+    einvoiceRequestOnPlace = false;
+    placeOrder();
+    return;
+  }
+  // Personal + under RM10k → ask the customer.
+  document.getElementById('einv-modal').style.display = 'flex';
+}
+
+function confirmPlaceOrder(wantEinvoice){
+  einvoiceRequestOnPlace = !!wantEinvoice;
+  document.getElementById('einv-modal').style.display = 'none';
+  placeOrder();
+}
+
 // ── Place Order ──
 async function placeOrder(){
   if(!cart.length){showToast('Cart is empty');return;}
@@ -1325,6 +1371,17 @@ async function placeOrder(){
 
   // Timeline entry — fire and forget (audit log, doesn't need to block redirect)
   _sb.from('salesweb_order_timeline').insert([{order_id:order.id,status:'Order Placed',note:'Order placed by customer',changed_by:email}]).then(function(){});
+
+  // If the customer ticked "Request E-Invoice" in the pre-order modal,
+  // stamp the request timestamp via the SECURITY DEFINER RPC. Best-effort:
+  // failure here shouldn't block the order flow — the customer can retry
+  // from the Active Orders card anyway.
+  if(einvoiceRequestOnPlace){
+    try{
+      var einvRes = await _sb.rpc('request_einvoice', { p_order_id: order.id });
+      if(einvRes && einvRes.error) console.warn('[einvoice] request failed:', einvRes.error.message);
+    }catch(e){ console.warn('[einvoice] request threw:', e); }
+  }
 
   // Order row, items and stock holds are all committed at this point — the
   // cart is no longer the source of truth, the order is. Clear it now so a

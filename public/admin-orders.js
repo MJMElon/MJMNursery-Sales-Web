@@ -688,6 +688,36 @@ async function viewOrder(id){
   html+='<div style="font-size:12px;color:var(--ink3);margin-top:.3rem;">Billing Address:</div>';
   html+='<div style="font-size:12px;color:var(--ink3);white-space:pre-wrap;">'+(_parsed.billAddr?esc(_parsed.billAddr):'<span style="color:var(--ink4);">—</span>')+'</div>';
   html+='<div style="font-size:12px;color:var(--ink3);margin-top:.3rem;">Points issued: '+(order.points_issued||0)+'</div>';
+  // ── E-Invoice request state ──────────────────────────────────────
+  // Auto-issue path (company or ≥RM10k) shows a green info line and
+  // no button. Request path shows either "Requested (waiting upload)"
+  // with an Upload button, or "Not requested — window open/closed".
+  var _isCompany = !!order.billing_tax_id;
+  var _isHiValue = (Number(order.total)||0) >= 10000;
+  var _autoIssue = _isCompany || _isHiValue;
+  var _reqAt = order.einvoice_requested_at;
+  var _upAt  = order.einvoice_uploaded_at;
+  var _upUrl = order.einvoice_url;
+  html+='<div style="font-size:12px;color:var(--ink3);margin-top:.4rem;padding-top:.4rem;border-top:1px dashed var(--border);">';
+  html+='<strong>E-Invoice:</strong> ';
+  if(_upAt && _upUrl){
+    html+='<span style="color:#15803d;font-weight:600;">✓ Issued</span> · <a href="'+esc(_upUrl)+'" target="_blank" rel="noopener" style="color:#15803d;text-decoration:underline;">View</a>';
+    html+=' &nbsp;<button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;" onclick="openEInvoiceUpload(\''+id+'\')">Replace</button>';
+  } else if(_reqAt){
+    html+='<span style="color:#b45309;font-weight:600;">⏳ Requested</span> · '+esc(fmtDate(_reqAt));
+    html+=' &nbsp;<button class="btn btn-primary btn-sm" style="font-size:10px;padding:2px 8px;" onclick="openEInvoiceUpload(\''+id+'\')">Upload E-Invoice</button>';
+  } else if(_autoIssue){
+    html+='<span style="color:var(--ink3);">Auto-issued ('+(_isCompany?'company':'≥RM10k')+') — handled by accounts</span>';
+  } else {
+    var _ordered = new Date(order.created_at).getTime();
+    var _daysLeft = Math.ceil((_ordered + 5*24*60*60*1000 - Date.now()) / (24*60*60*1000));
+    if(_daysLeft > 0){
+      html+='<span style="color:var(--ink4);">Not requested — customer has '+_daysLeft+' day'+(_daysLeft===1?'':'s')+' left to request.</span>';
+    } else {
+      html+='<span style="color:var(--ink4);">Not requested — request window expired.</span>';
+    }
+  }
+  html+='</div>';
   html+='</div>';
   html+='<div id="mo-billing-edit" style="display:none;">';
   html+='<input class="form-input" id="mo-bill-name" placeholder="Billing name" value="'+esc(order.billing_name||'')+'" style="font-size:12px;padding:6px 10px;margin-bottom:.3rem;">';
@@ -2244,6 +2274,39 @@ async function saveOrderItems(orderId){
 // ═══════════════════════════════════════
 //  CREDIT INVOICE UPLOAD (from order modal monthly breakdown)
 // ═══════════════════════════════════════
+// ═══════════════════════════════════════
+//  E-INVOICE UPLOAD (from order modal E-Invoice strip)
+// ═══════════════════════════════════════
+// One-shot file picker → uploads to the shared order-attachments
+// bucket → calls mark_einvoice_uploaded RPC → refreshes viewOrder so
+// the strip flips to ✓ Issued.
+async function openEInvoiceUpload(orderId){
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'application/pdf,image/*';
+  input.style.display = 'none';
+  document.body.appendChild(input);
+  input.onchange = async function(){
+    var file = input.files && input.files[0];
+    document.body.removeChild(input);
+    if(!file){ return; }
+    toast('Uploading E-Invoice…');
+    var ext = (file.name.split('.').pop()||'pdf').toLowerCase();
+    var key = 'einvoice_'+String(orderId).substring(0,8)+'_'+Date.now()+'.'+ext;
+    var up = await sb.storage.from('order-attachments').upload(key, file, { contentType: file.type, upsert: true });
+    if(up.error){ toast('Upload failed: '+up.error.message,'error'); return; }
+    var pub = sb.storage.from('order-attachments').getPublicUrl(key);
+    var url = pub && pub.data && pub.data.publicUrl;
+    if(!url){ toast('Upload done but public URL missing','error'); return; }
+    var rpc = await sb.rpc('mark_einvoice_uploaded', { p_order_id: orderId, p_url: url, p_name: file.name });
+    if(rpc.error){ toast('Save failed: '+rpc.error.message,'error'); return; }
+    toast('✓ E-Invoice uploaded');
+    viewOrder(orderId);
+  };
+  input.click();
+}
+window.openEInvoiceUpload = openEInvoiceUpload;
+
 async function openInvoiceUploadModalForMonth(orderId,period){
   // Pull the trigger order's customer_id + customer_name, then aggregate all
   // of that customer's credit orders with uninvoiced collections in this

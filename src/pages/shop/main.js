@@ -1314,6 +1314,14 @@ export function initShopMain() {
         discountNote:     o.discount_note||'',
         pointsRedeemed:   Number(o.points_redeemed)||0,
         pointsDiscountRm: Number(o.points_discount_rm)||0,
+        // E-Invoice state — nullable timestamps, drive the Request /
+        // Countdown / Uploaded UI on the Active Orders card.
+        einvoiceRequestedAt: o.einvoice_requested_at || null,
+        einvoiceUploadedAt:  o.einvoice_uploaded_at  || null,
+        einvoiceUrl:         o.einvoice_url  || '',
+        einvoiceName:        o.einvoice_name || '',
+        createdAt:           o.created_at || null,
+        billingType:         (o.billing_name && o.billing_tax_id) ? 'company' : 'personal',
         orderDate:orderDate,
         collDate:o.collection_date||'TBC',
         completedDate:o.completed_at?o.completed_at.substring(0,10):null,
@@ -1451,12 +1459,72 @@ export function initShopMain() {
       // list visually tight. Clicking the row opens the modal where
       // the customer gets the full categorised view + a "View" button
       // per file.
+      // E-Invoice strip — shown only for personal orders under RM10k
+      // (company / high-value orders auto-invoice per policy). One of
+      // three states: not-requested-yet + countdown, already requested,
+      // or uploaded (with a view link).
+      pEInvoiceStrip(o) +
       '<div class="p-order-foot">'+
         '<div class="p-order-total">RM '+o.total.toLocaleString('en-MY',{minimumFractionDigits:2})+'</div>'+
         '<div style="display:flex;gap:.4rem;align-items:center;">'+actionHtml+'</div>'+
       '</div>'+
     '</div>';
   }
+
+  // Renders the per-order E-Invoice strip; empty string when the order
+  // isn't eligible (company or ≥RM10k → auto-invoiced elsewhere).
+  function pEInvoiceStrip(o){
+    if(!o.createdAt) return '';
+    var HIGH_VALUE = 10000;
+    var eligible = (o.billingType !== 'company') && (Number(o.total)||0) < HIGH_VALUE;
+    if(!eligible) return '';
+    var idJs = String(o.fullId || o.id || '').replace(/[\\'"<>]/g,'');
+
+    // Uploaded state — clickable link to the E-Invoice PDF.
+    if(o.einvoiceUploadedAt && o.einvoiceUrl){
+      return '<div style="padding:.55rem .8rem;border-top:1px solid #f0f0ec;background:#ecfdf5;display:flex;justify-content:space-between;align-items:center;font-size:12px;">'+
+               '<div><strong style="color:#15803d;">✓ E-Invoice issued</strong><span style="color:var(--text-light);margin-left:.4rem;">'+esc(o.einvoiceName||'invoice.pdf')+'</span></div>'+
+               '<a href="'+esc(o.einvoiceUrl)+'" target="_blank" rel="noopener" onclick="event.stopPropagation();" style="color:#15803d;font-weight:600;text-decoration:underline;">View E-Invoice</a>'+
+             '</div>';
+    }
+    // Requested but not uploaded yet.
+    if(o.einvoiceRequestedAt){
+      return '<div style="padding:.55rem .8rem;border-top:1px solid #f0f0ec;background:#fef3c7;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#78350f;">'+
+               '<div>⏳ <strong>E-Invoice requested</strong> — waiting for accounts to issue.</div>'+
+             '</div>';
+    }
+    // Not requested yet — compute days remaining from order date.
+    var ordered = new Date(o.createdAt).getTime();
+    var deadline = ordered + 5*24*60*60*1000;
+    var msLeft = deadline - Date.now();
+    var daysLeft = Math.ceil(msLeft / (24*60*60*1000));
+    if(msLeft <= 0){
+      return '<div style="padding:.55rem .8rem;border-top:1px solid #f0f0ec;background:#f5f5f4;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--text-light);">'+
+               '<div>E-Invoice request window closed (5 days expired).</div>'+
+               '<button disabled style="background:#e5e7eb;color:#9ca3af;border:none;border-radius:8px;font-size:11px;padding:.4rem .8rem;cursor:not-allowed;">Request E-Invoice</button>'+
+             '</div>';
+    }
+    return '<div style="padding:.55rem .8rem;border-top:1px solid #f0f0ec;background:#fffbeb;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#78350f;">'+
+             '<div><strong>Need an E-Invoice?</strong> '+daysLeft+' day'+(daysLeft===1?'':'s')+' left to request.</div>'+
+             '<button onclick="event.stopPropagation();pRequestEInvoice(\''+idJs+'\')" class="p-btn" style="background:var(--green-dark);color:#fff;font-size:11px;padding:.4rem .8rem;">Request E-Invoice</button>'+
+           '</div>';
+  }
+
+  async function pRequestEInvoice(orderId){
+    if(!confirm('Request an official LHDN-compliant E-Invoice for this order?\n\nMake sure your billing details (TIN, IC / Registration No., contact) are complete and accurate.')) return;
+    try{
+      var res = await _sb.rpc('request_einvoice', { p_order_id: orderId });
+      if(res && res.error){
+        showPortalToast(res.error.message || 'Could not submit request');
+        return;
+      }
+      showPortalToast('✓ E-Invoice request submitted — accounts will process shortly.');
+      try{ await loadCustomerOrders(); pRenderOrders(); pRenderHistory(); }catch(_){}
+    }catch(e){
+      showPortalToast('Request failed: ' + (e.message || e));
+    }
+  }
+  window.pRequestEInvoice = pRequestEInvoice;
 
   function goPayOrder(orderId,total){
     sessionStorage.setItem('mjm_pay_order_id',orderId);

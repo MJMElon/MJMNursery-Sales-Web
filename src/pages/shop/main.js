@@ -1552,7 +1552,7 @@ export function initShopMain() {
     // Requested but not uploaded yet.
     if(o.einvoiceRequestedAt){
       return '<div style="padding:.55rem .8rem;border-top:1px solid #f0f0ec;background:#fef3c7;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#78350f;">'+
-               '<div>⏳ <strong>E-Invoice requested</strong> — waiting for accounts to issue.</div>'+
+               '<div>⏳ <strong>E-Invoice requested</strong> — Verifying &amp; Processing</div>'+
              '</div>';
     }
     // Personal < RM10k, no request yet — show button + live D:H:M:S

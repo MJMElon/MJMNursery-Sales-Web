@@ -336,6 +336,7 @@ export default function Admin() {
                     <div className="filter-bar">
                       <input className="filter-input" id="payment-search" placeholder="Search order number or customer..." onInput={(e) => { window.loadPayments(); }} />
                       <button className="filter-chip active" data-payment-view="awaiting" onClick={(e) => { window.setPaymentView('awaiting'); }}>Awaiting Verification</button>
+                      <button className="filter-chip" data-payment-view="partial" onClick={(e) => { window.setPaymentView('partial'); }}>Partially Paid</button>
                       <button className="filter-chip" data-payment-view="einvoice" onClick={(e) => { window.setPaymentView('einvoice'); }}>E-Invoice Requests</button>
                       </div>
                     <div id="payments-table"><div className="loading">Loading payments...</div></div>

@@ -21,10 +21,10 @@
    (from admin-orders.js), openEInvoiceUpload (from admin-orders.js).
    ═══════════════════════════════════════════════════════════════════ */
 
-var PAYMENTS_VIEW = 'awaiting';   // 'awaiting' | 'einvoice'
+var PAYMENTS_VIEW = 'awaiting';   // 'awaiting' | 'partial' | 'einvoice'
 
 function setPaymentView(view){
-  PAYMENTS_VIEW = view === 'einvoice' ? 'einvoice' : 'awaiting';
+  PAYMENTS_VIEW = ['awaiting','partial','einvoice'].indexOf(view) >= 0 ? view : 'awaiting';
   document.querySelectorAll('[data-payment-view]').forEach(function(el){
     el.classList.toggle('active', el.getAttribute('data-payment-view') === PAYMENTS_VIEW);
   });
@@ -42,6 +42,12 @@ async function loadPayments(){
   if (PAYMENTS_VIEW === 'einvoice'){
     // E-Invoice tab: customer has requested but accounts hasn't uploaded yet.
     query = query.not('einvoice_requested_at','is',null).is('einvoice_uploaded_at', null);
+  } else if (PAYMENTS_VIEW === 'partial'){
+    // Partially Paid tab: filtered client-side after we sum
+    // salesweb_order_payments per order (amount_paid is a snapshot that
+    // can lag when payments are edited per-invoice). Exclude cancelled
+    // and refunded orders — those aren't outstanding work.
+    query = query.not('status','in','("Cancelled","Refunded")');
   } else {
     query = query.eq('status', 'Pending Payment');
   }
@@ -77,8 +83,34 @@ async function loadPayments(){
   }
 
   renderPaymentStats();
-  if (PAYMENTS_VIEW === 'einvoice') renderEInvoiceTable(orders);
-  else renderAwaitingTable(orders);
+  if (PAYMENTS_VIEW === 'einvoice') {
+    renderEInvoiceTable(orders);
+  } else if (PAYMENTS_VIEW === 'partial') {
+    // Sum salesweb_order_payments per order — one query, then bucket
+    // client-side. amount_paid is used only as a fallback for rows
+    // that predate the per-payment ledger.
+    var ids = orders.map(function(o){ return o.id; });
+    var paidById = {};
+    if (ids.length){
+      var { data: pays } = await sb.from('salesweb_order_payments')
+        .select('order_id, amount').in('order_id', ids);
+      (pays||[]).forEach(function(p){
+        paidById[p.order_id] = (paidById[p.order_id]||0) + (Number(p.amount)||0);
+      });
+    }
+    var partial = orders.filter(function(o){
+      var tot  = Number(o.total)||0;
+      var paid = paidById[o.id];
+      if (paid == null) paid = Number(o.amount_paid)||0;
+      return tot > 0 && paid > 0 && paid < tot - 0.005;   // 0.5-sen tolerance
+    }).map(function(o){
+      o._paidSoFar = paidById[o.id] != null ? paidById[o.id] : (Number(o.amount_paid)||0);
+      return o;
+    });
+    renderPartialTable(partial);
+  } else {
+    renderAwaitingTable(orders);
+  }
 }
 window.loadPayments = loadPayments;
 
@@ -90,15 +122,44 @@ async function renderPaymentStats(){
   // projection if the einvoice_requests.sql migration isn't installed
   // yet so the KPI grid keeps working.
   var res = await sb.from('salesweb_customer_orders')
-    .select('id,status,total,updated_at,einvoice_requested_at,einvoice_uploaded_at');
+    .select('id,status,total,amount_paid,updated_at,einvoice_requested_at,einvoice_uploaded_at');
   if (res.error && /einvoice_requested_at|does not exist/i.test(res.error.message||'')){
-    res = await sb.from('salesweb_customer_orders').select('id,status,total,updated_at');
+    res = await sb.from('salesweb_customer_orders').select('id,status,total,amount_paid,updated_at');
   }
   var all = res.data || [];
 
   var awaiting = all.filter(function(o){ return o.status==='Pending Payment'; });
   var einvReqs = all.filter(function(o){ return o.einvoice_requested_at && !o.einvoice_uploaded_at; });
   var paidNow  = all.filter(function(o){ return ['Paid','Ready for Collection','Completed'].indexOf(o.status) >= 0; });
+
+  // Partially Paid — sum the per-order payments ledger so cases where
+  // amount_paid lags behind the credit-bill payments still surface.
+  var activeIds = all
+    .filter(function(o){ return o.status !== 'Cancelled' && o.status !== 'Refunded'; })
+    .map(function(o){ return o.id; });
+  var paidById = {};
+  if (activeIds.length){
+    // Chunk to keep the .in() list under PostgREST's URL-length limit.
+    for (var i = 0; i < activeIds.length; i += 500){
+      var slice = activeIds.slice(i, i+500);
+      var { data: pays } = await sb.from('salesweb_order_payments')
+        .select('order_id, amount').in('order_id', slice);
+      (pays||[]).forEach(function(p){
+        paidById[p.order_id] = (paidById[p.order_id]||0) + (Number(p.amount)||0);
+      });
+    }
+  }
+  var partial = all.filter(function(o){
+    if (o.status === 'Cancelled' || o.status === 'Refunded') return false;
+    var tot = Number(o.total)||0;
+    var paid = paidById[o.id] != null ? paidById[o.id] : (Number(o.amount_paid)||0);
+    return tot > 0 && paid > 0 && paid < tot - 0.005;
+  });
+  var sumPartial = partial.reduce(function(s,o){
+    var tot = Number(o.total)||0;
+    var paid = paidById[o.id] != null ? paidById[o.id] : (Number(o.amount_paid)||0);
+    return s + Math.max(0, tot - paid);
+  }, 0);
 
   var monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
   var paidMonth = paidNow.filter(function(o){
@@ -116,6 +177,8 @@ async function renderPaymentStats(){
   document.getElementById('payment-stats').innerHTML =
     '<div class="stat-box"><div class="stat-label">Awaiting Verification</div><div class="stat-val" style="color:var(--amber)">'+awaiting.length+'</div></div>'+
     '<div class="stat-box"><div class="stat-label">Awaiting Value</div><div class="stat-val" style="color:var(--amber)">RM '+sumAwait.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</div></div>'+
+    '<div class="stat-box"><div class="stat-label">Partially Paid</div><div class="stat-val" style="color:#1d4ed8;">'+partial.length+'</div></div>'+
+    '<div class="stat-box"><div class="stat-label">Outstanding Value</div><div class="stat-val" style="color:#1d4ed8;">RM '+sumPartial.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</div></div>'+
     '<div class="stat-box"><div class="stat-label">E-Invoice Requests</div><div class="stat-val" style="color:#7c5cbf;">'+einvReqs.length+'</div></div>'+
     '<div class="stat-box"><div class="stat-label">Verified This Month</div><div class="stat-val green">'+paidMonth.length+'</div></div>'+
     '<div class="stat-box"><div class="stat-label">Verified Value (MTD)</div><div class="stat-val green">RM '+sumPaid.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</div></div>'+
@@ -151,6 +214,53 @@ function renderAwaitingTable(orders){
       '<td>'+
         '<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();openPaymentDetail(\''+idJs+'\')">Review</button> '+
         '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();markPayment(\''+idJs+'\',\'Paid\')">✓ Mark Paid</button>'+
+      '</td>'+
+    '</tr>';
+  });
+  html += '</tbody></table>';
+  document.getElementById('payments-table').innerHTML = html;
+}
+
+// Partially Paid — some payment received but the order isn't fully
+// settled. Columns spotlight Paid / Total / Outstanding so the
+// accountant sees the gap at a glance without opening the row.
+function renderPartialTable(orders){
+  if (!orders.length){
+    document.getElementById('payments-table').innerHTML =
+      '<div class="loading">No partially-paid orders.</div>';
+    return;
+  }
+  var badge = (typeof orderBadgeCls === 'function') ? orderBadgeCls : function(){ return 'badge-blue'; };
+  var html = '<table class="data-table"><thead><tr>'+
+    '<th>Order</th><th>Customer</th><th>Placed</th><th>Method</th>'+
+    '<th style="text-align:right;">Paid</th><th style="text-align:right;">Total</th><th style="text-align:right;">Outstanding</th>'+
+    '<th>Status</th><th>Action</th>'+
+    '</tr></thead><tbody>';
+  orders.forEach(function(o){
+    var shortId = o.order_number || (o.id||'').substring(0,8).toUpperCase();
+    var idJs    = String(o.id||'').replace(/[\\'"<>]/g,'');
+    var method  = o.payment_terms === 'credit'
+      ? '<span class="badge badge-blue">📅 Credit</span>'
+      : '<span class="badge badge-grey">💵 Cash / Transfer</span>';
+    var tot   = Number(o.total)||0;
+    var paid  = Number(o._paidSoFar)||0;
+    var outst = Math.max(0, tot - paid);
+    var pct   = tot > 0 ? Math.min(100, Math.round((paid/tot)*100)) : 0;
+    var paidCell =
+      '<div style="font-weight:600;color:#047857;">RM '+paid.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</div>'+
+      '<div style="height:4px;background:#e5e7eb;border-radius:99px;margin-top:3px;overflow:hidden;"><div style="height:100%;width:'+pct+'%;background:#1d4ed8;"></div></div>'+
+      '<div style="font-size:10px;color:var(--ink4);margin-top:2px;">'+pct+'% paid</div>';
+    html += '<tr style="cursor:pointer;" onclick="openPaymentDetail(\''+idJs+'\')">'+
+      '<td><strong>'+esc(shortId)+'</strong></td>'+
+      '<td>'+esc(o.customer_name||o.billing_name||'—')+'<div style="font-size:11px;color:var(--ink4);">'+esc(o.customer_email||'')+'</div></td>'+
+      '<td>'+fmtDate(o.created_at)+'</td>'+
+      '<td>'+method+'</td>'+
+      '<td style="text-align:right;min-width:110px;">'+paidCell+'</td>'+
+      '<td style="text-align:right;">RM '+tot.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>'+
+      '<td style="text-align:right;font-weight:600;color:#b91c1c;">RM '+outst.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>'+
+      '<td><span class="badge '+badge(o.status)+'">'+esc(o.status||'—')+'</span></td>'+
+      '<td>'+
+        '<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();openPaymentDetail(\''+idJs+'\')">Review</button>'+
       '</td>'+
     '</tr>';
   });

@@ -47,7 +47,23 @@ async function loadPayments(){
   }
 
   var { data, error } = await query;
-  if (error) { toast('Error loading payments: '+error.message,'error'); return; }
+  if (error) {
+    // The E-Invoice tab hard-depends on 4 columns from
+    // supabase/migrations/einvoice_requests.sql. When that migration
+    // hasn't been applied yet the query 500s with a "column does not
+    // exist" error. Show an actionable note instead of a raw toast so
+    // the admin knows what to do without pinging support.
+    if (PAYMENTS_VIEW === 'einvoice' && /einvoice_requested_at|does not exist/i.test(error.message||'')){
+      document.getElementById('payments-table').innerHTML =
+        '<div style="padding:1.2rem;border:1px solid #f5c078;background:#fff8ec;border-radius:10px;color:#78350f;font-size:13px;line-height:1.6;">'+
+          '<div style="font-weight:600;margin-bottom:.3rem;">E-Invoice tracking not installed yet</div>'+
+          '<div>Run <code>supabase/migrations/einvoice_requests.sql</code> in the SQL Editor, then run <code>NOTIFY pgrst, \'reload schema\';</code>. Refresh this page to enable the E-Invoice Requests tab.</div>'+
+        '</div>';
+      return;
+    }
+    toast('Error loading payments: '+error.message,'error');
+    return;
+  }
   var orders = data || [];
 
   if (q) {
@@ -70,9 +86,15 @@ window.loadPayments = loadPayments;
 // when the accountant switches tabs (each tab shows the SAME set of
 // KPIs — the workload at a glance).
 async function renderPaymentStats(){
-  var { data: all } = await sb.from('salesweb_customer_orders')
+  // Try with the E-Invoice columns first; fall back to a narrower
+  // projection if the einvoice_requests.sql migration isn't installed
+  // yet so the KPI grid keeps working.
+  var res = await sb.from('salesweb_customer_orders')
     .select('id,status,total,updated_at,einvoice_requested_at,einvoice_uploaded_at');
-  all = all || [];
+  if (res.error && /einvoice_requested_at|does not exist/i.test(res.error.message||'')){
+    res = await sb.from('salesweb_customer_orders').select('id,status,total,updated_at');
+  }
+  var all = res.data || [];
 
   var awaiting = all.filter(function(o){ return o.status==='Pending Payment'; });
   var einvReqs = all.filter(function(o){ return o.einvoice_requested_at && !o.einvoice_uploaded_at; });
@@ -263,30 +285,119 @@ function renderPaymentReview(order, items, attachments, timeline, bills, payment
     itemsHtml = '<div style="color:var(--ink4);font-size:12px;">No items on this order.</div>';
   }
 
-  // ── Credit — Monthly Invoice Breakdown (link to full Orders view) ──
+  // ── Credit — Monthly Invoice Breakdown (fully functional) ──
+  // Mirrors the block in admin-orders.js so the accountant never has
+  // to leave Payments to key in invoice numbers, add per-bill
+  // payments, edit, or delete. Buttons call the same window-scoped
+  // handlers (openCreditBillModal / openAddPaymentModal /
+  // deleteCreditBill / deletePaymentEntry) which refreshOrderContext()
+  // now re-renders THIS modal on completion instead of viewOrder.
   var creditHtml = '';
   if (isCredit){
-    var billsSummary = bills.length
-      ? bills.map(function(b){
-          return '<tr>'+
-            '<td>'+fmtDate(b.bill_date)+'</td>'+
-            '<td>'+esc(b.invoice_no||'—')+'</td>'+
-            '<td style="text-align:right;">'+(Number(b.qty)||0).toLocaleString('en-MY')+'</td>'+
-            '<td style="text-align:right;">RM '+(Number(b.amount)||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>'+
+    var billedSum = bills.reduce(function(s,b){ return s + (Number(b.amount)||0); }, 0);
+    var billedRem = Math.max(0, tot - billedSum);
+    // Bucket the payment ledger by bill_id so each bill shows its own
+    // paid amount, fully-paid pill, and nested payment rows.
+    var paysByBill = {};
+    var unlinkedPays = [];
+    payments.forEach(function(p){
+      if (p.bill_id){ (paysByBill[p.bill_id] = paysByBill[p.bill_id] || []).push(p); }
+      else { unlinkedPays.push(p); }
+    });
+
+    var addBillBtn = tot > 0 && billedSum < tot
+      ? '<button class="btn btn-primary btn-sm" onclick="openCreditBillModal(\''+idJs+'\','+billedRem.toFixed(2)+')" style="font-size:11px;padding:5px 10px;">+ Add Bill</button>'
+      : '<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;font-size:10px;">Fully Billed</span>';
+
+    var billsRowsHtml = '';
+    if (bills.length){
+      billsRowsHtml += '<table class="data-table" style="font-size:12px;"><thead><tr>'+
+        '<th>Date</th><th>Invoice No.</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Amount</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Action</th>'+
+      '</tr></thead><tbody>';
+      bills.forEach(function(b){
+        var bidJs   = String(b.id||'').replace(/[\\'"<>]/g,'');
+        var billPays= paysByBill[b.id] || [];
+        var billPaid= billPays.reduce(function(s,p){ return s + (Number(p.amount)||0); }, 0);
+        var billAmt = Number(b.amount)||0;
+        var billBal = Math.max(0, billAmt - billPaid);
+        var fullyPaid = billAmt > 0 && billPaid >= billAmt - 0.005;   // 0.5-sen tolerance
+        var actionCell = fullyPaid
+          ? '<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;font-size:10px;padding:3px 8px;">✓ Fully Paid</span>'
+          : ('<button class="btn btn-primary btn-sm" onclick="openAddPaymentModal(\''+idJs+'\','+billBal.toFixed(2)+',\''+bidJs+'\')" style="font-size:10px;padding:2px 8px;margin-right:.2rem;">+ Add Payment</button>'+
+             '<button class="btn btn-outline btn-sm" onclick="openCreditBillModal(\''+idJs+'\',null,\''+bidJs+'\')" style="font-size:10px;padding:2px 6px;margin-right:.2rem;">Edit</button>'+
+             '<button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;color:var(--red);border-color:var(--red);" onclick="deleteCreditBill(\''+bidJs+'\',\''+idJs+'\')">✕</button>');
+        billsRowsHtml += '<tr>'+
+          '<td>'+esc(String(b.bill_date||'').substring(0,10))+'</td>'+
+          '<td>'+esc(b.invoice_no||'—')+'</td>'+
+          '<td style="text-align:right;">'+(Number(b.qty)||0).toLocaleString()+'</td>'+
+          '<td style="text-align:right;font-weight:600;">RM '+(billAmt).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>'+
+          '<td style="text-align:right;color:'+(billPaid>0?'var(--green)':'var(--ink4)')+';font-weight:600;">RM '+(billPaid).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>'+
+          '<td style="text-align:right;white-space:nowrap;">'+actionCell+'</td>'+
+        '</tr>';
+        // Nested payment rows for this bill
+        billPays.forEach(function(p){
+          var rid = String(p.id||'').replace(/[\\'"<>]/g,'');
+          var hasAtt = !!p.attachment_url;
+          var attCell = '<span style="color:var(--ink4);">—</span>';
+          var rowClick = '', rowStyle = 'background:#fafafa;';
+          if (hasAtt){
+            var u = String(p.attachment_url).replace(/'/g,'%27');
+            var n = String(p.attachment_name||'document').replace(/'/g,'\\\'');
+            attCell = '<span style="color:var(--green);">📎 '+esc(p.attachment_name||'document')+'</span>';
+            rowClick = ' onclick="openAttachmentPreview(\''+u+'\',\''+n+'\',\'\');"';
+            rowStyle += 'cursor:pointer;';
+          }
+          billsRowsHtml += '<tr style="'+rowStyle+'"'+rowClick+'>'+
+            '<td colspan="2" style="padding-left:1.5rem;font-size:11px;color:var(--ink3);">↳ '+esc(fmtDate(p.paid_at))+'</td>'+
+            '<td colspan="2" style="font-size:11px;">'+attCell+'</td>'+
+            '<td style="text-align:right;font-size:11px;font-weight:600;color:var(--green);">RM '+(Number(p.amount)||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>'+
+            '<td style="text-align:right;">'+
+              '<button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;color:var(--red);border-color:var(--red);" onclick="event.stopPropagation();deletePaymentEntry(\''+rid+'\',\''+idJs+'\')">✕</button>'+
+            '</td>'+
           '</tr>';
-        }).join('')
-      : '<tr><td colspan="4" style="color:var(--ink4);font-size:12px;padding:.6rem;">No bills recorded yet.</td></tr>';
+        });
+      });
+      // Legacy unlinked payments (recorded before per-bill link existed).
+      if (unlinkedPays.length){
+        billsRowsHtml += '<tr style="background:#fff7ed;"><td colspan="6" style="font-size:11px;font-weight:600;color:#9a3412;padding-top:.4rem;">Unlinked payments (not tied to a specific invoice)</td></tr>';
+        unlinkedPays.forEach(function(p){
+          var rid = String(p.id||'').replace(/[\\'"<>]/g,'');
+          var hasAtt = !!p.attachment_url;
+          var attCell = '<span style="color:var(--ink4);">—</span>';
+          var rowClick = '', rowStyle = 'background:#fff7ed;';
+          if (hasAtt){
+            var u = String(p.attachment_url).replace(/'/g,'%27');
+            var n = String(p.attachment_name||'document').replace(/'/g,'\\\'');
+            attCell = '<span style="color:var(--green);">📎 '+esc(p.attachment_name||'document')+'</span>';
+            rowClick = ' onclick="openAttachmentPreview(\''+u+'\',\''+n+'\',\'\');"';
+            rowStyle += 'cursor:pointer;';
+          }
+          billsRowsHtml += '<tr style="'+rowStyle+'"'+rowClick+'>'+
+            '<td colspan="2" style="font-size:11px;color:var(--ink3);">'+esc(fmtDate(p.paid_at))+'</td>'+
+            '<td colspan="2" style="font-size:11px;">'+attCell+'</td>'+
+            '<td style="text-align:right;font-weight:600;color:var(--green);">RM '+(Number(p.amount)||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>'+
+            '<td style="text-align:right;"><button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;color:var(--red);border-color:var(--red);" onclick="event.stopPropagation();deletePaymentEntry(\''+rid+'\',\''+idJs+'\')">✕</button></td>'+
+          '</tr>';
+        });
+      }
+      billsRowsHtml += '</tbody></table>';
+    } else {
+      billsRowsHtml = '<div style="font-size:12px;color:var(--ink4);padding:.3rem 0;">No bills yet. Click <strong>+ Add Bill</strong> to log the first one.</div>';
+    }
+
     creditHtml =
-      '<div style="margin-top:1.2rem;padding:.9rem 1rem;background:#f1f5ff;border:1px solid #dbe5ff;border-radius:10px;">'+
+      '<div style="margin-top:1.2rem;padding:.9rem 1rem;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;">'+
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">'+
           '<div style="font-weight:600;color:#1d4ed8;font-size:13px;">Credit — Monthly Invoice Breakdown</div>'+
-          '<button class="btn btn-outline btn-sm" onclick="closeModal(\'modal-payment\');window.viewOrder(\''+idJs+'\')">Open in Orders →</button>'+
+          '<span style="font-size:11px;color:var(--ink3);">Order placed '+fmtDate(order.created_at)+'</span>'+
         '</div>'+
-        '<table class="data-table" style="font-size:12px;background:#fff;">'+
-          '<thead><tr><th>Date</th><th>Invoice No.</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Amount</th></tr></thead>'+
-          '<tbody>'+billsSummary+'</tbody>'+
-        '</table>'+
-        '<div style="font-size:11px;color:var(--ink4);margin-top:.4rem;">Bill entries + per-invoice payments are edited in the Orders tab.</div>'+
+        '<div style="background:#fff;border:1px solid #dbeafe;border-radius:8px;padding:.6rem .8rem;">'+
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem;">'+
+            '<div style="font-size:12px;font-weight:600;">Billings ('+bills.length+' entr'+(bills.length===1?'y':'ies')+')</div>'+
+            addBillBtn+
+          '</div>'+
+          billsRowsHtml+
+        '</div>'+
       '</div>';
   }
 

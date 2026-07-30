@@ -444,6 +444,20 @@ function orderBadgeCls(s){
   return{'Pending Payment':'badge-amber','Partially Paid':'badge-amber','Paid':'badge-blue','Ready for Collection':'badge-green','Completed':'badge-grey','Cancelled':'badge-red','Refunded':'badge-red'}[s]||'badge-grey';
 }
 
+// After a credit-bill or per-invoice payment mutation, refresh whichever
+// order modal is currently open — Orders (#modal-order) or Payments
+// (#modal-payment). Falls back to viewOrder so any legacy caller that
+// bypasses the wrapper still gets its full re-render.
+function refreshOrderContext(orderId){
+  var payModal = document.getElementById('modal-payment');
+  if(payModal && payModal.classList.contains('open') && typeof window.openPaymentDetail === 'function'){
+    window.openPaymentDetail(orderId);
+    return;
+  }
+  viewOrder(orderId);
+}
+window.refreshOrderContext = refreshOrderContext;
+
 // ═══════════════════════════════════════
 //  VIEW ORDER — FULL DETAIL
 // ═══════════════════════════════════════
@@ -3270,7 +3284,7 @@ async function savePaymentEntry(){
     // RPC path succeeded — skip the legacy direct-insert flow below.
     closeModal('modal-add-payment');
     toast(uploadWarning ? ('Payment RM '+fmtMYR(amt)+' saved. '+uploadWarning) : ('Payment recorded: RM '+fmtMYR(amt)));
-    viewOrder(orderId);
+    refreshOrderContext(orderId);
     return;
   }
   var rpcMsg = (rpcRes.error && rpcRes.error.message) || '';
@@ -3343,7 +3357,7 @@ async function savePaymentEntry(){
 
   closeModal('modal-add-payment');
   toast(uploadWarning ? ('Payment RM '+fmtMYR(amt)+' saved. '+uploadWarning) : ('Payment recorded: RM '+fmtMYR(amt)));
-  viewOrder(orderId);
+  refreshOrderContext(orderId);
 }
 
 async function deletePaymentEntry(paymentId, orderId){
@@ -3351,12 +3365,12 @@ async function deletePaymentEntry(paymentId, orderId){
   // Route through the SECURITY DEFINER RPC so RLS on
   // salesweb_order_payments doesn't silently swallow the delete.
   var rpc = await sb.rpc('delete_order_payment', { p_payment_id: paymentId });
-  if(!rpc.error){ toast('Payment entry deleted'); viewOrder(orderId); return; }
+  if(!rpc.error){ toast('Payment entry deleted'); refreshOrderContext(orderId); return; }
   console.warn('[deletePaymentEntry] RPC unavailable, falling back to direct delete:', rpc.error.message);
   var{error} = await sb.from('salesweb_order_payments').delete().eq('id', paymentId);
   if(error){ toast('Delete failed: '+error.message,'error'); return; }
   toast('Payment entry deleted');
-  viewOrder(orderId);
+  refreshOrderContext(orderId);
 }
 
 // ═══════════════════════════════════════

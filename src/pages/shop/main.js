@@ -1408,6 +1408,7 @@ export function initShopMain() {
     else if(q){html='<div class="p-card" style="text-align:center;padding:1.5rem;font-size:13px;color:var(--text-light);">No matching orders found.</div>';}
     else{html='<div class="p-card" style="text-align:center;padding:2.5rem 1.5rem;"><div style="font-size:2rem;margin-bottom:.6rem;">📦</div><div style="font-family:\'Cormorant Garamond\',serif;font-size:1.1rem;color:var(--text-dark);margin-bottom:.4rem;">No Active Orders</div><div style="font-size:12px;color:var(--text-light);line-height:1.5;">You don\'t have any active orders at the moment.<br>Browse our shop to place your first order.</div><button onclick="showPage(\'home\')" class="p-btn" style="margin-top:1rem;">Browse Shop</button></div>';}
     document.getElementById('pp-orders').innerHTML=html;
+    pStartEInvoiceCountdowns();
   }
 
   // History (left side — separate panel)
@@ -1424,6 +1425,7 @@ export function initShopMain() {
     else if(q){html='<div class="p-card" style="text-align:center;padding:1.5rem;font-size:13px;color:var(--text-light);">No matching orders found.</div>';}
     else{html='<div class="p-card" style="text-align:center;padding:2.5rem 1.5rem;"><div style="font-size:2rem;margin-bottom:.6rem;">📋</div><div style="font-family:\'Cormorant Garamond\',serif;font-size:1.1rem;color:var(--text-dark);margin-bottom:.4rem;">No Order History</div><div style="font-size:12px;color:var(--text-light);line-height:1.5;">Your completed orders will appear here.</div></div>';}
     document.getElementById('pp-history').innerHTML=html;
+    pStartEInvoiceCountdowns();
   }
 
   function pOrderMatchSearch(o,q){
@@ -1517,6 +1519,7 @@ export function initShopMain() {
     var HIGH_VALUE = 10000;
     var isCompany  = (o.billingType === 'company');
     var isHighVal  = (Number(o.total)||0) >= HIGH_VALUE;
+    var isCancelled= (o.status === 'Cancelled' || o.status === 'Refunded');
     var idJs = String(o.fullId || o.id || '').replace(/[\\'"<>]/g,'');
 
     // Uploaded state — clickable link to the E-Invoice PDF.
@@ -1524,6 +1527,15 @@ export function initShopMain() {
       return '<div style="padding:.55rem .8rem;border-top:1px solid #f0f0ec;background:#ecfdf5;display:flex;justify-content:space-between;align-items:center;font-size:12px;">'+
                '<div><strong style="color:#15803d;">✓ E-Invoice issued</strong><span style="color:var(--text-light);margin-left:.4rem;">'+esc(o.einvoiceName||'invoice.pdf')+'</span></div>'+
                '<a href="'+esc(o.einvoiceUrl)+'" target="_blank" rel="noopener" onclick="event.stopPropagation();" style="color:#15803d;font-weight:600;text-decoration:underline;">View E-Invoice</a>'+
+             '</div>';
+    }
+    // Cancelled / refunded — E-Invoice can't be requested. Show a
+    // greyed-out disabled button so customers know the option existed
+    // but is no longer available for this order.
+    if(isCancelled){
+      return '<div style="padding:.55rem .8rem;border-top:1px solid #f0f0ec;background:#f5f5f4;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--text-light);gap:.5rem;flex-wrap:wrap;">'+
+               '<div>E-Invoice not available — order '+esc(String(o.status||'').toLowerCase())+'.</div>'+
+               '<button disabled style="background:#e5e7eb;color:#9ca3af;border:none;border-radius:8px;font-size:11px;padding:.4rem .8rem;cursor:not-allowed;">Request E-Invoice</button>'+
              '</div>';
     }
     // Company OR ≥RM10k — auto-generated per policy. Positive
@@ -1543,21 +1555,73 @@ export function initShopMain() {
                '<div>⏳ <strong>E-Invoice requested</strong> — waiting for accounts to issue.</div>'+
              '</div>';
     }
-    // Personal < RM10k, no request yet — show button + countdown.
+    // Personal < RM10k, no request yet — show button + live D:H:M:S
+    // countdown. Deadline is stamped as a data attribute so
+    // pStartEInvoiceCountdowns() can tick every element once a second
+    // without re-rendering the whole order card.
     var ordered = new Date(o.createdAt).getTime();
     var deadline = ordered + 5*24*60*60*1000;
     var msLeft = deadline - Date.now();
-    var daysLeft = Math.ceil(msLeft / (24*60*60*1000));
     if(msLeft <= 0){
       return '<div style="padding:.55rem .8rem;border-top:1px solid #f0f0ec;background:#f5f5f4;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--text-light);">'+
                '<div>E-Invoice request window closed (5 days expired).</div>'+
                '<button disabled style="background:#e5e7eb;color:#9ca3af;border:none;border-radius:8px;font-size:11px;padding:.4rem .8rem;cursor:not-allowed;">Request E-Invoice</button>'+
              '</div>';
     }
-    return '<div style="padding:.55rem .8rem;border-top:1px solid #f0f0ec;background:#fffbeb;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#78350f;gap:.5rem;flex-wrap:wrap;">'+
-             '<div><strong>Need an E-Invoice?</strong> '+daysLeft+' day'+(daysLeft===1?'':'s')+' left to request.</div>'+
+    // Countdown chip styling — compact black/dark background with
+    // orange digit-labels, echoing the flip-clock look ops asked for.
+    var chip = 'display:inline-flex;flex-direction:column;align-items:center;justify-content:center;background:#1f1d1a;color:#fff;border-radius:6px;padding:.25rem .45rem;min-width:38px;line-height:1;box-shadow:inset 0 -2px 0 rgba(0,0,0,.35);';
+    var lab  = 'font-size:8px;color:#f59e0b;text-transform:uppercase;letter-spacing:.06em;margin-top:2px;font-weight:600;';
+    var num  = 'font-family:\'SFMono-Regular\',Consolas,monospace;font-size:14px;font-weight:700;letter-spacing:.03em;';
+    return '<div style="padding:.55rem .8rem;border-top:1px solid #f0f0ec;background:#fffbeb;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#78350f;gap:.6rem;flex-wrap:wrap;">'+
+             '<div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;">'+
+               '<div><strong>Need an E-Invoice?</strong><div style="font-size:10px;color:#9a3412;margin-top:2px;">Request window closes in</div></div>'+
+               '<div class="einv-countdown" data-einv-deadline="'+deadline+'" style="display:flex;gap:.25rem;align-items:center;">'+
+                 '<div style="'+chip+'"><span style="'+num+'" data-slot="d">--</span><span style="'+lab+'">Days</span></div>'+
+                 '<span style="color:#9a3412;font-weight:700;">:</span>'+
+                 '<div style="'+chip+'"><span style="'+num+'" data-slot="h">--</span><span style="'+lab+'">Hrs</span></div>'+
+                 '<span style="color:#9a3412;font-weight:700;">:</span>'+
+                 '<div style="'+chip+'"><span style="'+num+'" data-slot="m">--</span><span style="'+lab+'">Min</span></div>'+
+                 '<span style="color:#9a3412;font-weight:700;">:</span>'+
+                 '<div style="'+chip+'"><span style="'+num+'" data-slot="s">--</span><span style="'+lab+'">Sec</span></div>'+
+               '</div>'+
+             '</div>'+
              '<button onclick="event.stopPropagation();pRequestEInvoice(\''+idJs+'\')" class="p-btn" style="background:var(--green-dark);color:#fff;font-size:11px;padding:.4rem .8rem;">Request E-Invoice</button>'+
            '</div>';
+  }
+
+  // One global 1-Hz tick refreshes every visible countdown chip so
+  // hundreds of orders on-screen cost one interval, not one-per-card.
+  // If the deadline lapses mid-tick, the whole strip re-renders (via
+  // pRenderOrders/pRenderHistory) so the button flips to the disabled
+  // "window closed" state without a page reload.
+  var _P_EINV_TIMER = null;
+  function pStartEInvoiceCountdowns(){
+    if(_P_EINV_TIMER) return;   // idempotent — pRender* fires it every render
+    _P_EINV_TIMER = setInterval(function(){
+      var nodes = document.querySelectorAll('.einv-countdown[data-einv-deadline]');
+      if(!nodes.length) return;
+      var now = Date.now();
+      var flippedAny = false;
+      nodes.forEach(function(el){
+        var deadline = Number(el.getAttribute('data-einv-deadline'))||0;
+        var ms = deadline - now;
+        if(ms <= 0){ flippedAny = true; return; }
+        var days = Math.floor(ms / 86400000);
+        var hrs  = Math.floor((ms % 86400000) / 3600000);
+        var mins = Math.floor((ms % 3600000) / 60000);
+        var secs = Math.floor((ms % 60000) / 1000);
+        var pad  = function(n){ return (n<10?'0':'')+n; };
+        var slots = { d:pad(days), h:pad(hrs), m:pad(mins), s:pad(secs) };
+        el.querySelectorAll('[data-slot]').forEach(function(sp){
+          var k = sp.getAttribute('data-slot');
+          if(slots[k] != null && sp.textContent !== slots[k]) sp.textContent = slots[k];
+        });
+      });
+      if(flippedAny){
+        try{ pRenderOrders(); pRenderHistory(); }catch(_){}
+      }
+    }, 1000);
   }
 
   async function pRequestEInvoice(orderId){

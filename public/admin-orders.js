@@ -232,6 +232,12 @@ async function loadOrders(){
       if(sideStatuses.indexOf('Deleted') !== -1 && !!o.deleted_at) ok = true;
       return ok;
     });
+  } else {
+    // No explicit status filter → hide Cancelled by default. Admin
+    // never asks to see a wall of cancelled rows first thing; they
+    // opt in by opening Filter, ticking "Cancelled", and applying.
+    // (Deleted is already hidden by the wantDeleted branch above.)
+    orders = orders.filter(function(o){ return o.status !== 'Cancelled'; });
   }
 
   // ── Payment filter ── (uses amount_paid as the source of truth, with a

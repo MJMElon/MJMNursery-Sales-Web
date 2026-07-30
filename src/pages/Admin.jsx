@@ -335,17 +335,8 @@ export default function Admin() {
                   <div className="card">
                     <div className="filter-bar">
                       <input className="filter-input" id="payment-search" placeholder="Search order number or customer..." onInput={(e) => { window.loadPayments(); }} />
-                      <select className="filter-select" id="payment-filter" onChange={(e) => { window.loadPayments(); }}>
-                        <option value="awaiting">Awaiting Verification</option>
-                        <option value="paid">Paid</option>
-                        <option value="refunded">Refunded</option>
-                        <option value="">All</option>
-                        </select>
-                      <select className="filter-select" id="payment-method-filter" onChange={(e) => { window.loadPayments(); }}>
-                        <option value="">All Methods</option>
-                        <option value="cash">Cash / Bank Transfer</option>
-                        <option value="credit">Credit Terms</option>
-                        </select>
+                      <button className="filter-chip active" data-payment-view="awaiting" onClick={(e) => { window.setPaymentView('awaiting'); }}>Awaiting Verification</button>
+                      <button className="filter-chip" data-payment-view="einvoice" onClick={(e) => { window.setPaymentView('einvoice'); }}>E-Invoice Requests</button>
                       </div>
                     <div id="payments-table"><div className="loading">Loading payments...</div></div>
                     </div>
@@ -717,7 +708,7 @@ export default function Admin() {
             {/* CANCEL STOCK RESTORE MODAL — opened on top of modal-order (z=250) */}
             <div className="modal-overlay" id="modal-cancel-stock" style={{ zIndex: '270' }}><div className="modal" style={{ maxWidth: '600px' }}><div className="modal-head" style={{ background: '#fef2f2' }}><h2 style={{ fontSize: '1.1rem', color: '#dc2626' }}>Cancel Order — Restore Stock</h2><button className="modal-close" onClick={(e) => { closeModal('modal-cancel-stock'); }}>✕</button></div><div className="modal-body" id="cancel-stock-body" style={{ maxHeight: '65vh', overflowY: 'auto' }} /><div className="modal-foot" id="cancel-stock-foot" /></div></div>
             {/* PAYMENT DETAIL MODAL — populated by openPaymentDetail() in admin-payments.js */}
-            <div className="modal-overlay" id="modal-payment" style={{ zIndex: '255' }}><div className="modal" style={{ maxWidth: '760px' }}><div className="modal-head"><h2>Payment Review</h2><button className="modal-close" onClick={(e) => { closeModal('modal-payment'); }}>✕</button></div><div className="modal-body" id="payment-detail-body" style={{ maxHeight: '78vh', overflowY: 'auto' }} /></div></div>
+            <div className="modal-overlay" id="modal-payment" style={{ zIndex: '255' }}><div className="modal" style={{ maxWidth: '960px' }}><div className="modal-head"><h2>Payment Review</h2><button className="modal-close" onClick={(e) => { closeModal('modal-payment'); }}>✕</button></div><div className="modal-body" id="payment-detail-body" style={{ maxHeight: '82vh', overflowY: 'auto' }} /></div></div>
             {/* USER ACCESS MODAL — populated by openUserEdit() in admin-users.js */}
             <div className="modal-overlay" id="modal-user-access" style={{ zIndex: '255' }}><div className="modal" style={{ maxWidth: '520px' }}><div className="modal-head"><h2>Edit User Access</h2><button className="modal-close" onClick={(e) => { closeModal('modal-user-access'); }}>✕</button></div><div className="modal-body" id="user-access-body" style={{ maxHeight: '78vh', overflowY: 'auto' }} /></div></div>
             {/* PRODUCT FORM MODAL */}

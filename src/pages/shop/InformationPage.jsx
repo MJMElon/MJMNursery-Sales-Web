@@ -157,13 +157,13 @@ export default function InformationPage() {
               <h3 style={css(h3Next)}>2. Automatic E-Invoice Processing</h3>
               <p>Official E-Invoices (compliant with LHDN guidelines) are generated and submitted to LHDN automatically for:</p>
               <ul style={css('margin:.5rem 0 .5rem 1.4rem;padding:0;')}>
-                <li>Orders placed under a registered <strong>Company / Corporate Name</strong> (E-Invoice issued upon payment).</li>
-                <li>Orders with a total value of <strong>RM 10,000.00 and above</strong> (E-Invoice issued upon payment).</li>
+                <li>Orders placed under a registered <strong>Company / Corporate Name</strong>.</li>
+                <li>Orders with a total value of <strong>RM 10,000.00 and above</strong>, with an E-Invoice issued upon payment.</li>
               </ul>
 
               <h3 style={css(h3Next)}>3. Personal Orders &amp; Request Window</h3>
               <p>For individual / personal purchases under RM 10,000.00, an official E-Invoice is <strong>not generated automatically</strong>. Customers who need one must submit an explicit request via the active order portal.</p>
-              <p>Requests must be submitted within <strong>five (5) calendar days</strong> from the payment date. After this window, requests are automatically declined and cannot be entertained.</p>
+              <p>Requests must be submitted within <strong>five (5) calendar days</strong> from the order date with payment. After this window, requests are automatically declined and cannot be entertained.</p>
               <p>Unrequested individual orders are aggregated and submitted as a consolidated E-Invoice to LHDN in accordance with regulatory guidelines.</p>
 
               <h3 style={css(h3Next)}>4. Customer Responsibility &amp; Tax Data Accuracy</h3>

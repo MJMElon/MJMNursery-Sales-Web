@@ -628,11 +628,16 @@ function renderPaymentReview(order, items, attachments, timeline, bills, payment
   }
 
   // ── Attached documents (bidirectional with order detail) ──
+  // Delete button routes through admin-orders.js's deleteAttachment(),
+  // which removes both the DB row AND the storage file so a mistaken
+  // upload doesn't linger in the bucket.
   var attHtml = attachments.length
     ? attachments.map(function(a){
-        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem .6rem;border:1px solid var(--border);border-radius:8px;margin-bottom:.3rem;font-size:12px;">'+
-                 '<a href="'+esc(a.file_url)+'" target="_blank" rel="noopener" style="color:var(--ink2);text-decoration:none;">📎 '+esc(a.file_name||'file')+'</a>'+
-                 '<span style="color:var(--ink4);font-size:11px;">'+fmtDate(a.created_at)+'</span>'+
+        var attIdJs = String(a.id||'').replace(/[\\'"<>]/g,'');
+        return '<div style="display:flex;justify-content:space-between;align-items:center;gap:.4rem;padding:.4rem .6rem;border:1px solid var(--border);border-radius:8px;margin-bottom:.3rem;font-size:12px;">'+
+                 '<a href="'+esc(a.file_url)+'" target="_blank" rel="noopener" style="color:var(--ink2);text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📎 '+esc(a.file_name||'file')+'</a>'+
+                 '<span style="color:var(--ink4);font-size:11px;white-space:nowrap;">'+fmtDate(a.created_at)+'</span>'+
+                 '<button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;color:var(--red);border-color:var(--red);" onclick="deletePaymentAttachment(\''+attIdJs+'\',\''+idJs+'\')" title="Delete attachment (removes file + row)">✕</button>'+
                '</div>';
       }).join('')
     : '<div style="color:var(--ink4);font-size:12px;">No documents uploaded yet.</div>';
@@ -915,6 +920,33 @@ async function toggleCreditNoteFlag(orderId, on){
   loadPayments();
 }
 window.toggleCreditNoteFlag = toggleCreditNoteFlag;
+
+// Delete a document from the Payment Review modal. Mirrors
+// admin-orders.js deleteAttachment (removes both the DB row AND the
+// storage object) and re-renders THIS modal instead of Orders so a
+// mistaken upload can be removed inline.
+async function deletePaymentAttachment(attId, orderId){
+  if (!confirm('Delete this attachment?\n\nThe file is removed from storage AND the row is removed from the database — this cannot be undone.')) return;
+  var { data: row, error: rowErr } = await sb.from('salesweb_order_attachments')
+    .select('file_url').eq('id', attId).maybeSingle();
+  if (rowErr){ toast('Lookup failed: '+rowErr.message,'error'); return; }
+  if (!row){ toast('Attachment already gone','error'); openPaymentDetail(orderId); return; }
+
+  var key = '';
+  var parts = String(row.file_url||'').split('/order-attachments/');
+  if (parts.length >= 2){ key = decodeURIComponent(parts[parts.length-1].split('?')[0]); }
+  if (key){
+    var { error: storErr } = await sb.storage.from('order-attachments').remove([key]);
+    if (storErr && !/not.*found/i.test(storErr.message||'')){
+      toast('Storage delete failed: '+storErr.message,'error'); return;
+    }
+  }
+  var { error: dbErr } = await sb.from('salesweb_order_attachments').delete().eq('id', attId);
+  if (dbErr){ toast('DB delete failed: '+dbErr.message,'error'); return; }
+  toast('Attachment deleted');
+  openPaymentDetail(orderId);
+}
+window.deletePaymentAttachment = deletePaymentAttachment;
 
 async function markCreditNoteIssued(orderId, fromModal){
   if (!confirm('Mark this order\'s Credit Note as issued? The row will move out of the Credit Note tab.')) return;

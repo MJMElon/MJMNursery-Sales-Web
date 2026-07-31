@@ -1856,8 +1856,34 @@ async function uploadOrderAttachment(orderId){
 }
 
 async function deleteAttachment(attId,orderId){
-  if(!confirm('Delete this attachment?'))return;
-  await sb.from('salesweb_order_attachments').delete().eq('id',attId);
+  if(!confirm('Delete this attachment?\n\nThe file is removed from storage AND the row is removed from the database — this cannot be undone.'))return;
+
+  // 1. Fetch the row so we can derive the storage key from file_url.
+  //    We don't store the key separately; the public URL contains it
+  //    after the "/order-attachments/" segment.
+  var{data:row, error:rowErr} = await sb.from('salesweb_order_attachments')
+    .select('file_url').eq('id',attId).maybeSingle();
+  if(rowErr){ toast('Lookup failed: '+rowErr.message,'error'); return; }
+  if(!row){ toast('Attachment already gone','error'); loadAttachments(orderId); return; }
+
+  // 2. Remove the storage object. Best-effort — we always try but keep
+  //    going if the file was already deleted server-side, otherwise the
+  //    DB row would linger pointing at a 404.
+  var key = '';
+  var m = String(row.file_url||'').split('/order-attachments/');
+  if(m.length >= 2){ key = decodeURIComponent(m[m.length-1].split('?')[0]); }
+  if(key){
+    var{error:storErr} = await sb.storage.from('order-attachments').remove([key]);
+    if(storErr && !/not.*found/i.test(storErr.message||'')){
+      toast('Storage delete failed: '+storErr.message,'error');
+      return;
+    }
+  }
+
+  // 3. Remove the row.
+  var{error:dbErr} = await sb.from('salesweb_order_attachments').delete().eq('id',attId);
+  if(dbErr){ toast('DB delete failed: '+dbErr.message,'error'); return; }
+
   toast('Attachment deleted');
   loadAttachments(orderId);
 }

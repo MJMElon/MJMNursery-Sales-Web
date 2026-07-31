@@ -21,10 +21,10 @@
    (from admin-orders.js), openEInvoiceUpload (from admin-orders.js).
    ═══════════════════════════════════════════════════════════════════ */
 
-var PAYMENTS_VIEW = 'awaiting';   // 'awaiting' | 'partial' | 'einvoice'
+var PAYMENTS_VIEW = 'awaiting';   // 'awaiting' | 'partial' | 'credit' | 'einvoice'
 
 function setPaymentView(view){
-  PAYMENTS_VIEW = ['awaiting','partial','einvoice'].indexOf(view) >= 0 ? view : 'awaiting';
+  PAYMENTS_VIEW = ['awaiting','partial','credit','einvoice'].indexOf(view) >= 0 ? view : 'awaiting';
   document.querySelectorAll('[data-payment-view]').forEach(function(el){
     el.classList.toggle('active', el.getAttribute('data-payment-view') === PAYMENTS_VIEW);
   });
@@ -48,6 +48,16 @@ async function loadPayments(){
     // can lag when payments are edited per-invoice). Exclude cancelled
     // and refunded orders — those aren't outstanding work.
     query = query.not('status','in','("Cancelled","Refunded")');
+  } else if (PAYMENTS_VIEW === 'credit'){
+    // Credit Note tab: three visibility rules OR'd, minus already-issued.
+    //   - Refunded orders
+    //   - Cancelled orders that received payment (client-side check)
+    //   - Manually flagged (credit_note_flagged_at IS NOT NULL)
+    // Filter by status here + client-side dedup/finalise after payments
+    // are summed. `credit_note_issued_at IS NULL` is applied client-side
+    // so a stale schema cache doesn't block the query.
+    // (No `.in('status',...)` because we also need flagged rows outside
+    // Refunded/Cancelled — we filter client-side.)
   } else {
     query = query.eq('status', 'Pending Payment');
   }
@@ -83,7 +93,39 @@ async function loadPayments(){
   }
 
   renderPaymentStats();
-  if (PAYMENTS_VIEW === 'einvoice') {
+  if (PAYMENTS_VIEW === 'credit') {
+    // Sum payments per order so we can bucket "Cancelled + received
+    // payment" rows client-side, then apply the three OR'd rules and
+    // hide already-issued rows.
+    var candidateIds = orders.map(function(o){ return o.id; });
+    var paidById = {};
+    if (candidateIds.length){
+      for (var i = 0; i < candidateIds.length; i += 500){
+        var slice = candidateIds.slice(i, i+500);
+        var { data: pays } = await sb.from('salesweb_order_payments')
+          .select('order_id, amount').in('order_id', slice);
+        (pays||[]).forEach(function(p){
+          paidById[p.order_id] = (paidById[p.order_id]||0) + (Number(p.amount)||0);
+        });
+      }
+    }
+    var creditRows = orders.filter(function(o){
+      if (o.credit_note_issued_at) return false;
+      var paid = paidById[o.id] != null ? paidById[o.id] : (Number(o.amount_paid)||0);
+      if (o.status === 'Refunded') return true;
+      if (o.status === 'Cancelled' && paid > 0) return true;
+      if (o.credit_note_flagged_at) return true;
+      return false;
+    }).map(function(o){
+      var paid = paidById[o.id] != null ? paidById[o.id] : (Number(o.amount_paid)||0);
+      o._paidSoFar = paid;
+      o._creditReason = o.status === 'Refunded' ? 'refunded'
+                     : (o.status === 'Cancelled' && paid > 0) ? 'cancelled-with-payment'
+                     : 'flagged';
+      return o;
+    });
+    renderCreditNoteTable(creditRows);
+  } else if (PAYMENTS_VIEW === 'einvoice') {
     renderEInvoiceTable(orders);
   } else if (PAYMENTS_VIEW === 'partial') {
     // Sum salesweb_order_payments per order — one query, then bucket
@@ -118,11 +160,15 @@ window.loadPayments = loadPayments;
 // when the accountant switches tabs (each tab shows the SAME set of
 // KPIs — the workload at a glance).
 async function renderPaymentStats(){
-  // Try with the E-Invoice columns first; fall back to a narrower
-  // projection if the einvoice_requests.sql migration isn't installed
-  // yet so the KPI grid keeps working.
+  // Try the widest projection first; fall back through narrower ones
+  // if newer migrations (einvoice_requests.sql, order_credit_note.sql)
+  // haven't been applied yet, so the KPI grid keeps rendering.
   var res = await sb.from('salesweb_customer_orders')
-    .select('id,status,total,amount_paid,updated_at,einvoice_requested_at,einvoice_uploaded_at');
+    .select('id,status,total,amount_paid,updated_at,einvoice_requested_at,einvoice_uploaded_at,credit_note_flagged_at,credit_note_issued_at');
+  if (res.error && /credit_note_|does not exist/i.test(res.error.message||'')){
+    res = await sb.from('salesweb_customer_orders')
+      .select('id,status,total,amount_paid,updated_at,einvoice_requested_at,einvoice_uploaded_at');
+  }
   if (res.error && /einvoice_requested_at|does not exist/i.test(res.error.message||'')){
     res = await sb.from('salesweb_customer_orders').select('id,status,total,amount_paid,updated_at');
   }
@@ -171,6 +217,30 @@ async function renderPaymentStats(){
     return new Date(o.einvoice_uploaded_at) >= monthStart;
   });
 
+  // Credit-note open queue: refunded OR (cancelled + paid>0) OR flagged,
+  // minus already-issued. Uses the same paidById we already built for
+  // Partially Paid, plus explicit lookups for cancelled/refunded rows.
+  var extraIds = all
+    .filter(function(o){ return (o.status==='Cancelled'||o.status==='Refunded') && paidById[o.id]==null; })
+    .map(function(o){ return o.id; });
+  if (extraIds.length){
+    for (var j = 0; j < extraIds.length; j += 500){
+      var slice2 = extraIds.slice(j, j+500);
+      var { data: pays2 } = await sb.from('salesweb_order_payments')
+        .select('order_id, amount').in('order_id', slice2);
+      (pays2||[]).forEach(function(p){
+        paidById[p.order_id] = (paidById[p.order_id]||0) + (Number(p.amount)||0);
+      });
+    }
+  }
+  var creditOpen = all.filter(function(o){
+    if (o.credit_note_issued_at) return false;
+    var paid = paidById[o.id] != null ? paidById[o.id] : (Number(o.amount_paid)||0);
+    return o.status === 'Refunded'
+        || (o.status === 'Cancelled' && paid > 0)
+        || !!o.credit_note_flagged_at;
+  });
+
   var sumAwait = awaiting.reduce(function(s,o){ return s + (o.total||0); }, 0);
   var sumPaid  = paidMonth.reduce(function(s,o){ return s + (o.total||0); }, 0);
 
@@ -179,6 +249,7 @@ async function renderPaymentStats(){
     '<div class="stat-box"><div class="stat-label">Awaiting Value</div><div class="stat-val" style="color:var(--amber)">RM '+sumAwait.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</div></div>'+
     '<div class="stat-box"><div class="stat-label">Partially Paid</div><div class="stat-val" style="color:#1d4ed8;">'+partial.length+'</div></div>'+
     '<div class="stat-box"><div class="stat-label">Outstanding Value</div><div class="stat-val" style="color:#1d4ed8;">RM '+sumPartial.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</div></div>'+
+    '<div class="stat-box"><div class="stat-label">Credit Note Pending</div><div class="stat-val" style="color:#b45309;">'+creditOpen.length+'</div></div>'+
     '<div class="stat-box"><div class="stat-label">E-Invoice Requests</div><div class="stat-val" style="color:#7c5cbf;">'+einvReqs.length+'</div></div>'+
     '<div class="stat-box"><div class="stat-label">Verified This Month</div><div class="stat-val green">'+paidMonth.length+'</div></div>'+
     '<div class="stat-box"><div class="stat-label">Verified Value (MTD)</div><div class="stat-val green">RM '+sumPaid.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</div></div>'+
@@ -261,6 +332,51 @@ function renderPartialTable(orders){
       '<td><span class="badge '+badge(o.status)+'">'+esc(o.status||'—')+'</span></td>'+
       '<td>'+
         '<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();openPaymentDetail(\''+idJs+'\')">Review</button>'+
+      '</td>'+
+    '</tr>';
+  });
+  html += '</tbody></table>';
+  document.getElementById('payments-table').innerHTML = html;
+}
+
+// Credit Note tab — three surfaced buckets share this table:
+//   refunded (auto), cancelled-with-payment (auto), flagged (manual).
+// Each row shows the reason as an amber chip so the accountant knows
+// why it's here before opening the modal.
+function renderCreditNoteTable(orders){
+  if (!orders.length){
+    document.getElementById('payments-table').innerHTML =
+      '<div class="loading">No credit notes pending.</div>';
+    return;
+  }
+  var reasonChip = function(r){
+    if (r === 'refunded')                return '<span class="badge" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;">Refunded</span>';
+    if (r === 'cancelled-with-payment')  return '<span class="badge" style="background:#fef3c7;color:#78350f;border:1px solid #fde68a;">Cancelled · Paid</span>';
+    return '<span class="badge" style="background:#f5e6ff;color:#5b21b6;border:1px solid #ddd0f5;">Flagged</span>';
+  };
+  var html = '<table class="data-table"><thead><tr>'+
+    '<th>Order</th><th>Customer</th><th>Reason</th>'+
+    '<th style="text-align:right;">Order Amount</th><th style="text-align:right;">Received</th>'+
+    '<th>Status</th><th>Action</th>'+
+    '</tr></thead><tbody>';
+  orders.forEach(function(o){
+    var shortId = o.order_number || (o.id||'').substring(0,8).toUpperCase();
+    var idJs    = String(o.id||'').replace(/[\\'"<>]/g,'');
+    var tot     = Number(o.total)||0;
+    var paid    = Number(o._paidSoFar)||0;
+    var statusBadge = (typeof orderBadgeCls === 'function')
+      ? '<span class="badge '+orderBadgeCls(o.status)+'">'+esc(o.status||'—')+'</span>'
+      : '<span class="badge badge-grey">'+esc(o.status||'—')+'</span>';
+    html += '<tr style="cursor:pointer;" onclick="openPaymentDetail(\''+idJs+'\')">'+
+      '<td><strong>'+esc(shortId)+'</strong><div style="font-size:11px;color:var(--ink4);">'+fmtDate(o.created_at)+'</div></td>'+
+      '<td>'+esc(o.customer_name||o.billing_name||'—')+'<div style="font-size:11px;color:var(--ink4);">'+esc(o.customer_email||'')+'</div></td>'+
+      '<td>'+reasonChip(o._creditReason)+'</td>'+
+      '<td style="text-align:right;">RM '+tot.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>'+
+      '<td style="text-align:right;font-weight:600;color:#047857;">RM '+paid.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>'+
+      '<td>'+statusBadge+'</td>'+
+      '<td>'+
+        '<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();openPaymentDetail(\''+idJs+'\')">Review</button> '+
+        '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();markCreditNoteIssued(\''+idJs+'\')">✓ Mark Issued</button>'+
       '</td>'+
     '</tr>';
   });
@@ -541,6 +657,18 @@ function renderPaymentReview(order, items, attachments, timeline, bills, payment
 
   var canPaid     = order.status === 'Pending Payment';
   var canUnpaid   = ['Paid','Ready for Collection'].indexOf(order.status) >= 0;
+  // Credit-note actions — visible on every open order:
+  //   - Flag / Unflag (manual "needs credit note" toggle for orders
+  //     that aren't Refunded/Cancelled but still need one).
+  //   - Mark Credit Note Issued (only when the row is currently in
+  //     the Credit Note tab's open queue; hides the row afterwards).
+  var isCnIssued  = !!order.credit_note_issued_at;
+  var isCnFlagged = !!order.credit_note_flagged_at;
+  var paidTotal   = (payments||[]).reduce(function(s,p){ return s+(Number(p.amount)||0); }, 0)
+                   || Number(order.amount_paid)||0;
+  var inCnQueue   = !isCnIssued && (order.status==='Refunded'
+                                 || (order.status==='Cancelled' && paidTotal>0)
+                                 || isCnFlagged);
 
   return ''+
     // Row 1 — Customer + Order + Payment
@@ -615,6 +743,14 @@ function renderPaymentReview(order, items, attachments, timeline, bills, payment
     '<div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--border);display:flex;gap:.5rem;flex-wrap:wrap;justify-content:flex-end;">'+
       (canPaid   ? '<button class="btn btn-outline btn-sm" style="background:var(--green);color:#fff;border-color:var(--green);" onclick="markPayment(\''+idJs+'\',\'Paid\',true)">✓ Mark as Paid</button>' : '')+
       (canUnpaid ? '<button class="btn btn-outline btn-sm" onclick="markPayment(\''+idJs+'\',\'Pending Payment\',true)">Revert to Unpaid</button>' : '')+
+      (isCnIssued
+        ? '<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;padding:.35rem .6rem;">✓ Credit Note Issued '+esc(fmtDate(order.credit_note_issued_at))+'</span>'
+        : ((isCnFlagged
+             ? '<button class="btn btn-outline btn-sm" onclick="toggleCreditNoteFlag(\''+idJs+'\',false)">Unflag Credit Note</button>'
+             : '<button class="btn btn-outline btn-sm" style="border-color:#b45309;color:#b45309;" onclick="toggleCreditNoteFlag(\''+idJs+'\',true)">Flag for Credit Note</button>')
+          + (inCnQueue
+              ? ' <button class="btn btn-outline btn-sm" style="background:#b45309;color:#fff;border-color:#b45309;" onclick="markCreditNoteIssued(\''+idJs+'\',true)">✓ Mark Credit Note Issued</button>'
+              : ''))+
       '<button class="btn btn-outline btn-sm" onclick="closeModal(\'modal-payment\')">Close</button>'+
     '</div>';
 }
@@ -753,3 +889,60 @@ async function savePaymentNote(){
   toast('Note saved');
 }
 window.savePaymentNote = savePaymentNote;
+
+// ═══════════════════════════════════════
+//  CREDIT NOTE — flag / mark issued
+// ═══════════════════════════════════════
+// Both write directly to timestamp columns added in
+// supabase/migrations/order_credit_note.sql. On error we surface the
+// missing-migration case with an actionable toast so the accountant
+// knows the fix instead of chasing a raw column error.
+async function toggleCreditNoteFlag(orderId, on){
+  var patch = on ? { credit_note_flagged_at: new Date().toISOString() }
+                 : { credit_note_flagged_at: null };
+  patch.updated_at = new Date().toISOString();
+  var { error } = await sb.from('salesweb_customer_orders').update(patch).eq('id', orderId);
+  if (error){
+    if (/credit_note_|does not exist/i.test(error.message||'')){
+      toast('Credit Note tracking not installed yet — run order_credit_note.sql then NOTIFY pgrst','error');
+    } else {
+      toast('Flag failed: '+error.message,'error');
+    }
+    return;
+  }
+  toast(on ? 'Flagged for Credit Note' : 'Credit Note flag cleared');
+  openPaymentDetail(orderId);
+  loadPayments();
+}
+window.toggleCreditNoteFlag = toggleCreditNoteFlag;
+
+async function markCreditNoteIssued(orderId, fromModal){
+  if (!confirm('Mark this order\'s Credit Note as issued? The row will move out of the Credit Note tab.')) return;
+  var nowIso = new Date().toISOString();
+  var { error } = await sb.from('salesweb_customer_orders')
+    .update({ credit_note_issued_at: nowIso, updated_at: nowIso })
+    .eq('id', orderId);
+  if (error){
+    if (/credit_note_|does not exist/i.test(error.message||'')){
+      toast('Credit Note tracking not installed yet — run order_credit_note.sql then NOTIFY pgrst','error');
+    } else {
+      toast('Save failed: '+error.message,'error');
+    }
+    return;
+  }
+  // Audit trail — best-effort.
+  try{
+    var session = await sb.auth.getSession();
+    var actor   = session?.data?.session?.user?.email || 'accountant';
+    await sb.from('salesweb_order_timeline').insert([{
+      order_id: orderId,
+      status:   'Credit Note Issued',
+      note:     'Credit Note marked issued by ' + actor,
+      changed_by: actor
+    }]);
+  }catch(_){ /* non-fatal */ }
+  toast('✓ Credit Note marked issued');
+  if (fromModal) closeModal('modal-payment');
+  loadPayments();
+}
+window.markCreditNoteIssued = markCreditNoteIssued;

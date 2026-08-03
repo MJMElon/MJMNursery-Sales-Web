@@ -11,3 +11,9 @@ verify_jwt = false
 
 [functions.verify-billplz-bill]
 verify_jwt = false
+
+# phone-auth is called by logged-OUT browsers (signup / login by phone
+# number), so it cannot carry a user JWT. It does its own validation and
+# only ever returns sessions minted by GoTrue itself.
+[functions.phone-auth]
+verify_jwt = false

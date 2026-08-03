@@ -3086,6 +3086,10 @@ export function initShopMain() {
     if (btnTogP) btnTogP.textContent = 'First time? Create Account';
     var btnLogin = document.getElementById('cl-btn-login');
     if (btnLogin) btnLogin.textContent = 'Sign In';
+    var btnLoginP = document.getElementById('cl-btn-login-phone');
+    if (btnLoginP) btnLoginP.textContent = 'Sign In';
+    var pwPhone = document.getElementById('cl-password-phone');
+    if (pwPhone) pwPhone.placeholder = 'Password';
     var statusEl = document.getElementById('cl-status');
     if (statusEl) { statusEl.textContent = ''; statusEl.className = 'cl-status'; }
     ['cl-otp-row','cl-otp-row-phone'].forEach(function(id){
@@ -3096,7 +3100,7 @@ export function initShopMain() {
       var el = document.getElementById(id); if (el) el.value = '';
     });
     // Default to phone tab
-    clSwitchMode('email');
+    clSwitchMode('phone');
     // Update subtitle
     var subEl = document.getElementById('lm-sub');
     if (subEl) subEl.textContent = context === 'checkout'
@@ -3125,7 +3129,7 @@ export function initShopMain() {
         if (rowEl) rowEl.classList.add('show');
         var codeEl = document.getElementById(pend.isPhone ? 'cl-otp-code-phone' : 'cl-otp-code');
         if (codeEl) { codeEl.value = ''; setTimeout(function(){ codeEl.focus(); }, 120); }
-        clShowStatus('Enter the code we sent to ' + pend.identity + ', or resend a new one.', 'success');
+        clShowStatus('Enter the code we emailed to ' + (pend.masked || pend.identity) + ', or resend a new one.', 'success');
       } else if (pend) {
         // Expired — drop it so we don't show a stale prompt.
         sessionStorage.removeItem('mjm_pending_otp');
@@ -3171,6 +3175,10 @@ export function initShopMain() {
       var btnP = document.getElementById('cl-btn-toggle-phone');
       if (sf) sf.style.display = clIsSignUp ? 'block' : 'none';
       if (btnP) btnP.textContent = clIsSignUp ? 'Back to Sign In' : 'First time? Create Account';
+      var btnLP = document.getElementById('cl-btn-login-phone');
+      if (btnLP) btnLP.textContent = clIsSignUp ? 'Create Account' : 'Sign In';
+      var pwLP = document.getElementById('cl-password-phone');
+      if (pwLP) pwLP.placeholder = clIsSignUp ? 'Password (optional — blank = login by code)' : 'Password';
     } else {
       document.getElementById('cl-signup-fields').style.display = clIsSignUp ? 'block' : 'none';
       document.getElementById('cl-btn-login').textContent = clIsSignUp ? 'Create Account' : 'Sign In';
@@ -3220,6 +3228,138 @@ export function initShopMain() {
     // Already country-code with no plus
     if (/^\d{10,}$/.test(v)) return '+' + v;
     return v;
+  }
+
+  // ═══════════════════════════════════════
+  //  PHONE-NUMBER AUTH (no SMS provider)
+  // ═══════════════════════════════════════
+  // The phone-auth edge function maps the phone number to the account's
+  // email, then either checks the password or emails a one-time login code
+  // via Resend (the same transport as the order emails). Sessions come back
+  // as a token pair that we hand to supabase-js via setSession().
+
+  async function clPhoneAuthCall(action, payload) {
+    var body = Object.assign({ action: action }, payload || {});
+    var res, data;
+    try {
+      res = await fetch(SUPA_URL + '/functions/v1/phone-auth', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPA_KEY,
+          'Authorization': 'Bearer ' + SUPA_KEY
+        },
+        body: JSON.stringify(body)
+      });
+      data = await res.json();
+    } catch (e) {
+      return { error: 'Network error — please check your connection and try again.' };
+    }
+    if (!res.ok) return { error: (data && data.error) || 'Something went wrong. Please try again.' };
+    return data || {};
+  }
+
+  async function clPhoneAdoptSession(tokens) {
+    if (!tokens || !tokens.access_token) { clShowStatus('Login failed. Please try again.', 'error'); return; }
+    await loadSupabaseSdk();
+    var { data, error } = await _sb.auth.setSession({
+      access_token: tokens.access_token, refresh_token: tokens.refresh_token
+    });
+    if (error || !data || !data.session) { clShowStatus('Login failed. Please try again.', 'error'); return; }
+    try { sessionStorage.removeItem('mjm_pending_otp'); } catch (e) {}
+    await clPostLogin(data.session);
+  }
+
+  function clPhoneRememberPendingOtp(phone, maskedEmail) {
+    try {
+      sessionStorage.setItem('mjm_pending_otp', JSON.stringify({
+        identity: phone, channel: 'email-code', isPhone: true, masked: maskedEmail || '', ts: Date.now()
+      }));
+    } catch (e) {}
+  }
+
+  // Sign In / Create Account button on the phone pane.
+  async function clPhoneAction() {
+    var phone = clNormalisePhone(document.getElementById('cl-phone').value);
+    if (!phone) { clShowStatus('Please enter your phone number.', 'error'); return; }
+    var pw = document.getElementById('cl-password-phone').value;
+
+    if (clIsSignUp) {
+      var name = document.getElementById('cl-signup-name-phone').value.trim();
+      var email = document.getElementById('cl-signup-email-phone').value.trim();
+      if (!name) { clShowStatus('Please enter your full name.', 'error'); return; }
+      if (!email) { clShowStatus('Please enter your email address — login codes are sent there.', 'error'); return; }
+      if (pw && pw.length < 6) { clShowStatus('Password must be at least 6 characters (or leave it blank).', 'error'); return; }
+      clShowStatus('Creating account...', 'success');
+      var r = await clPhoneAuthCall('signup', { name: name, phone: phone, email: email, password: pw });
+      if (r.error) { clShowStatus(r.error, 'error'); return; }
+      if (r.session) {
+        clShowStatus('Account created! Signing you in...', 'success');
+        await clPhoneAdoptSession(r.session);
+        return;
+      }
+      if (r.otp_sent) {
+        document.getElementById('cl-otp-row-phone').classList.add('show');
+        document.getElementById('cl-otp-code-phone').focus();
+        clShowStatus('Account created! Enter the login code we emailed to ' + (r.masked_email || 'your email') + '.', 'success');
+        clPhoneRememberPendingOtp(phone, r.masked_email);
+        return;
+      }
+      // Account exists but neither auto-login nor code delivery worked —
+      // let the customer request a fresh code themselves.
+      clToggleSignup('phone');
+      clShowStatus(r.warning || 'Account created! Use "Email me a Login Code" to sign in.', r.warning ? 'error' : 'success');
+      return;
+    }
+
+    if (!pw) { clShowStatus('Enter your password, or tap "Email me a Login Code".', 'error'); return; }
+    clShowStatus('Signing in...', 'success');
+    var r2 = await clPhoneAuthCall('login', { phone: phone, password: pw });
+    if (r2.error) { clShowStatus(r2.error, 'error'); return; }
+    await clPhoneAdoptSession(r2.session);
+  }
+
+  async function clPhoneSendOTP() {
+    var phone = clNormalisePhone(document.getElementById('cl-phone').value);
+    if (!phone) { clShowStatus('Please enter your phone number.', 'error'); return; }
+    if (clIsSignUp) {
+      clShowStatus('Tap "Create Account" first — we\'ll email your first login code automatically.', 'error');
+      return;
+    }
+    var btn = document.getElementById('cl-btn-otp-phone');
+    var orig = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
+    var r = await clPhoneAuthCall('send-otp', { phone: phone });
+    if (r.error) {
+      clShowStatus(r.error, 'error');
+      if (btn) { btn.disabled = false; btn.textContent = orig; }
+      return;
+    }
+    clShowStatus('Code sent to ' + (r.masked_email || 'your email') + ' — check your inbox.', 'success');
+    document.getElementById('cl-otp-row-phone').classList.add('show');
+    document.getElementById('cl-otp-code-phone').focus();
+    clPhoneRememberPendingOtp(phone, r.masked_email);
+    // Same 30s resend cooldown as the email pane.
+    var cd = 30;
+    if (btn) btn.textContent = 'Sent';
+    var t = setInterval(function() {
+      cd--;
+      if (btn) btn.textContent = 'Resend (' + cd + ')';
+      if (cd <= 0) {
+        clearInterval(t);
+        if (btn) { btn.disabled = false; btn.textContent = orig; }
+      }
+    }, 1000);
+  }
+
+  async function clPhoneVerifyOTP() {
+    var phone = clNormalisePhone(document.getElementById('cl-phone').value);
+    var otp = document.getElementById('cl-otp-code-phone').value.trim();
+    if (!phone || !otp) { clShowStatus('Please enter the code from your email.', 'error'); return; }
+    clShowStatus('Verifying...', 'success');
+    var r = await clPhoneAuthCall('verify-otp', { phone: phone, token: otp });
+    if (r.error) { clShowStatus(r.error, 'error'); return; }
+    await clPhoneAdoptSession(r.session);
   }
 
   async function clLoginPassword() {
@@ -3385,9 +3525,9 @@ export function initShopMain() {
   document.addEventListener('keydown', function(e) {
     if (e.key !== 'Enter') return;
     if (e.target.id === 'cl-otp-code') clVerifyOTP('email');
-    else if (e.target.id === 'cl-otp-code-phone') clVerifyOTP('phone');
+    else if (e.target.id === 'cl-otp-code-phone') clPhoneVerifyOTP();
     else if (e.target.id === 'cl-identity' || e.target.id === 'cl-password') clLoginPassword();
-    else if (e.target.id === 'cl-phone') clSendOTP('sms');
+    else if (e.target.id === 'cl-phone' || e.target.id === 'cl-password-phone') clPhoneAction();
   });
 
   // Sign out
@@ -3674,6 +3814,7 @@ export function initShopMain() {
     // login modal
     clLoginPassword, clSendOTP, clVerifyOTP, clForgotPassword,
     clToggleSignup, clSwitchMode,
+    clPhoneAction, clPhoneSendOTP, clPhoneVerifyOTP,
     // misc helpers referenced indirectly
     initPortal, pRenderOrders, pRenderHistory, loadCustomerOrders,
     setLoggedInUi, setLoggedOutUi, loadSupabaseSdk, sbFetch,

@@ -2680,8 +2680,9 @@ export function initShopMain() {
   //   * receipt  — "RECEIPT", Receipt No MJMRC/#ID, received-from block
   //     (payment method, reference, PAID), items and Amount Paid.
   //   * summary  — plain order copy for cancelled / refunded orders.
-  // Print is triggered automatically; the customer's browser print dialog
-  // is the "Save as PDF" entry point on every desktop platform.
+  // The document opens in a new tab for reading; the on-page
+  // "Print / Save as PDF" button opens the browser print dialog, which is
+  // the "Save as PDF" entry point on every desktop platform.
   function downloadOrder(orderId){
     var o = P_ORDERS.find(function(x){return x.id===orderId;});
     if(!o){ showPortalToast('Order not found'); return; }
@@ -2855,10 +2856,12 @@ export function initShopMain() {
 
       '<div class="foot">This document is computer generated and does not require a signature.</div>'+
       '<div class="no-print" style="text-align:center;margin-top:24px;"><button onclick="window.print()" style="padding:10px 22px;background:#2D4A30;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">Print / Save as PDF</button></div>'+
-      '<script>setTimeout(function(){try{window.print();}catch(e){}},500);<\/script>'+
       '</body></html>';
 
-    var w = window.open('','_blank','width=760,height=920');
+    // Opens in a new tab (no window-features string) and does NOT auto-print
+    // — the customer reads the document first and uses the on-page
+    // "Print / Save as PDF" button when they actually want a copy.
+    var w = window.open('','_blank');
     if(!w){ showPortalToast('Please allow pop-ups to download the document'); return; }
     w.document.open();
     w.document.write(html);

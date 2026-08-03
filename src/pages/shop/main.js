@@ -1350,6 +1350,9 @@ export function initShopMain() {
         einvoiceUrl:         o.einvoice_url  || '',
         einvoiceName:        o.einvoice_name || '',
         createdAt:           o.created_at || null,
+        // Timestamp the order became fully paid (order_amount_paid_at.sql)
+        // — printed as the issue date on the downloadable Receipt.
+        amountPaidAt:        o.amount_paid_at || null,
         // Prefer the type the customer actually picked at checkout
         // (persisted via order_billing_type.sql). Fall back to the old
         // heuristic only for historical rows placed before that column
@@ -2274,11 +2277,18 @@ export function initShopMain() {
 
     // ── Order Info ──
     var idJsDl=String(o.id||'').replace(/[\\'"<>]/g,'');
+    // Download button names the document the customer will actually get
+    // (see pOrderDocKind / downloadOrder): Proforma Invoice while payment
+    // is pending, Receipt once paid, plain order copy otherwise.
+    var dlKind=pOrderDocKind(o);
+    var dlLabel = dlKind==='proforma' ? '📄 Proforma Invoice'
+                : dlKind==='receipt'  ? '🧾 Receipt'
+                : '📄 Download Order';
     h+='<div style="background:var(--cream);border-radius:12px;padding:1rem;margin-bottom:.8rem;">';
     h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;"><span style="font-family:\'Cormorant Garamond\',serif;font-size:1.1rem;font-weight:600;">Order #'+o.id+'</span><span class="p-badge '+pBadge(o.status)+'" style="font-size:11px;">'+o.status+'</span></div>';
     h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;">';
     h+='<div style="font-size:12px;color:var(--text-mid);">'+o.orderDate+'</div>';
-    h+='<button onclick="downloadOrder(\''+idJsDl+'\')" style="background:#fff;border:1.5px solid var(--green-pale);color:var(--green-dark);padding:.35rem .75rem;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:.3rem;transition:all .15s;" onmouseover="this.style.background=\'var(--green-dark)\';this.style.color=\'#fff\';this.style.borderColor=\'var(--green-dark)\';" onmouseout="this.style.background=\'#fff\';this.style.color=\'var(--green-dark)\';this.style.borderColor=\'var(--green-pale)\';">📄 Download Order</button>';
+    h+='<button onclick="downloadOrder(\''+idJsDl+'\')" style="background:#fff;border:1.5px solid var(--green-pale);color:var(--green-dark);padding:.35rem .75rem;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:.3rem;transition:all .15s;" onmouseover="this.style.background=\'var(--green-dark)\';this.style.color=\'#fff\';this.style.borderColor=\'var(--green-dark)\';" onmouseout="this.style.background=\'#fff\';this.style.color=\'var(--green-dark)\';this.style.borderColor=\'var(--green-pale)\';">'+dlLabel+'</button>';
     h+='</div>';
     h+='</div>';
 
@@ -2649,21 +2659,83 @@ export function initShopMain() {
     document.getElementById('p-order-detail-modal').classList.add('open');
   }
 
-  // Opens a print-friendly window with the order receipt — order number,
-  // date, billing details, items, total. When the order is still Pending
-  // Payment, also shows the bank details + a "use Order # as reference"
-  // hint so the customer can pay via bank transfer from the printout.
+  // Which downloadable document an order gets, by lifecycle stage:
+  //   * Pending Payment                      → 'proforma' (Proforma Invoice)
+  //   * Paid / collection / completed        → 'receipt'  (Receipt)
+  //   * Cancelled / Refunded / anything else → 'summary'  (plain order copy)
+  // Shared by the order-detail Download button label and downloadOrder so
+  // the button always names the document the click will produce.
+  function pOrderDocKind(o){
+    if(o.status==='Pending Payment') return 'proforma';
+    if(['Paid','Ready for Collection','Collecting','Completed','Order Completed'].indexOf(o.status)!==-1) return 'receipt';
+    return 'summary';
+  }
+
+  // Opens a print-friendly window with the order's document on the MEGA
+  // JUTAMAS letterhead (layout mirrors the samples approved by accounts):
+  //   * proforma — "PROFORMA INVOICE", PI No MJMPI/#ID, billing details,
+  //     items / discounts / total, and the payment-instructions box
+  //     (bank + "use Order # as reference" hint) so the customer can pay
+  //     via bank transfer straight from the printout.
+  //   * receipt  — "RECEIPT", Receipt No MJMRC/#ID, received-from block
+  //     (payment method, reference, PAID), items and Amount Paid.
+  //   * summary  — plain order copy for cancelled / refunded orders.
   // Print is triggered automatically; the customer's browser print dialog
   // is the "Save as PDF" entry point on every desktop platform.
   function downloadOrder(orderId){
     var o = P_ORDERS.find(function(x){return x.id===orderId;});
     if(!o){ showPortalToast('Order not found'); return; }
 
-    var isPending = (o.status==='Pending Payment');
-    var totalLabel = isPending ? 'Amount to be Paid' : 'Total Paid';
-    var statusColor = isPending ? '#b45309' : '#15803d';
-    var pd = P_PAY_DETAILS || {};
+    var pd   = P_PAY_DETAILS || {};
+    var kind = pOrderDocKind(o);
 
+    var fmtRM   = function(n){ return 'RM '+(Number(n)||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}); };
+    var fmtDate = function(src){
+      var d = src ? new Date(src) : new Date();
+      if(isNaN(d.getTime())) d = new Date();
+      return String(d.getDate()).padStart(2,'0')+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+d.getFullYear();
+    };
+
+    var docTitle, docNo, docDate, partyHeading, totalLabel, winTitle;
+    if(kind==='proforma'){
+      docTitle='PROFORMA INVOICE';  docNo='PI No: MJMPI/#'+esc(o.id);
+      docDate=fmtDate(o.createdAt); partyHeading='BILLING DETAILS';
+      totalLabel='Total';           winTitle='Proforma Invoice MJMPI-'+o.id;
+    } else if(kind==='receipt'){
+      docTitle='RECEIPT';           docNo='Receipt No: MJMRC/#'+esc(o.id);
+      docDate=fmtDate(o.amountPaidAt||o.createdAt); partyHeading='RECEIVED FROM';
+      totalLabel='Amount Paid';     winTitle='Receipt MJMRC-'+o.id;
+    } else {
+      docTitle='ORDER SUMMARY';     docNo='Order #'+esc(o.id);
+      docDate=fmtDate(o.createdAt); partyHeading='BILLING DETAILS';
+      totalLabel='Total';           winTitle='Order '+o.id;
+    }
+
+    // ── Party details rows ──
+    var row = function(lbl,val,valStyle){
+      return '<div class="prow"><span class="plbl">'+lbl+'</span><span class="pval"'+(valStyle?' style="'+valStyle+'"':'')+'>'+val+'</span></div>';
+    };
+    var party = row('Name', esc(o.billingName));
+    if(o.email)        party += row('Email', esc(o.email));
+    if(o.contactPhone) party += row('Phone', esc(o.contactPhone));
+    if(kind!=='receipt'){
+      if(o.billingTin) party += row('TIN', esc(o.billingTin));
+      if(o.billingIc)  party += row('IC',  esc(o.billingIc));
+    }
+    if(o.billingAddr)  party += row('Address', esc(o.billingAddr));
+    if(kind==='receipt'){
+      var payLabel = (o.paymentMethod==='Offline Payment Method' && pd.bank_name)
+                     ? 'Bank Transfer - '+esc(pd.bank_name)
+                     : esc(o.paymentMethod||'—');
+      party += row('Payment Method', payLabel);
+      party += row('Reference', 'Order #'+esc(o.id));
+      party += row('Payment Status', 'PAID', 'color:#38684A;');
+    }
+    if(kind==='summary'){
+      party += row('Order Status', esc(o.status), 'color:#b45309;');
+    }
+
+    // ── Items + discount rows ── (same math as the order-detail modal)
     var itemsHtml = '';
     var subtotal = 0;
     if(o.items && o.items.length){
@@ -2671,107 +2743,123 @@ export function initShopMain() {
         var st = Number(it.subtotal!=null ? it.subtotal : it.unit_price*it.quantity) || 0;
         subtotal += st;
         itemsHtml += '<tr>'+
-          '<td style="padding:8px;border-bottom:1px solid #EEE;">'+esc(stripMonth(it.product_name))+'</td>'+
-          '<td style="padding:8px;border-bottom:1px solid #EEE;text-align:right;">RM '+(Number(it.unit_price)||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>'+
-          '<td style="padding:8px;border-bottom:1px solid #EEE;text-align:right;">'+it.quantity+'</td>'+
-          '<td style="padding:8px;border-bottom:1px solid #EEE;text-align:right;">RM '+st.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>'+
+          '<td>'+esc(stripMonth(it.product_name))+'</td>'+
+          '<td style="text-align:right;">'+fmtRM(it.unit_price)+'</td>'+
+          '<td style="text-align:right;">'+it.quantity+'</td>'+
+          '<td style="text-align:right;">'+fmtRM(st)+'</td>'+
         '</tr>';
       });
     }
-    var subRow='', discRow='';
+    var totRows='';
     if(Math.abs(subtotal - (Number(o.total)||0)) > 0.001){
-      subRow = '<tr><td colspan="3" style="padding:6px 8px;text-align:right;color:#8AAB8C;">Subtotal</td><td style="padding:6px 8px;text-align:right;">RM '+subtotal.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td></tr>';
-      var fmt = function(n){return n.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});};
+      totRows += '<tr class="tot"><td>Subtotal</td><td>'+fmtRM(subtotal)+'</td></tr>';
       var namedTotal = (o.couponDiscount||0) + (o.discountAmount||0) + (o.pointsDiscountRm||0);
       var disc = subtotal - (Number(o.total)||0);
       if(namedTotal > 0.001){
         if(o.couponDiscount > 0){
           var codeLabel = o.couponCode ? ' ('+esc(o.couponCode)+')' : '';
-          discRow += '<tr><td colspan="3" style="padding:6px 8px;text-align:right;color:#dc2626;">Voucher'+codeLabel+'</td><td style="padding:6px 8px;text-align:right;color:#dc2626;">-RM '+fmt(o.couponDiscount)+'</td></tr>';
+          totRows += '<tr class="tot disc"><td>Voucher'+codeLabel+'</td><td>-'+fmtRM(o.couponDiscount)+'</td></tr>';
         }
         if(o.discountAmount > 0){
-          discRow += '<tr><td colspan="3" style="padding:6px 8px;text-align:right;color:#dc2626;">Discount'+(o.discountNote?' ('+esc(o.discountNote)+')':'')+'</td><td style="padding:6px 8px;text-align:right;color:#dc2626;">-RM '+fmt(o.discountAmount)+'</td></tr>';
+          totRows += '<tr class="tot disc"><td>Discount'+(o.discountNote?' ('+esc(o.discountNote)+')':'')+'</td><td>-'+fmtRM(o.discountAmount)+'</td></tr>';
         }
         if(o.pointsDiscountRm > 0){
           var ptsLabel = o.pointsRedeemed ? ' ('+o.pointsRedeemed.toLocaleString()+' pts)' : '';
-          discRow += '<tr><td colspan="3" style="padding:6px 8px;text-align:right;color:#dc2626;">Points'+ptsLabel+'</td><td style="padding:6px 8px;text-align:right;color:#dc2626;">-RM '+fmt(o.pointsDiscountRm)+'</td></tr>';
+          totRows += '<tr class="tot disc"><td>Points'+ptsLabel+'</td><td>-'+fmtRM(o.pointsDiscountRm)+'</td></tr>';
         }
         var residual = disc - namedTotal;
         if(residual > 0.005){
-          discRow += '<tr><td colspan="3" style="padding:6px 8px;text-align:right;color:#dc2626;">Other adjustment</td><td style="padding:6px 8px;text-align:right;color:#dc2626;">-RM '+fmt(residual)+'</td></tr>';
+          totRows += '<tr class="tot disc"><td>Other adjustment</td><td>-'+fmtRM(residual)+'</td></tr>';
         }
       } else if(disc > 0){
-        discRow = '<tr><td colspan="3" style="padding:6px 8px;text-align:right;color:#dc2626;">Discount / Voucher</td><td style="padding:6px 8px;text-align:right;color:#dc2626;">-RM '+fmt(disc)+'</td></tr>';
+        totRows += '<tr class="tot disc"><td>Discount / Voucher</td><td>-'+fmtRM(disc)+'</td></tr>';
       }
     }
 
-    var bankBlock = '';
-    if(isPending){
+    // ── Payment-instructions box — proforma only ──
+    var payBox = '';
+    if(kind==='proforma'){
       var hasBank = pd.bank_name || pd.account_name || pd.account_number || pd.duitnow_qr_url;
-      bankBlock = '<div style="margin-top:24px;padding:18px;background:#FFF8EB;border:1px solid #F2D58F;border-radius:8px;">'+
-        '<div style="font-size:11px;font-weight:700;color:#8A6314;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Payment Instructions</div>'+
+      payBox = '<div class="paybox">'+
+        '<div class="paybox-h">Payment Instructions</div>'+
         (hasBank ?
-          '<div style="font-size:13px;color:#5C4308;line-height:1.7;">'+
+          '<div class="paybox-b">'+
             (pd.bank_name ?      '<div><strong>Bank:</strong> '+esc(pd.bank_name)+'</div>' : '')+
             (pd.account_name ?   '<div><strong>Account Name:</strong> '+esc(pd.account_name)+'</div>' : '')+
             (pd.account_number ? '<div><strong>Account Number:</strong> '+esc(pd.account_number)+'</div>' : '')+
-            '<div style="margin-top:8px;padding-top:8px;border-top:1px dashed #E2C76E;font-size:12px;">Please use <strong>Order #'+esc(o.id)+'</strong> as your payment reference, then upload your payment proof from the portal.</div>'+
+            '<div class="paybox-ref">Please use <strong>Order #'+esc(o.id)+'</strong> as your payment reference, then upload your payment proof from the portal.</div>'+
           '</div>'
           :
-          '<div style="font-size:12px;color:#5C4308;">Please contact MJM Nursery for payment details, and use <strong>Order #'+esc(o.id)+'</strong> as your reference.</div>'
+          '<div class="paybox-b">Please contact MJM Nursery for payment details, and use <strong>Order #'+esc(o.id)+'</strong> as your reference.</div>'
         )+
       '</div>';
     }
 
-    var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Order #'+esc(o.id)+' — MJM Nursery</title>'+
+    var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+esc(winTitle)+'</title>'+
       '<style>'+
-        'body{font-family:Helvetica,Arial,sans-serif;color:#1A2E1B;max-width:680px;margin:30px auto;padding:0 24px;line-height:1.5;}'+
-        'h1{font-family:Georgia,serif;font-size:26px;margin:0 0 4px;color:#2D4A30;font-weight:600;}'+
-        '.muted{color:#8AAB8C;font-size:12px;}'+
-        '.sect{font-size:11px;font-weight:700;color:#4A6B4C;text-transform:uppercase;letter-spacing:.06em;margin:24px 0 8px;padding-bottom:6px;border-bottom:1px solid #C8DFC9;}'+
-        '.row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px;}'+
-        '.row .lbl{color:#8AAB8C;}'+
-        '.row .val{font-weight:600;text-align:right;}'+
-        'table{width:100%;border-collapse:collapse;margin-top:6px;}'+
-        'th{font-size:11px;text-align:left;color:#4A6B4C;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid #2D4A30;padding:8px;}'+
-        '.total{font-size:16px;font-weight:700;color:'+statusColor+';}'+
-        '.brand{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#8AAB8C;}'+
+        'body{font-family:Georgia,"Times New Roman",serif;color:#1A2E1B;max-width:700px;margin:26px auto;padding:0 24px;line-height:1.45;}'+
+        '.co-name{font-size:20px;font-weight:700;}'+
+        '.co-reg{font-size:12px;font-weight:700;margin:1px 0 4px;}'+
+        '.co-line{font-size:10.5px;color:#444;}'+
+        '.doc-title{font-family:Georgia,serif;font-size:23px;font-weight:700;color:#38684A;letter-spacing:.5px;}'+
+        '.doc-meta{font-size:12px;font-weight:600;margin-top:3px;}'+
+        '.sect{font-size:11.5px;font-weight:700;color:#38684A;letter-spacing:.05em;margin:28px 0 4px;}'+
+        '.prow{display:flex;justify-content:space-between;gap:16px;padding:7px 2px;border-bottom:1px solid #DDD;font-size:13px;}'+
+        '.plbl{color:#555;white-space:nowrap;}'+
+        '.pval{font-weight:700;text-align:right;}'+
+        'table{width:100%;border-collapse:collapse;margin-top:4px;}'+
+        'th{font-size:10.5px;text-align:left;color:#38684A;letter-spacing:.05em;border-bottom:1px solid #999;padding:8px 6px;text-transform:uppercase;}'+
+        'th.r{text-align:right;}'+
+        'td{padding:9px 6px;font-size:13px;border-bottom:1px solid #E5E5E5;}'+
+        '.totals{width:55%;margin-left:auto;margin-top:14px;}'+
+        '.totals td{border-bottom:none;padding:4px 6px;text-align:right;}'+
+        '.tot.disc td{color:#C0392B;}'+
+        '.grand{border-top:2px solid #1A1A1A;margin-top:8px;padding-top:10px;display:flex;justify-content:flex-end;gap:46px;align-items:baseline;}'+
+        '.grand .glbl{font-size:15px;font-weight:700;color:#38684A;}'+
+        '.grand .gval{font-size:15px;font-weight:700;}'+
+        '.paybox{margin-top:36px;border:1px solid #38684A;border-radius:2px;padding:16px 20px;}'+
+        '.paybox-h{font-size:11px;font-weight:700;color:#38684A;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;}'+
+        '.paybox-b{font-size:12.5px;color:#38684A;line-height:1.7;}'+
+        '.paybox-b strong{color:#1A2E1B;}'+
+        '.paybox-ref{margin-top:10px;padding-top:10px;border-top:1px dashed #38684A;color:#1A2E1B;font-size:12px;}'+
+        '.foot{margin-top:44px;text-align:center;font-size:11px;font-style:italic;color:#666;}'+
         '@media print{body{margin:0;padding:0 18px;}.no-print{display:none !important;}}'+
       '</style></head><body>'+
-      '<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #2D4A30;padding-bottom:14px;">'+
-        '<div><div class="brand">MJM Nursery</div><h1>Order #'+esc(o.id)+'</h1><div class="muted">Placed on '+esc(o.orderDate)+'</div></div>'+
-        '<div style="text-align:right;"><div class="muted">Status</div><div style="font-size:14px;font-weight:700;color:'+statusColor+';">'+esc(o.status)+'</div></div>'+
+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;">'+
+        '<div>'+
+          '<div class="co-name">MEGA JUTAMAS SDN BHD</div>'+
+          '<div class="co-reg">(663951-U)</div>'+
+          '<div class="co-line">2nd Floor, Lot 1180, Bangunan Bei, Jalan Krokop 2, 98000 Miri, Sarawak.</div>'+
+          '<div class="co-line">TIN No : C 11739927020</div>'+
+          '<div class="co-line">Tel : +6011-2933 7889 / 085-419907&nbsp;&nbsp;&nbsp;Email : nursery.mjsb@gmail.com</div>'+
+          '<div class="co-line">Website : https://www.mjmnursery.com/</div>'+
+        '</div>'+
+        '<div style="text-align:right;flex-shrink:0;">'+
+          '<div class="doc-title">'+docTitle+'</div>'+
+          '<div class="doc-meta">'+docNo+'</div>'+
+          '<div class="doc-meta">Date: '+docDate+'</div>'+
+        '</div>'+
       '</div>'+
 
-      '<div class="sect">Billing Details</div>'+
-      '<div>'+
-        '<div class="row"><span class="lbl">Name</span><span class="val">'+esc(o.billingName)+'</span></div>'+
-        (o.email      ? '<div class="row"><span class="lbl">Email</span><span class="val">'+esc(o.email)+'</span></div>' : '')+
-        (o.contactPhone ? '<div class="row"><span class="lbl">Phone</span><span class="val">'+esc(o.contactPhone)+'</span></div>' : '')+
-        (o.billingTin ? '<div class="row"><span class="lbl">TIN</span><span class="val">'+esc(o.billingTin)+'</span></div>' : '')+
-        (o.billingIc  ? '<div class="row"><span class="lbl">IC</span><span class="val">'+esc(o.billingIc)+'</span></div>' : '')+
-        (o.billingAddr? '<div class="row"><span class="lbl">Address</span><span class="val">'+esc(o.billingAddr)+'</span></div>' : '')+
-        '<div class="row"><span class="lbl">Payment Method</span><span class="val">'+esc(o.paymentMethod)+'</span></div>'+
-      '</div>'+
+      '<div class="sect">'+partyHeading+'</div>'+
+      party +
 
-      '<div class="sect">Items</div>'+
-      '<table><thead><tr><th>Product</th><th style="text-align:right;">Price</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Subtotal</th></tr></thead>'+
+      '<div class="sect">ITEMS</div>'+
+      '<table><thead><tr><th>Product</th><th class="r">Price</th><th class="r">Qty</th><th class="r">Subtotal</th></tr></thead>'+
       '<tbody>'+itemsHtml+'</tbody></table>'+
-      (subRow ? '<table style="margin-top:0;"><tbody>'+subRow+discRow+'</tbody></table>' : '')+
-      '<div style="border-top:2px solid #2D4A30;margin-top:10px;padding-top:12px;display:flex;justify-content:space-between;align-items:center;">'+
-        '<div class="total">'+totalLabel+'</div>'+
-        '<div class="total">RM '+(Number(o.total)||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</div>'+
-      '</div>'+
+      (totRows ? '<table class="totals"><tbody>'+totRows+'</tbody></table>' : '')+
+      '<div class="grand"><span class="glbl">'+totalLabel+'</span><span class="gval">'+fmtRM(o.total)+'</span></div>'+
 
-      bankBlock +
+      payBox +
 
-      '<div style="margin-top:30px;padding-top:14px;border-top:1px solid #C8DFC9;text-align:center;font-size:11px;color:#8AAB8C;">Thank you for choosing MJM Nursery.</div>'+
+      '<div class="foot">This document is computer generated and does not require a signature.</div>'+
       '<div class="no-print" style="text-align:center;margin-top:24px;"><button onclick="window.print()" style="padding:10px 22px;background:#2D4A30;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">Print / Save as PDF</button></div>'+
       '<script>setTimeout(function(){try{window.print();}catch(e){}},500);<\/script>'+
       '</body></html>';
 
     var w = window.open('','_blank','width=760,height=920');
-    if(!w){ showPortalToast('Please allow pop-ups to download the order'); return; }
+    if(!w){ showPortalToast('Please allow pop-ups to download the document'); return; }
     w.document.open();
     w.document.write(html);
     w.document.close();

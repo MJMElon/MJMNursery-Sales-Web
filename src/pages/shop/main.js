@@ -3074,6 +3074,9 @@ export function initShopMain() {
     // SDK load now (no await, so the modal opens instantly; auth.* calls below
     // already await _sb internally via the lazy guard).
     loadSupabaseSdk();
+    // Reveal the SMS / WhatsApp code buttons if Twilio is configured
+    // (async — the modal opens instantly either way).
+    try { clLoadPhoneChannels(); } catch (e) {}
     clLoginContext = context || 'nav';
     // Reset form state
     clIsSignUp = false;
@@ -3129,7 +3132,11 @@ export function initShopMain() {
         if (rowEl) rowEl.classList.add('show');
         var codeEl = document.getElementById(pend.isPhone ? 'cl-otp-code-phone' : 'cl-otp-code');
         if (codeEl) { codeEl.value = ''; setTimeout(function(){ codeEl.focus(); }, 120); }
-        clShowStatus('Enter the code we emailed to ' + (pend.masked || pend.identity) + ', or resend a new one.', 'success');
+        var pendDest = pend.masked || pend.identity;
+        var pendVerb = pend.channel === 'sms' ? 'sent by SMS to '
+          : pend.channel === 'whatsapp' ? 'sent on WhatsApp to '
+          : 'emailed to ';
+        clShowStatus('Enter the code we ' + pendVerb + pendDest + ', or resend a new one.', 'success');
       } else if (pend) {
         // Expired — drop it so we don't show a stale prompt.
         sessionStorage.removeItem('mjm_pending_otp');
@@ -3270,12 +3277,40 @@ export function initShopMain() {
     await clPostLogin(data.session);
   }
 
-  function clPhoneRememberPendingOtp(phone, maskedEmail) {
+  function clPhoneRememberPendingOtp(phone, masked, channel) {
     try {
       sessionStorage.setItem('mjm_pending_otp', JSON.stringify({
-        identity: phone, channel: 'email-code', isPhone: true, masked: maskedEmail || '', ts: Date.now()
+        identity: phone, channel: channel || 'email', isPhone: true, masked: masked || '', ts: Date.now()
       }));
     } catch (e) {}
+  }
+
+  // Ask the edge function which delivery channels are configured, then show
+  // the SMS / WhatsApp buttons. Twilio switches on purely by adding secrets —
+  // no frontend redeploy needed. Cached per page load.
+  var clPhoneChannels = null;
+  async function clLoadPhoneChannels() {
+    if (clPhoneChannels) { clApplyPhoneChannels(); return; }
+    var r = await clPhoneAuthCall('channels', {});
+    if (r && r.channels) { clPhoneChannels = r.channels; clApplyPhoneChannels(); }
+  }
+  function clApplyPhoneChannels() {
+    var ch = clPhoneChannels || {};
+    var anyPhoneChannel = !!(ch.sms || ch.whatsapp);
+    var btnSms = document.getElementById('cl-btn-sms');
+    var btnWa = document.getElementById('cl-btn-wa');
+    var btnEmail = document.getElementById('cl-btn-otp-phone');
+    if (btnSms) btnSms.style.display = ch.sms ? '' : 'none';
+    if (btnWa) btnWa.style.display = ch.whatsapp ? '' : 'none';
+    // Alone, the email button explains itself; next to SMS/WhatsApp a short
+    // label keeps the row tidy.
+    if (btnEmail) btnEmail.textContent = anyPhoneChannel ? 'Email' : 'Email me a Login Code';
+  }
+
+  function clPhoneSentMessage(channel, masked) {
+    if (channel === 'sms') return 'Code sent by SMS to ' + (masked || 'your phone') + '.';
+    if (channel === 'whatsapp') return 'Code sent on WhatsApp to ' + (masked || 'your phone') + '.';
+    return 'Code sent to ' + (masked || 'your email') + ' — check your inbox.';
   }
 
   // Sign In / Create Account button on the phone pane.
@@ -3299,10 +3334,13 @@ export function initShopMain() {
         return;
       }
       if (r.otp_sent) {
+        // Back to sign-in view so the resend buttons work, but keep the
+        // phone filled and jump straight to code entry.
+        clToggleSignup('phone');
         document.getElementById('cl-otp-row-phone').classList.add('show');
         document.getElementById('cl-otp-code-phone').focus();
-        clShowStatus('Account created! Enter the login code we emailed to ' + (r.masked_email || 'your email') + '.', 'success');
-        clPhoneRememberPendingOtp(phone, r.masked_email);
+        clShowStatus('Account created! ' + clPhoneSentMessage(r.channel, r.masked || r.masked_email), 'success');
+        clPhoneRememberPendingOtp(phone, r.masked || r.masked_email, r.channel);
         return;
       }
       // Account exists but neither auto-login nor code delivery worked —
@@ -3319,27 +3357,36 @@ export function initShopMain() {
     await clPhoneAdoptSession(r2.session);
   }
 
-  async function clPhoneSendOTP() {
+  async function clPhoneSendOTP(channel) {
+    channel = channel || 'email';
     var phone = clNormalisePhone(document.getElementById('cl-phone').value);
     if (!phone) { clShowStatus('Please enter your phone number.', 'error'); return; }
     if (clIsSignUp) {
-      clShowStatus('Tap "Create Account" first — we\'ll email your first login code automatically.', 'error');
+      clShowStatus('Tap "Create Account" first — we\'ll send your first login code automatically.', 'error');
       return;
     }
-    var btn = document.getElementById('cl-btn-otp-phone');
+    // Disable all three send buttons during the call; cooldown only lands on
+    // the clicked one so the others stay usable as a fallback channel.
+    var btnIds = { sms: 'cl-btn-sms', whatsapp: 'cl-btn-wa', email: 'cl-btn-otp-phone' };
+    var allBtns = Object.keys(btnIds).map(function(k){ return document.getElementById(btnIds[k]); }).filter(Boolean);
+    var btn = document.getElementById(btnIds[channel] || btnIds.email);
     var orig = btn ? btn.textContent : '';
-    if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
-    var r = await clPhoneAuthCall('send-otp', { phone: phone });
+    allBtns.forEach(function(b){ b.disabled = true; });
+    if (btn) btn.textContent = 'Sending...';
+    var r = await clPhoneAuthCall('send-otp', { phone: phone, channel: channel });
     if (r.error) {
       clShowStatus(r.error, 'error');
-      if (btn) { btn.disabled = false; btn.textContent = orig; }
+      allBtns.forEach(function(b){ b.disabled = false; });
+      if (btn) btn.textContent = orig;
       return;
     }
-    clShowStatus('Code sent to ' + (r.masked_email || 'your email') + ' — check your inbox.', 'success');
+    clShowStatus(clPhoneSentMessage(r.channel || channel, r.masked), 'success');
     document.getElementById('cl-otp-row-phone').classList.add('show');
     document.getElementById('cl-otp-code-phone').focus();
-    clPhoneRememberPendingOtp(phone, r.masked_email);
-    // Same 30s resend cooldown as the email pane.
+    clPhoneRememberPendingOtp(phone, r.masked, r.channel || channel);
+    // 30s cooldown on the clicked button only; siblings come back right away
+    // so the customer can fall back to another channel if nothing arrives.
+    allBtns.forEach(function(b){ if (b !== btn) b.disabled = false; });
     var cd = 30;
     if (btn) btn.textContent = 'Sent';
     var t = setInterval(function() {
@@ -3355,7 +3402,7 @@ export function initShopMain() {
   async function clPhoneVerifyOTP() {
     var phone = clNormalisePhone(document.getElementById('cl-phone').value);
     var otp = document.getElementById('cl-otp-code-phone').value.trim();
-    if (!phone || !otp) { clShowStatus('Please enter the code from your email.', 'error'); return; }
+    if (!phone || !otp) { clShowStatus('Please enter the code you received.', 'error'); return; }
     clShowStatus('Verifying...', 'success');
     var r = await clPhoneAuthCall('verify-otp', { phone: phone, token: otp });
     if (r.error) { clShowStatus(r.error, 'error'); return; }

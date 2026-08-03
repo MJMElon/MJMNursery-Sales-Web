@@ -64,9 +64,15 @@ export default function LoginModal() {
 
               <button className="cl-btn" id="cl-btn-login-phone" onClick={() => window.clPhoneAction()}>Sign In</button>
 
-              <div className="cl-divider"><span>or no password?</span></div>
+              <div className="cl-divider"><span>or login with a code?</span></div>
 
-              <button className="cl-otp-btn" id="cl-btn-otp-phone" onClick={() => window.clPhoneSendOTP()}>Email me a Login Code</button>
+              {/* SMS + WhatsApp stay hidden until the phone-auth function
+                  reports Twilio is configured (see clLoadPhoneChannels). */}
+              <div style={css('display:flex;gap:.5rem;')}>
+                <button className="cl-otp-btn" id="cl-btn-sms" style={css('display:none;flex:1;')} onClick={() => window.clPhoneSendOTP('sms')}>SMS</button>
+                <button className="cl-otp-btn" id="cl-btn-wa" style={css('display:none;flex:1;')} onClick={() => window.clPhoneSendOTP('whatsapp')}>WhatsApp</button>
+                <button className="cl-otp-btn" id="cl-btn-otp-phone" style={css('flex:1;')} onClick={() => window.clPhoneSendOTP('email')}>Email me a Login Code</button>
+              </div>
 
               <div className="cl-otp-row" id="cl-otp-row-phone">
                 <input type="text" id="cl-otp-code-phone" className="cl-input" placeholder="Enter code" maxLength="8" inputMode="numeric" />

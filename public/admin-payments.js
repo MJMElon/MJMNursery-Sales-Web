@@ -748,16 +748,26 @@ function renderPaymentReview(order, items, attachments, timeline, bills, payment
     '<div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--border);display:flex;gap:.5rem;flex-wrap:wrap;justify-content:flex-end;">'+
       (canPaid   ? '<button class="btn btn-outline btn-sm" style="background:var(--green);color:#fff;border-color:var(--green);" onclick="markPayment(\''+idJs+'\',\'Paid\',true)">✓ Mark as Paid</button>' : '')+
       (canUnpaid ? '<button class="btn btn-outline btn-sm" onclick="markPayment(\''+idJs+'\',\'Pending Payment\',true)">Revert to Unpaid</button>' : '')+
-      (isCnIssued
-        ? '<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;padding:.35rem .6rem;">✓ Credit Note Issued '+esc(fmtDate(order.credit_note_issued_at))+'</span>'
-        : ((isCnFlagged
-             ? '<button class="btn btn-outline btn-sm" onclick="toggleCreditNoteFlag(\''+idJs+'\',false)">Unflag Credit Note</button>'
-             : '<button class="btn btn-outline btn-sm" style="border-color:#b45309;color:#b45309;" onclick="toggleCreditNoteFlag(\''+idJs+'\',true)">Flag for Credit Note</button>')
-          + (inCnQueue
-              ? ' <button class="btn btn-outline btn-sm" style="background:#b45309;color:#fff;border-color:#b45309;" onclick="markCreditNoteIssued(\''+idJs+'\',true)">✓ Mark Credit Note Issued</button>'
-              : ''))+
+      creditNoteActionsHtml(idJs, isCnIssued, isCnFlagged, inCnQueue, order) +
       '<button class="btn btn-outline btn-sm" onclick="closeModal(\'modal-payment\')">Close</button>'+
     '</div>';
+}
+
+// Broken-out helper — the inline nested ternary here shipped with an
+// unbalanced paren that made admin-payments.js fail to parse and
+// stranded Payments at "Loading payments…". Keeping this as a plain
+// function is easier to read and impossible to mis-nest.
+function creditNoteActionsHtml(idJs, isCnIssued, isCnFlagged, inCnQueue, order){
+  if (isCnIssued){
+    return '<span class="badge" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;padding:.35rem .6rem;">✓ Credit Note Issued '+esc(fmtDate(order.credit_note_issued_at))+'</span>';
+  }
+  var toggleBtn = isCnFlagged
+    ? '<button class="btn btn-outline btn-sm" onclick="toggleCreditNoteFlag(\''+idJs+'\',false)">Unflag Credit Note</button>'
+    : '<button class="btn btn-outline btn-sm" style="border-color:#b45309;color:#b45309;" onclick="toggleCreditNoteFlag(\''+idJs+'\',true)">Flag for Credit Note</button>';
+  var markIssuedBtn = inCnQueue
+    ? ' <button class="btn btn-outline btn-sm" style="background:#b45309;color:#fff;border-color:#b45309;" onclick="markCreditNoteIssued(\''+idJs+'\',true)">✓ Mark Credit Note Issued</button>'
+    : '';
+  return toggleBtn + markIssuedBtn;
 }
 
 // ═══════════════════════════════════════

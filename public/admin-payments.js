@@ -28,9 +28,21 @@ function setPaymentView(view){
   document.querySelectorAll('[data-payment-view]').forEach(function(el){
     el.classList.toggle('active', el.getAttribute('data-payment-view') === PAYMENTS_VIEW);
   });
+  // Reset every tab's cursor when switching so the new tab always
+  // opens at page 1 — matches the Orders/Customers tab behaviour.
+  window._paymentsPageAw = 1;
+  window._paymentsPagePa = 1;
+  window._paymentsPageCn = 1;
+  window._paymentsPageEi = 1;
   loadPayments();
 }
 window.setPaymentView = setPaymentView;
+
+// Page changers per sub-tab. Same shape as changeOrdersPage.
+window.changePaymentsPageAw = function(n){ window._paymentsPageAw = Math.max(1, Number(n)||1); loadPayments(); try{ window.scrollTo({top:0, behavior:'smooth'}); }catch(_){} };
+window.changePaymentsPagePa = function(n){ window._paymentsPagePa = Math.max(1, Number(n)||1); loadPayments(); try{ window.scrollTo({top:0, behavior:'smooth'}); }catch(_){} };
+window.changePaymentsPageCn = function(n){ window._paymentsPageCn = Math.max(1, Number(n)||1); loadPayments(); try{ window.scrollTo({top:0, behavior:'smooth'}); }catch(_){} };
+window.changePaymentsPageEi = function(n){ window._paymentsPageEi = Math.max(1, Number(n)||1); loadPayments(); try{ window.scrollTo({top:0, behavior:'smooth'}); }catch(_){} };
 
 // ═══════════════════════════════════════
 //  LOAD PAYMENTS — DASHBOARD
@@ -268,10 +280,19 @@ function renderAwaitingTable(orders){
     return;
   }
   var badge = (typeof orderBadgeCls === 'function') ? orderBadgeCls : function(){ return 'badge-amber'; };
+  // 50/page pagination — same shape + purple accent as the Orders and
+  // Customers tabs. Each Payments sub-tab has its own page cursor so
+  // flipping between Awaiting / Partially Paid / Credit Note doesn't
+  // teleport the admin mid-audit.
+  var pageSize = 50;
+  var totalPages = Math.max(1, Math.ceil(orders.length / pageSize));
+  if (!window._paymentsPageAw || window._paymentsPageAw < 1) window._paymentsPageAw = 1;
+  if (window._paymentsPageAw > totalPages) window._paymentsPageAw = 1;
+  var pageOrders = orders.slice((window._paymentsPageAw - 1) * pageSize, window._paymentsPageAw * pageSize);
   var html = '<table class="data-table"><thead><tr>'+
     '<th>Order</th><th>Customer</th><th>Placed</th><th>Method</th><th>Total</th><th>Status</th><th>Action</th>'+
     '</tr></thead><tbody>';
-  orders.forEach(function(o){
+  pageOrders.forEach(function(o){
     var shortId = o.order_number || (o.id||'').substring(0,8).toUpperCase();
     var idJs    = String(o.id||'').replace(/[\\'"<>]/g,'');
     var method  = o.payment_terms === 'credit'
@@ -298,6 +319,9 @@ function renderAwaitingTable(orders){
     '</tr>';
   });
   html += '</tbody></table>';
+  if (typeof window.mjmRenderPagination === 'function'){
+    html += window.mjmRenderPagination(window._paymentsPageAw, totalPages, 'changePaymentsPageAw', orders.length, pageSize);
+  }
   document.getElementById('payments-table').innerHTML = html;
 }
 
@@ -311,12 +335,17 @@ function renderPartialTable(orders){
     return;
   }
   var badge = (typeof orderBadgeCls === 'function') ? orderBadgeCls : function(){ return 'badge-blue'; };
+  var pageSize = 50;
+  var totalPages = Math.max(1, Math.ceil(orders.length / pageSize));
+  if (!window._paymentsPagePa || window._paymentsPagePa < 1) window._paymentsPagePa = 1;
+  if (window._paymentsPagePa > totalPages) window._paymentsPagePa = 1;
+  var pageOrders = orders.slice((window._paymentsPagePa - 1) * pageSize, window._paymentsPagePa * pageSize);
   var html = '<table class="data-table"><thead><tr>'+
     '<th>Order</th><th>Customer</th><th>Placed</th><th>Method</th>'+
     '<th style="text-align:right;">Paid</th><th style="text-align:right;">Total</th><th style="text-align:right;">Outstanding</th>'+
     '<th>Status</th><th>Action</th>'+
     '</tr></thead><tbody>';
-  orders.forEach(function(o){
+  pageOrders.forEach(function(o){
     var shortId = o.order_number || (o.id||'').substring(0,8).toUpperCase();
     var idJs    = String(o.id||'').replace(/[\\'"<>]/g,'');
     var method  = o.payment_terms === 'credit'
@@ -352,6 +381,9 @@ function renderPartialTable(orders){
     '</tr>';
   });
   html += '</tbody></table>';
+  if (typeof window.mjmRenderPagination === 'function'){
+    html += window.mjmRenderPagination(window._paymentsPagePa, totalPages, 'changePaymentsPagePa', orders.length, pageSize);
+  }
   document.getElementById('payments-table').innerHTML = html;
 }
 
@@ -370,12 +402,17 @@ function renderCreditNoteTable(orders){
     if (r === 'cancelled-with-payment')  return '<span class="badge" style="background:#fef3c7;color:#78350f;border:1px solid #fde68a;">Cancelled · Paid</span>';
     return '<span class="badge" style="background:#f5e6ff;color:#5b21b6;border:1px solid #ddd0f5;">Flagged</span>';
   };
+  var pageSize = 50;
+  var totalPages = Math.max(1, Math.ceil(orders.length / pageSize));
+  if (!window._paymentsPageCn || window._paymentsPageCn < 1) window._paymentsPageCn = 1;
+  if (window._paymentsPageCn > totalPages) window._paymentsPageCn = 1;
+  var pageOrders = orders.slice((window._paymentsPageCn - 1) * pageSize, window._paymentsPageCn * pageSize);
   var html = '<table class="data-table"><thead><tr>'+
     '<th>Order</th><th>Customer</th><th>Reason</th>'+
     '<th style="text-align:right;">Order Amount</th><th style="text-align:right;">Received</th>'+
     '<th>Status</th><th>Action</th>'+
     '</tr></thead><tbody>';
-  orders.forEach(function(o){
+  pageOrders.forEach(function(o){
     var shortId = o.order_number || (o.id||'').substring(0,8).toUpperCase();
     var idJs    = String(o.id||'').replace(/[\\'"<>]/g,'');
     var tot     = Number(o.total)||0;
@@ -404,6 +441,9 @@ function renderCreditNoteTable(orders){
     '</tr>';
   });
   html += '</tbody></table>';
+  if (typeof window.mjmRenderPagination === 'function'){
+    html += window.mjmRenderPagination(window._paymentsPageCn, totalPages, 'changePaymentsPageCn', orders.length, pageSize);
+  }
   document.getElementById('payments-table').innerHTML = html;
 }
 
@@ -413,11 +453,16 @@ function renderEInvoiceTable(orders){
       '<div class="loading">No E-Invoice requests waiting.</div>';
     return;
   }
+  var pageSize = 50;
+  var totalPages = Math.max(1, Math.ceil(orders.length / pageSize));
+  if (!window._paymentsPageEi || window._paymentsPageEi < 1) window._paymentsPageEi = 1;
+  if (window._paymentsPageEi > totalPages) window._paymentsPageEi = 1;
+  var pageOrders = orders.slice((window._paymentsPageEi - 1) * pageSize, window._paymentsPageEi * pageSize);
   var html = '<table class="data-table"><thead><tr>'+
     '<th>Order</th><th>Billing Name</th><th>TIN</th><th>Requested</th><th>Total</th><th>Days Left</th><th>Action</th>'+
     '</tr></thead><tbody>';
   var now = Date.now();
-  orders.forEach(function(o){
+  pageOrders.forEach(function(o){
     var shortId = o.order_number || (o.id||'').substring(0,8).toUpperCase();
     var idJs    = String(o.id||'').replace(/[\\'"<>]/g,'');
     // 5-day request window is per-customer policy; here we surface how
@@ -441,6 +486,9 @@ function renderEInvoiceTable(orders){
     '</tr>';
   });
   html += '</tbody></table>';
+  if (typeof window.mjmRenderPagination === 'function'){
+    html += window.mjmRenderPagination(window._paymentsPageEi, totalPages, 'changePaymentsPageEi', orders.length, pageSize);
+  }
   document.getElementById('payments-table').innerHTML = html;
 }
 

@@ -11,7 +11,14 @@
     position: fixed;
     top: 0; right: 0; bottom: 0; left: 0;
     inset: 0; z-index: 9999;
-    background: linear-gradient(160deg, #1a1608 0%, #2c2210 30%, #3d321a 60%, #1a1608 100%);
+    /* Editorial dark-green gradient — mimics an oil palm plantation
+       photograph at golden hour. Radial highlight top-right is where
+       the "sun" bleeds through, matching where the god-rays radiate
+       from behind the seedling. */
+    background:
+      radial-gradient(ellipse at 65% 30%, rgba(180,150,60,.22) 0%, transparent 45%),
+      radial-gradient(ellipse at 90% 50%, rgba(60,90,50,.55) 0%, transparent 55%),
+      linear-gradient(135deg, #1b2416 0%, #22321f 35%, #2b3d24 65%, #1a2415 100%);
     display: flex; align-items: center; justify-content: center;
     transition: opacity 1.2s ease-out;
     overflow: hidden;
@@ -78,36 +85,85 @@
   }
 
   .splash-inner {
-    text-align: center; position: relative; z-index: 2;
+    position: relative; z-index: 2;
     animation: splashIn 1.2s ease-out;
-    width: 100%; max-width: 700px; padding: 0 1rem;
+    width: 100%; max-width: 1200px; padding: 0 3rem;
+    display: grid;
+    grid-template-columns: minmax(280px, 1fr) minmax(0, 1.35fr);
+    align-items: center;
+    gap: 2rem;
   }
-  @keyframes splashIn { from { opacity: 0; transform: scale(.85) translateY(30px); } to { opacity: 1; transform: none; } }
+  @keyframes splashIn { from { opacity: 0; transform: scale(.94) translateY(20px); } to { opacity: 1; transform: none; } }
 
-  .splash-logo {
-    height: 140px; margin-bottom: .5rem;
-    display: block; margin-left: auto; margin-right: auto;
-    filter: drop-shadow(0 4px 20px rgba(201,168,76,.4));
-    animation: logoGlow 3s ease-in-out infinite;
+  /* LEFT column — editorial headline + tagline */
+  .splash-hero-left { padding-right: 1rem; }
+  .splash-heading {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: clamp(2.2rem, 5vw, 3.4rem);
+    font-weight: 400; color: #fff; line-height: 1.05;
+    letter-spacing: .01em; text-shadow: 0 2px 24px rgba(0,0,0,.35);
   }
-  @keyframes logoGlow {
-    0%,100% { filter: drop-shadow(0 4px 20px rgba(201,168,76,.3)); }
-    50% { filter: drop-shadow(0 4px 30px rgba(201,168,76,.6)) drop-shadow(0 0 60px rgba(232,212,154,.2)); }
+  .splash-heading-em {
+    font-style: italic; font-weight: 500;
+    color: var(--gold-light);
+    background: linear-gradient(120deg, #d9c07a 20%, #8ec27a 60%, #cfe0b6 100%);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent; color: transparent;
+  }
+  .splash-hero-rule {
+    width: 64px; height: 2px; margin: .9rem 0 .8rem;
+    background: linear-gradient(90deg, var(--gold-light), rgba(232,212,154,.15));
+    border-radius: 999px;
+  }
+  .splash-tagline {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: clamp(.95rem, 1.5vw, 1.15rem);
+    color: rgba(255,255,255,.82); letter-spacing: .01em;
+    font-weight: 400; font-style: italic;
   }
 
-  .splash-center { display: flex; align-items: center; justify-content: center; gap: 1.5rem; margin: 1rem 0; position: relative; }
-  @media(max-width:600px) {
+  /* RIGHT column — award, halo, seedling, features, caption */
+  .splash-hero-right { display: flex; flex-direction: column; align-items: center; gap: .6rem; position: relative; }
+
+  .splash-center { display: flex; align-items: center; justify-content: center; gap: 1.5rem; margin: .4rem 0; position: relative; }
+
+  /* Halo ring behind the seedling — the ops-reference cinematic circle. */
+  .splash-halo {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 340px; height: 340px; border-radius: 50%;
+    border: 1px dashed rgba(232,212,154,.35);
+    box-shadow: 0 0 60px rgba(232,212,154,.06) inset;
+    animation: haloBreathe 6s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes haloBreathe {
+    0%,100% { transform: translate(-50%,-50%) scale(1); opacity: .7; }
+    50%     { transform: translate(-50%,-50%) scale(1.04); opacity: 1; }
+  }
+
+  .splash-caption {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: clamp(1.2rem, 2vw, 1.6rem);
+    font-weight: 400; color: #fff;
+    letter-spacing: .04em; margin-top: .3rem;
+    text-shadow: 0 2px 20px rgba(0,0,0,.4);
+  }
+
+  /* Mobile: stack the two columns and shrink the hero cluster. */
+  @media (max-width: 900px) {
+    .splash-inner { grid-template-columns: 1fr; gap: 1rem; padding: 0 1.2rem; text-align: center; }
+    .splash-hero-left { padding-right: 0; }
+    .splash-hero-rule { margin-left: auto; margin-right: auto; }
+  }
+  @media (max-width: 600px) {
     .splash-center { flex-direction: column; gap: .4rem; margin: .4rem 0; }
-    .splash-logo { height: 124px !important; margin-bottom: .25rem !important; }
     .splash-seedling { height: 140px !important; }
     .splash-glow { width: 180px !important; height: 180px !important; }
+    .splash-halo  { width: 210px !important; height: 210px !important; }
     .splash-feature { flex: 0 0 auto !important; padding: .4rem .7rem !important; }
     .splash-feature-icon { font-size: 1rem !important; margin-bottom: .15rem !important; }
     .splash-feature-text { font-size: 11px !important; }
-    /* .splash-award mobile sizing lives with the new pill markup below.
-       Kept this line intentionally out of the legacy !important block so
-       the two rulesets don't fight each other. */
-    .splash-title { margin-top: .25rem !important; }
     .splash-rays { width: 100vw !important; height: 100vw !important; }
   }
 

@@ -11,14 +11,13 @@
     position: fixed;
     top: 0; right: 0; bottom: 0; left: 0;
     inset: 0; z-index: 9999;
-    /* Editorial dark-green gradient — mimics an oil palm plantation
-       photograph at golden hour. Radial highlight top-right is where
-       the "sun" bleeds through, matching where the god-rays radiate
-       from behind the seedling. */
+    /* Deep-space plantation dusk — no sun highlight, no god-rays.
+       The seedling itself is the light source now (see .splash-glow +
+       orbiting rings). Very subtle green vignette keeps the corners
+       from feeling flat. */
     background:
-      radial-gradient(ellipse at 65% 30%, rgba(180,150,60,.22) 0%, transparent 45%),
-      radial-gradient(ellipse at 90% 50%, rgba(60,90,50,.55) 0%, transparent 55%),
-      linear-gradient(135deg, #1b2416 0%, #22321f 35%, #2b3d24 65%, #1a2415 100%);
+      radial-gradient(ellipse at 50% 55%, rgba(40,70,45,.35) 0%, transparent 60%),
+      linear-gradient(135deg, #131c11 0%, #18261a 40%, #1c2e1e 70%, #101a10 100%);
     display: flex; align-items: center; justify-content: center;
     transition: opacity 1.2s ease-out;
     overflow: hidden;
@@ -27,6 +26,10 @@
        class wins via higher specificity + opacity:0 already. */
     animation: splashAutoFade 1.5s ease-out 4s forwards;
   }
+  /* Old sun / god-ray layers are no longer used but stay hidden here
+     as a belt-and-braces — even if some cached JS still spawns them
+     they'll be invisible. */
+  .splash-shimmer, .splash-rays, .splash-ray { display: none !important; }
   @keyframes splashAutoFade { to { opacity: 0; pointer-events: none; visibility: hidden; } }
   #splash-poster.fade-out { opacity: 0; pointer-events: none; }
 
@@ -127,19 +130,46 @@
 
   .splash-center { display: flex; align-items: center; justify-content: center; gap: 1.5rem; margin: .4rem 0; position: relative; }
 
-  /* Halo ring behind the seedling — the ops-reference cinematic circle. */
-  .splash-halo {
+  /* Galaxy — three concentric orbit rings around the seedling. Each
+     ring is a thin dashed circle; a small glowing dot lives on the
+     ring's top edge, then the WHOLE ring rotates so the dot traces
+     the perimeter. Different sizes + speeds + directions give the
+     planetary-orbit feel. Pointer-events off so the rings don't
+     intercept clicks on the underlying elements. */
+  .splash-orbit {
     position: absolute; top: 50%; left: 50%;
     transform: translate(-50%, -50%);
-    width: 340px; height: 340px; border-radius: 50%;
-    border: 1px dashed rgba(232,212,154,.35);
-    box-shadow: 0 0 60px rgba(232,212,154,.06) inset;
-    animation: haloBreathe 6s ease-in-out infinite;
-    pointer-events: none;
+    width: 360px; height: 360px; pointer-events: none; z-index: 1;
   }
-  @keyframes haloBreathe {
-    0%,100% { transform: translate(-50%,-50%) scale(1); opacity: .7; }
-    50%     { transform: translate(-50%,-50%) scale(1.04); opacity: 1; }
+  .splash-orbit-ring {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    border-radius: 50%;
+    border: 1px dashed rgba(232,212,154,.28);
+    animation-name: orbitSpin;
+    animation-iteration-count: infinite;
+    animation-timing-function: linear;
+  }
+  .splash-orbit-ring-1 { width: 220px; height: 220px; animation-duration: 14s; }
+  .splash-orbit-ring-2 { width: 300px; height: 300px; animation-duration: 22s; animation-direction: reverse; border-style: solid; border-color: rgba(232,212,154,.14); }
+  .splash-orbit-ring-3 { width: 380px; height: 380px; animation-duration: 34s; border-color: rgba(180,220,180,.16); }
+  @keyframes orbitSpin { to { transform: translate(-50%,-50%) rotate(360deg); } }
+
+  /* One or two dots per ring — sit on the top of the ring (top:-3px)
+     so when the ring rotates they trace the whole perimeter. */
+  .splash-orbit-dot {
+    position: absolute; top: -4px; left: 50%;
+    width: 8px; height: 8px; margin-left: -4px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #fff 0%, #E8D49A 50%, transparent 80%);
+    box-shadow: 0 0 12px rgba(232,212,154,.75), 0 0 24px rgba(232,212,154,.35);
+  }
+  /* Second dot on ring 2 — positioned mid-arc via a translated
+     wrapper trick: rotate the dot itself around the ring's centre. */
+  .splash-orbit-ring-2 .splash-orbit-dot-b {
+    top: 50%; left: -4px; width: 6px; height: 6px;
+    background: radial-gradient(circle, #fff 0%, #C8DFC9 60%, transparent 85%);
+    box-shadow: 0 0 10px rgba(200,223,201,.7);
   }
 
   .splash-caption {
@@ -160,11 +190,13 @@
     .splash-center { flex-direction: column; gap: .4rem; margin: .4rem 0; }
     .splash-seedling { height: 140px !important; }
     .splash-glow { width: 180px !important; height: 180px !important; }
-    .splash-halo  { width: 210px !important; height: 210px !important; }
+    .splash-orbit          { width: 230px !important; height: 230px !important; }
+    .splash-orbit-ring-1   { width: 150px !important; height: 150px !important; }
+    .splash-orbit-ring-2   { width: 200px !important; height: 200px !important; }
+    .splash-orbit-ring-3   { width: 250px !important; height: 250px !important; }
     .splash-feature { flex: 0 0 auto !important; padding: .4rem .7rem !important; }
     .splash-feature-icon { font-size: 1rem !important; margin-bottom: .15rem !important; }
     .splash-feature-text { font-size: 11px !important; }
-    .splash-rays { width: 100vw !important; height: 100vw !important; }
   }
 
   /* Floating feature boxes */

@@ -1546,10 +1546,8 @@ export function initShopMain() {
     // handled without a button click. Wording lifted verbatim from
     // the ops spec (Case 2 of the E-Invoice Request Logic).
     if(isCompany || isHighVal){
-      var reason = isCompany ? 'for company / corporate orders' : 'order value ≥ RM 10,000';
       return '<div style="padding:.55rem .8rem;border-top:1px solid #f0f0ec;background:#eff6ff;font-size:12px;color:#1e40af;line-height:1.5;">'+
-               '<div>✓ <strong>E-Invoice will be prepared and submitted to LHDN</strong> ('+reason+').</div>'+
-               '<div style="color:#3b6bd6;font-size:11px;margin-top:.15rem;">Click on the order to view your E-Invoice once ready.</div>'+
+               '✓ <strong>E-Invoice pending LHDN</strong> — tap the order to view once ready.'+
              '</div>';
     }
     // Requested but not uploaded yet.

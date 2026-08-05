@@ -279,7 +279,14 @@ function renderAwaitingTable(orders){
       : '<span class="badge badge-grey">💵 Cash / Transfer</span>';
     html += '<tr style="cursor:pointer;" onclick="openPaymentDetail(\''+idJs+'\')">'+
       '<td><strong>'+esc(shortId)+'</strong></td>'+
-      '<td>'+esc(o.customer_name||o.billing_name||'—')+'<div style="font-size:11px;color:var(--ink4);">'+esc(o.customer_email||'')+'</div></td>'+
+      '<td>'+esc(o.customer_name||o.billing_name||'—')+
+        (o.billing_name && o.billing_name !== o.customer_name
+          ? '<div style="font-size:11px;color:var(--ink3);font-weight:600;">'+esc(o.billing_name)+'</div>'
+          : '')+
+        (o.customer_email
+          ? '<div style="font-size:11px;color:var(--ink4);">'+esc(o.customer_email)+'</div>'
+          : '')+
+      '</td>'+
       '<td>'+fmtDate(o.created_at)+'</td>'+
       '<td>'+method+'</td>'+
       '<td><strong>RM '+(o.total||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</strong></td>'+
@@ -325,7 +332,14 @@ function renderPartialTable(orders){
       '<div style="font-size:10px;color:var(--ink4);margin-top:2px;">'+pct+'% paid</div>';
     html += '<tr style="cursor:pointer;" onclick="openPaymentDetail(\''+idJs+'\')">'+
       '<td><strong>'+esc(shortId)+'</strong></td>'+
-      '<td>'+esc(o.customer_name||o.billing_name||'—')+'<div style="font-size:11px;color:var(--ink4);">'+esc(o.customer_email||'')+'</div></td>'+
+      '<td>'+esc(o.customer_name||o.billing_name||'—')+
+        (o.billing_name && o.billing_name !== o.customer_name
+          ? '<div style="font-size:11px;color:var(--ink3);font-weight:600;">'+esc(o.billing_name)+'</div>'
+          : '')+
+        (o.customer_email
+          ? '<div style="font-size:11px;color:var(--ink4);">'+esc(o.customer_email)+'</div>'
+          : '')+
+      '</td>'+
       '<td>'+fmtDate(o.created_at)+'</td>'+
       '<td>'+method+'</td>'+
       '<td style="text-align:right;min-width:110px;">'+paidCell+'</td>'+
@@ -371,7 +385,14 @@ function renderCreditNoteTable(orders){
       : '<span class="badge badge-grey">'+esc(o.status||'—')+'</span>';
     html += '<tr style="cursor:pointer;" onclick="openPaymentDetail(\''+idJs+'\')">'+
       '<td><strong>'+esc(shortId)+'</strong><div style="font-size:11px;color:var(--ink4);">'+fmtDate(o.created_at)+'</div></td>'+
-      '<td>'+esc(o.customer_name||o.billing_name||'—')+'<div style="font-size:11px;color:var(--ink4);">'+esc(o.customer_email||'')+'</div></td>'+
+      '<td>'+esc(o.customer_name||o.billing_name||'—')+
+        (o.billing_name && o.billing_name !== o.customer_name
+          ? '<div style="font-size:11px;color:var(--ink3);font-weight:600;">'+esc(o.billing_name)+'</div>'
+          : '')+
+        (o.customer_email
+          ? '<div style="font-size:11px;color:var(--ink4);">'+esc(o.customer_email)+'</div>'
+          : '')+
+      '</td>'+
       '<td>'+reasonChip(o._creditReason)+'</td>'+
       '<td style="text-align:right;">RM '+tot.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>'+
       '<td style="text-align:right;font-weight:600;color:#047857;">RM '+paid.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>'+

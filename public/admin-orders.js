@@ -2344,13 +2344,31 @@ async function openEInvoiceUpload(orderId){
     if(!file){ return; }
     toast('Uploading E-Invoice…');
     var ext = (file.name.split('.').pop()||'pdf').toLowerCase();
-    var key = 'einvoice_'+String(orderId).substring(0,8)+'_'+Date.now()+'.'+ext;
+
+    // Standardise the display + storage name to "<order_number>_E-Invoice.<ext>".
+    // Falls back to the first 8 chars of the UUID if the order_number
+    // column somehow isn't set on this row.
+    var orderNumber = '';
+    try{
+      var { data: ord } = await sb.from('salesweb_customer_orders')
+        .select('order_number').eq('id', orderId).maybeSingle();
+      orderNumber = (ord && ord.order_number) ? String(ord.order_number) : '';
+    }catch(_e){ /* fall through */ }
+    if (!orderNumber) orderNumber = String(orderId).substring(0,8).toUpperCase();
+    // Strip anything the filesystem / URL routing dislikes.
+    var safeOrderNumber = orderNumber.replace(/[^A-Za-z0-9_-]/g,'');
+    var stdName = safeOrderNumber + '_E-Invoice.' + ext;
+
+    // Storage key uses the same standardised name so the bucket also
+    // reflects the naming convention. Include the timestamp so a
+    // re-upload doesn't clobber the previous file irretrievably.
+    var key = 'einvoice_'+safeOrderNumber+'_'+Date.now()+'.'+ext;
     var up = await sb.storage.from('order-attachments').upload(key, file, { contentType: file.type, upsert: true });
     if(up.error){ toast('Upload failed: '+up.error.message,'error'); return; }
     var pub = sb.storage.from('order-attachments').getPublicUrl(key);
     var url = pub && pub.data && pub.data.publicUrl;
     if(!url){ toast('Upload done but public URL missing','error'); return; }
-    var rpc = await sb.rpc('mark_einvoice_uploaded', { p_order_id: orderId, p_url: url, p_name: file.name });
+    var rpc = await sb.rpc('mark_einvoice_uploaded', { p_order_id: orderId, p_url: url, p_name: stdName });
     if(rpc.error){ toast('Save failed: '+rpc.error.message,'error'); return; }
     toast('✓ E-Invoice uploaded');
     viewOrder(orderId);

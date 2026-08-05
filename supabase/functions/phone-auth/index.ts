@@ -3,10 +3,14 @@
 // normal Supabase email user under the hood; the phone number is stored on
 // shared_profiles (unique) and used to look the email up at login time.
 //
-// One-time login codes can be delivered three ways:
-//   email    — via Resend (same transport as send-order-email). Always on.
-//   sms      — via Twilio, when the TWILIO_* secrets below are set.
-//   whatsapp — via Twilio WhatsApp, when TWILIO_WHATSAPP_FROM is set.
+// One-time login codes can be delivered three ways, each channel picking
+// whichever provider has its secrets set (see README.md for setup):
+//   email    — Resend (same transport as send-order-email). Always on.
+//   sms      — Mocean (MOCEAN_API_KEY + MOCEAN_API_SECRET [+ MOCEAN_SMS_FROM]),
+//              falling back to Twilio (TWILIO_* + TWILIO_SMS_FROM).
+//   whatsapp — Meta WhatsApp Cloud API (WHATSAPP_CLOUD_TOKEN +
+//              WHATSAPP_PHONE_NUMBER_ID [+ WHATSAPP_TEMPLATE_NAME/_LANG]),
+//              falling back to Twilio (TWILIO_* + TWILIO_WHATSAPP_FROM).
 // The code itself is always the same Supabase email OTP (generateLink),
 // so verification is identical no matter how the code travelled.
 //
@@ -90,15 +94,28 @@ function esc(s: unknown): string {
 
 interface ProfileRow { id: string; email: string | null; full_name: string | null }
 
-// Which delivery channels are configured. Twilio SMS and WhatsApp switch on
-// as soon as their secrets exist — no code change needed.
+// Which providers are configured. Each channel switches on as soon as any
+// one of its providers has its secrets set — no code change needed.
+//   SMS:      Mocean (Malaysian gateway) or Twilio
+//   WhatsApp: Meta WhatsApp Cloud API or Twilio
+function twilioReady() {
+  return !!((Deno.env.get('TWILIO_ACCOUNT_SID') || '') && (Deno.env.get('TWILIO_AUTH_TOKEN') || ''))
+}
+function smsProvider(): 'mocean' | 'twilio' | null {
+  if ((Deno.env.get('MOCEAN_API_KEY') || '') && (Deno.env.get('MOCEAN_API_SECRET') || '')) return 'mocean'
+  if (twilioReady() && (Deno.env.get('TWILIO_SMS_FROM') || '')) return 'twilio'
+  return null
+}
+function whatsappProvider(): 'meta' | 'twilio' | null {
+  if ((Deno.env.get('WHATSAPP_CLOUD_TOKEN') || '') && (Deno.env.get('WHATSAPP_PHONE_NUMBER_ID') || '')) return 'meta'
+  if (twilioReady() && (Deno.env.get('TWILIO_WHATSAPP_FROM') || '')) return 'twilio'
+  return null
+}
 function enabledChannels() {
-  const sid = Deno.env.get('TWILIO_ACCOUNT_SID') || ''
-  const token = Deno.env.get('TWILIO_AUTH_TOKEN') || ''
   return {
     email: !!(Deno.env.get('RESEND_API_KEY') || ''),
-    sms: !!(sid && token && (Deno.env.get('TWILIO_SMS_FROM') || '')),
-    whatsapp: !!(sid && token && (Deno.env.get('TWILIO_WHATSAPP_FROM') || '')),
+    sms: !!smsProvider(),
+    whatsapp: !!whatsappProvider(),
   }
 }
 
@@ -231,6 +248,95 @@ serve(async (req) => {
       })
       if (!res.ok) {
         console.error(`Twilio ${channel} error:`, await res.text())
+        return { error: 'twilio failed' }
+      }
+      return {}
+    }
+
+    // Mocean (moceanapi.com) — Malaysian SMS gateway with simple sign-up, no
+    // compliance-profile hurdle. Sender defaults to the notification name.
+    async function sendViaMocean(otp: string): Promise<{ error?: string }> {
+      const { fromName } = await getFromConfig()
+      const from = Deno.env.get('MOCEAN_SMS_FROM') || fromName.replace(/[^A-Za-z0-9 ]/g, '').slice(0, 11) || 'MJMNursery'
+      const params = new URLSearchParams({
+        'mocean-api-key': Deno.env.get('MOCEAN_API_KEY') || '',
+        'mocean-api-secret': Deno.env.get('MOCEAN_API_SECRET') || '',
+        'mocean-from': from,
+        'mocean-to': phone.replace('+', ''),
+        'mocean-text': `Your ${fromName} login code is ${otp}. It expires in 1 hour.`,
+        'mocean-resp-format': 'JSON',
+      })
+      const res = await fetch('https://rest.moceanapi.com/rest/2/sms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString(),
+      })
+      const bodyText = await res.text()
+      let ok = res.ok
+      try {
+        const parsed = JSON.parse(bodyText)
+        ok = ok && String(parsed?.messages?.[0]?.status ?? '1') === '0'
+      } catch (_e) { ok = false }
+      if (!ok) {
+        console.error('Mocean SMS error:', bodyText)
+        return { error: 'mocean failed' }
+      }
+      return {}
+    }
+
+    // Meta WhatsApp Cloud API (graph.facebook.com) — direct from Meta, no
+    // Twilio needed. With WHATSAPP_TEMPLATE_NAME set, sends the approved
+    // authentication template (required for production); without it, sends
+    // plain text (only delivered inside a 24h customer-initiated session —
+    // fine for testing with the Meta test number).
+    async function sendViaMetaWhatsApp(otp: string): Promise<{ error?: string }> {
+      const token = Deno.env.get('WHATSAPP_CLOUD_TOKEN') || ''
+      const phoneNumberId = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID') || ''
+      const templateName = Deno.env.get('WHATSAPP_TEMPLATE_NAME') || ''
+      const templateLang = Deno.env.get('WHATSAPP_TEMPLATE_LANG') || 'en'
+      const { fromName } = await getFromConfig()
+
+      const payload: Record<string, unknown> = {
+        messaging_product: 'whatsapp',
+        to: phone.replace('+', ''),
+      }
+      if (templateName) {
+        payload.type = 'template'
+        payload.template = {
+          name: templateName,
+          language: { code: templateLang },
+          components: [
+            { type: 'body', parameters: [{ type: 'text', text: otp }] },
+            // Authentication templates ship with a copy-code button whose
+            // parameter is the same code.
+            { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: otp }] },
+          ],
+        }
+      } else {
+        payload.type = 'text'
+        payload.text = { body: `Your ${fromName} login code is ${otp}. It expires in 1 hour.` }
+      }
+
+      const res = await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId}/messages`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) {
+        console.error('Meta WhatsApp error:', await res.text())
+        return { error: 'meta failed' }
+      }
+      return {}
+    }
+
+    async function sendViaPhoneChannel(channel: 'sms' | 'whatsapp', otp: string): Promise<{ error?: string }> {
+      const provider = channel === 'sms' ? smsProvider() : whatsappProvider()
+      let r: { error?: string }
+      if (provider === 'mocean') r = await sendViaMocean(otp)
+      else if (provider === 'meta') r = await sendViaMetaWhatsApp(otp)
+      else if (provider === 'twilio') r = await sendViaTwilio(channel, otp)
+      else r = { error: 'not configured' }
+      if (r.error) {
         return { error: channel === 'whatsapp'
           ? 'Could not send the WhatsApp message. Try SMS or Email instead.'
           : 'Could not send the SMS. Try WhatsApp or Email instead.' }
@@ -257,7 +363,7 @@ serve(async (req) => {
       }
 
       if (channel === 'sms' || channel === 'whatsapp') {
-        const r = await sendViaTwilio(channel, otp)
+        const r = await sendViaPhoneChannel(channel, otp)
         if (r.error) return { error: r.error }
         return { channel, masked: maskPhone(phone) }
       }

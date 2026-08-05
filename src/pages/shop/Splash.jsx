@@ -6,8 +6,10 @@ export default function Splash() {
   return (
     <div id="splash-poster">
       <div className="splash-countdown"><span className="splash-countdown-num" id="splash-cd">3</span></div>
-      <div className="splash-shimmer"></div>
-      <div className="splash-rays" id="splash-rays"></div>
+      {/* splash-shimmer + splash-rays intentionally removed — the
+          "sun" effect is replaced by orbiting rings around the
+          seedling (see .splash-orbit inside .splash-plant). The
+          particles div stays for scattered galaxy stars. */}
       <div id="splash-particles"></div>
 
       <div className="splash-inner">
@@ -52,7 +54,15 @@ export default function Splash() {
             </div>
 
             <div className="splash-plant">
-              <div className="splash-halo" aria-hidden="true"></div>
+              {/* Galaxy — three concentric orbit rings turning at
+                  different speeds and directions, each carrying one
+                  or two glowing dots that trace the ring's edge.
+                  Purely decorative — aria-hidden. */}
+              <div className="splash-orbit" aria-hidden="true">
+                <div className="splash-orbit-ring splash-orbit-ring-1"><span className="splash-orbit-dot"></span></div>
+                <div className="splash-orbit-ring splash-orbit-ring-2"><span className="splash-orbit-dot"></span><span className="splash-orbit-dot splash-orbit-dot-b"></span></div>
+                <div className="splash-orbit-ring splash-orbit-ring-3"><span className="splash-orbit-dot"></span></div>
+              </div>
               <div className="splash-glow"></div>
               <img src="https://cdn.store-assets.com/s/1408881/f/16655809.png" alt="Oil Palm Seedling" className="splash-seedling" />
             </div>

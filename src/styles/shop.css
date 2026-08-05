@@ -104,7 +104,9 @@
     .splash-feature { flex: 0 0 auto !important; padding: .4rem .7rem !important; }
     .splash-feature-icon { font-size: 1rem !important; margin-bottom: .15rem !important; }
     .splash-feature-text { font-size: 11px !important; }
-    .splash-award { font-size: 11px !important; padding: .35rem 1rem !important; margin: .35rem auto .5rem !important; letter-spacing: .08em !important; }
+    /* .splash-award mobile sizing lives with the new pill markup below.
+       Kept this line intentionally out of the legacy !important block so
+       the two rulesets don't fight each other. */
     .splash-title { margin-top: .25rem !important; }
     .splash-rays { width: 100vw !important; height: 100vw !important; }
   }
@@ -148,15 +150,41 @@
     font-weight: 300; color: #fff; letter-spacing: .06em; margin-top: .5rem;
     text-shadow: 0 2px 20px rgba(0,0,0,.4);
   }
+  /* Best-Nursery-Award badge:
+       - Solid dark-green pill with a subtle 1px gold hairline border
+       - Gold trophy in a soft gold-tinted circle on the left
+       - White uppercase text (real 4.5:1+ contrast against the pill)
+       - Two symmetric laurel branches flanking the pill outside */
+  .splash-award-wrap {
+    display: inline-flex; align-items: center; justify-content: center;
+    gap: .6rem; margin: .6rem auto 1rem; line-height: 1;
+  }
+  .splash-award-laurel   { width: 34px; height: 52px; flex-shrink: 0; opacity: .95; }
+  .splash-award-laurel-r { transform: scaleX(-1); }
+
   .splash-award {
-    display: inline-block; margin: .6rem auto 1rem;
-    background: linear-gradient(135deg, rgba(201,168,76,.2), rgba(232,212,154,.1));
-    border: 1.5px solid rgba(201,168,76,.35);
-    color: var(--gold-light); font-size: 16px; font-weight: 600;
-    letter-spacing: .12em; text-transform: uppercase;
-    padding: .6rem 2rem; border-radius: 30px;
-    backdrop-filter: blur(6px);
-    text-shadow: 0 1px 8px rgba(201,168,76,.3);
+    display: inline-flex; align-items: center; gap: .55rem;
+    background: var(--green-dark);
+    border: 1px solid rgba(232,212,154,.35);
+    color: #fff; font-size: 14px; font-weight: 700;
+    letter-spacing: .14em; text-transform: uppercase;
+    padding: .55rem 1.5rem .55rem 1rem; border-radius: 999px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.35), inset 0 0 0 1px rgba(232,212,154,.06);
+  }
+  .splash-award-ico {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: rgba(232,212,154,.16);
+    font-size: 14px; line-height: 1;
+    text-shadow: 0 1px 4px rgba(201,168,76,.5);
+  }
+  .splash-award-text { color: #fff; }
+
+  @media (max-width: 600px) {
+    .splash-award-wrap  { gap: .35rem; margin: .35rem auto .5rem; }
+    .splash-award-laurel{ width: 28px; height: 44px; }
+    .splash-award       { font-size: 11px; letter-spacing: .1em; padding: .45rem 1rem .45rem .7rem; gap: .4rem; }
+    .splash-award-ico   { width: 20px; height: 20px; font-size: 11px; }
   }
 
   :root {

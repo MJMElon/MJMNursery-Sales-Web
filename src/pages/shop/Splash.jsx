@@ -12,7 +12,31 @@ export default function Splash() {
 
       <div className="splash-inner">
         <img src="https://cdn.store-assets.com/s/1408881/f/16655641.png" alt="MJM Nursery" className="splash-logo" />
-        <div className="splash-award">&#127942; Best Nursery Award</div>
+        <div className="splash-award-wrap" role="img" aria-label="Best Nursery Award">
+          <svg className="splash-award-laurel" viewBox="0 0 40 60" aria-hidden="true">
+            {/* Curving stem + 5 leaves along it — laurel motif for the
+                award badge. Drawn as one branch; the right-hand copy
+                below flips it via CSS `transform: scaleX(-1)`. */}
+            <path d="M36 4 C 20 18, 10 36, 4 58" stroke="#E8D49A" strokeWidth="1.4" fill="none" strokeLinecap="round"/>
+            <ellipse cx="30" cy="10" rx="2.8" ry="5.6" fill="#E8D49A" transform="rotate(-35 30 10)"/>
+            <ellipse cx="24" cy="20" rx="2.8" ry="5.6" fill="#E8D49A" transform="rotate(-25 24 20)"/>
+            <ellipse cx="17" cy="30" rx="2.8" ry="5.6" fill="#E8D49A" transform="rotate(-15 17 30)"/>
+            <ellipse cx="12" cy="41" rx="2.8" ry="5.6" fill="#E8D49A" transform="rotate(-5 12 41)"/>
+            <ellipse cx="7"  cy="52" rx="2.8" ry="5.6" fill="#E8D49A" transform="rotate(8 7 52)"/>
+          </svg>
+          <div className="splash-award">
+            <span className="splash-award-ico" aria-hidden="true">&#127942;</span>
+            <span className="splash-award-text">Best Nursery Award</span>
+          </div>
+          <svg className="splash-award-laurel splash-award-laurel-r" viewBox="0 0 40 60" aria-hidden="true">
+            <path d="M36 4 C 20 18, 10 36, 4 58" stroke="#E8D49A" strokeWidth="1.4" fill="none" strokeLinecap="round"/>
+            <ellipse cx="30" cy="10" rx="2.8" ry="5.6" fill="#E8D49A" transform="rotate(-35 30 10)"/>
+            <ellipse cx="24" cy="20" rx="2.8" ry="5.6" fill="#E8D49A" transform="rotate(-25 24 20)"/>
+            <ellipse cx="17" cy="30" rx="2.8" ry="5.6" fill="#E8D49A" transform="rotate(-15 17 30)"/>
+            <ellipse cx="12" cy="41" rx="2.8" ry="5.6" fill="#E8D49A" transform="rotate(-5 12 41)"/>
+            <ellipse cx="7"  cy="52" rx="2.8" ry="5.6" fill="#E8D49A" transform="rotate(8 7 52)"/>
+          </svg>
+        </div>
 
         <div className="splash-center">
           {/* Left features */}

@@ -13,51 +13,26 @@
     inset: 0; z-index: 9999;
     background: linear-gradient(160deg, #1a1608 0%, #2c2210 30%, #3d321a 60%, #1a1608 100%);
     display: flex; align-items: center; justify-content: center;
-    transition: opacity .8s ease-out;
+    transition: opacity 1.2s ease-out;
     overflow: hidden;
-    /* CSS-only safety net. Timing mirrors the JS 3s dismiss + 800ms
-       fade so a JS-blocked page still leaves the same way instead of
-       racing an earlier/later auto-fade. */
-    animation: splashAutoFade .8s ease-out 3.2s forwards;
+    /* CSS-only fade safety net — kicks in 4s after page load and runs for
+       1.5s. If JS dismiss fires first (normal happy path) the .fade-out
+       class wins via higher specificity + opacity:0 already. */
+    animation: splashAutoFade 1.5s ease-out 4s forwards;
   }
   @keyframes splashAutoFade { to { opacity: 0; pointer-events: none; visibility: hidden; } }
   #splash-poster.fade-out { opacity: 0; pointer-events: none; }
 
-  /* Explains what the number is counting down to — a lone "3" gave
-     screen readers and busy visitors no context. Contrast bumped to
-     rgba(255,255,255,.78) → ~10:1 on the darkest gradient stop,
-     comfortably clears the 4.5:1 accessibility floor. */
   .splash-countdown {
-    position: absolute; top: 1.4rem; left: 1.4rem; z-index: 10;
-    color: rgba(255,255,255,.78); font-size: 12px; font-weight: 500;
-    letter-spacing: .06em; display: flex; align-items: center; gap: .55rem;
-    text-transform: uppercase;
+    position: absolute; top: 1.5rem; left: 1.5rem; z-index: 10;
+    color: rgba(255,255,255,.35); font-size: 13px; font-weight: 500;
+    letter-spacing: .08em; display: flex; align-items: center; gap: .5rem;
   }
   .splash-countdown-num {
     display: inline-flex; align-items: center; justify-content: center;
-    width: 26px; height: 26px; border-radius: 50%;
-    border: 1.5px solid rgba(232,212,154,.55);
-    font-size: 13px; font-weight: 700; color: var(--gold-light);
-  }
-
-  /* Visible Skip affordance replaces "click anywhere" as the only
-     escape hatch — anti-pattern per the ui-ux skill. Gold outline
-     matches the shimmer palette; hover / focus states match. */
-  .splash-skip {
-    position: absolute; top: 1.2rem; right: 1.4rem; z-index: 10;
-    background: transparent; border: 1.5px solid rgba(232,212,154,.5);
-    color: var(--gold-light); font-size: 12px; font-weight: 600;
-    letter-spacing: .1em; text-transform: uppercase;
-    padding: .45rem 1rem; border-radius: 999px; cursor: pointer;
-    font-family: inherit;
-    transition: background .18s ease, border-color .18s ease, color .18s ease;
-  }
-  .splash-skip:hover,
-  .splash-skip:focus-visible {
-    background: rgba(232,212,154,.14);
-    border-color: rgba(232,212,154,.8);
-    color: #fff;
-    outline: none;
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1.5px solid rgba(255,255,255,.2);
+    font-size: 14px; font-weight: 700; color: rgba(255,255,255,.5);
   }
 
   /* Golden shimmer background */
@@ -182,24 +157,6 @@
     padding: .6rem 2rem; border-radius: 30px;
     backdrop-filter: blur(6px);
     text-shadow: 0 1px 8px rgba(201,168,76,.3);
-  }
-
-  /* Reduced-motion: strip the decorative loops (shimmer, rays rotate,
-     feature float, seedling float, glow pulse, logo glow, particle
-     float) and keep the intro fade + safety-net auto-fade only.
-     Vestibular / motion-sensitive users still see the branded poster
-     with a static seedling and a calm background. */
-  @media (prefers-reduced-motion: reduce) {
-    .splash-shimmer,
-    .splash-rays,
-    .splash-particle,
-    .splash-logo,
-    .splash-seedling,
-    .splash-glow,
-    .splash-feature {
-      animation: none !important;
-    }
-    .splash-inner { animation: none !important; }
   }
 
   :root {

@@ -156,9 +156,17 @@ async function loadPayments(){
 }
 window.loadPayments = loadPayments;
 
-// Stats are always sourced from a fresh query so counts don't drift
-// when the accountant switches tabs (each tab shows the SAME set of
-// KPIs — the workload at a glance).
+// Populate the count badges inside each chip so the accountant sees
+// the per-tab workload at a glance without a separate KPI grid. Runs
+// on every loadPayments() so counts don't drift while the accountant
+// works. Only sets [data-count] when the count > 0 (CSS hides the
+// badge otherwise — a bare "0" is noise, not information).
+function setChipCount(id, n){
+  var el = document.getElementById(id);
+  if (!el) return;
+  if (n > 0){ el.textContent = String(n); el.setAttribute('data-count', String(n)); }
+  else { el.textContent = ''; el.removeAttribute('data-count'); }
+}
 async function renderPaymentStats(){
   // Try the widest projection first; fall back through narrower ones
   // if newer migrations (einvoice_requests.sql, order_credit_note.sql)
@@ -241,19 +249,13 @@ async function renderPaymentStats(){
         || !!o.credit_note_flagged_at;
   });
 
-  var sumAwait = awaiting.reduce(function(s,o){ return s + (o.total||0); }, 0);
-  var sumPaid  = paidMonth.reduce(function(s,o){ return s + (o.total||0); }, 0);
-
-  document.getElementById('payment-stats').innerHTML =
-    '<div class="stat-box"><div class="stat-label">Awaiting Verification</div><div class="stat-val" style="color:var(--amber)">'+awaiting.length+'</div></div>'+
-    '<div class="stat-box"><div class="stat-label">Awaiting Value</div><div class="stat-val" style="color:var(--amber)">RM '+sumAwait.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</div></div>'+
-    '<div class="stat-box"><div class="stat-label">Partially Paid</div><div class="stat-val" style="color:#1d4ed8;">'+partial.length+'</div></div>'+
-    '<div class="stat-box"><div class="stat-label">Outstanding Value</div><div class="stat-val" style="color:#1d4ed8;">RM '+sumPartial.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</div></div>'+
-    '<div class="stat-box"><div class="stat-label">Credit Note Pending</div><div class="stat-val" style="color:#b45309;">'+creditOpen.length+'</div></div>'+
-    '<div class="stat-box"><div class="stat-label">E-Invoice Requests</div><div class="stat-val" style="color:#7c5cbf;">'+einvReqs.length+'</div></div>'+
-    '<div class="stat-box"><div class="stat-label">Verified This Month</div><div class="stat-val green">'+paidMonth.length+'</div></div>'+
-    '<div class="stat-box"><div class="stat-label">Verified Value (MTD)</div><div class="stat-val green">RM '+sumPaid.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</div></div>'+
-    '<div class="stat-box"><div class="stat-label">E-Invoices Issued (MTD)</div><div class="stat-val green">'+einvIssuedMonth.length+'</div></div>';
+  // Write per-tab counts into the chip badges. Everything else in the
+  // old KPI grid is dropped — the counts alongside each tab tell the
+  // accountant everything they used to read from the stat tiles.
+  setChipCount('pv-count-awaiting', awaiting.length);
+  setChipCount('pv-count-partial',  partial.length);
+  setChipCount('pv-count-credit',   creditOpen.length);
+  setChipCount('pv-count-einvoice', einvReqs.length);
 }
 
 // ═══════════════════════════════════════

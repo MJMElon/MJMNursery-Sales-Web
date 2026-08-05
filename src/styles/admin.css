@@ -102,6 +102,17 @@ input,select,textarea,button{font-family:inherit;}
 .filter-chip{background:var(--surface);border:1.5px solid var(--border);border-radius:999px;padding:6px 14px;font-size:11px;font-weight:600;color:var(--ink3);cursor:pointer;transition:all .15s;}
 .filter-chip:hover{border-color:var(--green);color:var(--green);}
 .filter-chip.active{background:var(--green);border-color:var(--green);color:#fff;}
+/* Count badge lives inside a filter-chip. Empty by default so a
+   count of 0 doesn't take up space; the JS sets its text only when
+   the count > 0. Colour comes from data-color so each tab can carry
+   its own accent that pops against the chip background. */
+.filter-chip .chip-count{display:none;margin-left:.4rem;font-weight:800;font-size:12px;color:var(--amber);}
+.filter-chip .chip-count[data-count]{display:inline;}
+.filter-chip .chip-count[data-color="amber"]{color:#f59e0b;}
+.filter-chip .chip-count[data-color="blue"]{color:#1d4ed8;}
+.filter-chip .chip-count[data-color="orange"]{color:#b45309;}
+.filter-chip .chip-count[data-color="purple"]{color:#7c5cbf;}
+.filter-chip.active .chip-count{color:#fff;opacity:.95;}
 
 /* AI PROMOTION ASSISTANT — chat + preview layout */
 .promo-assistant-modal{max-width:1100px !important;width:95vw !important;}

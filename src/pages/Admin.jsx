@@ -331,14 +331,13 @@ export default function Admin() {
                 {/* PAYMENTS — accountant-facing payment verification view */}
                 <div className="tab-content" id="tab-payments">
                   <div className="main-header"><div className="main-title">Payment Verification</div></div>
-                  <div className="stats-grid" id="payment-stats" />
                   <div className="card">
                     <div className="filter-bar">
                       <input className="filter-input" id="payment-search" placeholder="Search order number or customer..." onInput={(e) => { window.loadPayments(); }} />
-                      <button className="filter-chip active" data-payment-view="awaiting" onClick={(e) => { window.setPaymentView('awaiting'); }}>Awaiting Verification</button>
-                      <button className="filter-chip" data-payment-view="partial" onClick={(e) => { window.setPaymentView('partial'); }}>Partially Paid</button>
-                      <button className="filter-chip" data-payment-view="credit" onClick={(e) => { window.setPaymentView('credit'); }}>Credit Note</button>
-                      <button className="filter-chip" data-payment-view="einvoice" onClick={(e) => { window.setPaymentView('einvoice'); }}>E-Invoice Requests</button>
+                      <button className="filter-chip active" data-payment-view="awaiting" onClick={(e) => { window.setPaymentView('awaiting'); }}>Awaiting Verification <span className="chip-count" id="pv-count-awaiting" data-color="amber"></span></button>
+                      <button className="filter-chip" data-payment-view="partial" onClick={(e) => { window.setPaymentView('partial'); }}>Partially Paid <span className="chip-count" id="pv-count-partial" data-color="blue"></span></button>
+                      <button className="filter-chip" data-payment-view="credit" onClick={(e) => { window.setPaymentView('credit'); }}>Credit Note <span className="chip-count" id="pv-count-credit" data-color="orange"></span></button>
+                      <button className="filter-chip" data-payment-view="einvoice" onClick={(e) => { window.setPaymentView('einvoice'); }}>E-Invoice Requests <span className="chip-count" id="pv-count-einvoice" data-color="purple"></span></button>
                       </div>
                     <div id="payments-table"><div className="loading">Loading payments...</div></div>
                     </div>

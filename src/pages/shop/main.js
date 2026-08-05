@@ -1547,7 +1547,7 @@ export function initShopMain() {
     // the ops spec (Case 2 of the E-Invoice Request Logic).
     if(isCompany || isHighVal){
       return '<div style="padding:.55rem .8rem;border-top:1px solid #f0f0ec;background:#eff6ff;font-size:12px;color:#1e40af;line-height:1.5;">'+
-               '✓ <strong>E-Invoice pending LHDN</strong> — tap the order to view once ready.'+
+               '✓ <strong>E-Invoice Verifying &amp; Processing</strong> — tap the order to view once ready.'+
              '</div>';
     }
     // Requested but not uploaded yet.

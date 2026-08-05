@@ -1525,11 +1525,14 @@ export function initShopMain() {
     var isCancelled= (o.status === 'Cancelled' || o.status === 'Refunded');
     var idJs = String(o.fullId || o.id || '').replace(/[\\'"<>]/g,'');
 
-    // Uploaded state — clickable link to the E-Invoice PDF.
+    // Uploaded state — opens the E-Invoice PDF in the in-portal file
+    // viewer (pViewFile) instead of a new tab.
     if(o.einvoiceUploadedAt && o.einvoiceUrl){
+      var einvUrl  = String(o.einvoiceUrl||'').replace(/'/g,'%27');
+      var einvName = String(o.einvoiceName||'E-Invoice.pdf').replace(/'/g,'\\\'');
       return '<div style="padding:.55rem .8rem;border-top:1px solid #f0f0ec;background:#ecfdf5;display:flex;justify-content:space-between;align-items:center;font-size:12px;">'+
                '<div><strong style="color:#15803d;">✓ E-Invoice issued</strong><span style="color:var(--text-light);margin-left:.4rem;">'+esc(o.einvoiceName||'invoice.pdf')+'</span></div>'+
-               '<a href="'+esc(o.einvoiceUrl)+'" target="_blank" rel="noopener" onclick="event.stopPropagation();" style="color:#15803d;font-weight:600;text-decoration:underline;">View E-Invoice</a>'+
+               '<button type="button" onclick="event.stopPropagation();pViewFile(\''+einvUrl+'\',\''+einvName+'\',\'application/pdf\')" style="background:none;border:none;padding:0;color:#15803d;font-weight:600;text-decoration:underline;cursor:pointer;font-family:inherit;font-size:12px;">View E-Invoice</button>'+
              '</div>';
     }
     // Cancelled / refunded — E-Invoice can't be requested. Show a
@@ -2483,11 +2486,17 @@ export function initShopMain() {
           h+='</div>';
           if(d.ba_number||d.ba_raw_name){
             h+='<div style="font-size:11px;color:var(--text-mid);margin-top:.2rem;">BA: <strong>'+(d.ba_number||d.ba_raw_name)+'</strong>';
-            if(d.ba_image_url)h+=' <a href="'+d.ba_image_url+'" target="_blank" style="color:var(--green-mid);font-size:10px;">[View BA]</a>';
+            if(d.ba_image_url){
+              var baUrl  = String(d.ba_image_url).replace(/'/g,'%27');
+              var baName = String(d.ba_raw_name||('BA-'+(d.ba_number||''))).replace(/'/g,'\\\'');
+              h+=' <button type="button" onclick="event.stopPropagation();pViewFile(\''+baUrl+'\',\''+baName+'\',\'\')" style="background:none;border:none;padding:0;color:var(--green-mid);font-size:10px;cursor:pointer;font-family:inherit;text-decoration:underline;">[View BA]</button>';
+            }
             h+='</div>';
           }
           if(d.image_url&&!String(d.image_url).startsWith('data:')){
-            h+='<div style="margin-top:.3rem;"><a href="'+d.image_url+'" target="_blank" style="font-size:10px;color:var(--green-mid);text-decoration:none;">📄 View DO Document</a></div>';
+            var doUrl  = String(d.image_url).replace(/'/g,'%27');
+            var doName = String('DO-'+(d.do_number||'')+'.pdf').replace(/'/g,'\\\'');
+            h+='<div style="margin-top:.3rem;"><button type="button" onclick="event.stopPropagation();pViewFile(\''+doUrl+'\',\''+doName+'\',\'\')" style="background:none;border:none;padding:0;font-size:10px;color:var(--green-mid);text-decoration:none;cursor:pointer;font-family:inherit;">📄 View DO Document</button></div>';
           }
           h+='</div>';
         });
@@ -2633,7 +2642,9 @@ export function initShopMain() {
       if(t.files && t.files.length){
         h+='<div style="margin-top:.4rem;display:flex;flex-direction:column;gap:.2rem;">';
         t.files.forEach(function(f){
-          h+='<a href="'+esc(f.url)+'" target="_blank" rel="noopener" style="font-size:11px;color:var(--green-mid);text-decoration:none;font-weight:500;">📎 '+esc(f.name)+'</a>';
+          var fUrl  = String(f.url||'').replace(/'/g,'%27');
+          var fName = String(f.name||'file').replace(/'/g,'\\\'');
+          h+='<button type="button" onclick="event.stopPropagation();pViewFile(\''+fUrl+'\',\''+fName+'\',\'\')" style="background:none;border:none;padding:0;text-align:left;font-size:11px;color:var(--green-mid);text-decoration:none;font-weight:500;cursor:pointer;font-family:inherit;">📎 '+esc(f.name)+'</button>';
         });
         h+='</div>';
       }

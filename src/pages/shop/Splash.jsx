@@ -33,7 +33,6 @@ export default function Splash() {
           src="https://cdn.store-assets.com/s/1408881/f/16655641.png"
           alt="MJM Nursery"
           className="splash-logo"
-          width="240" height="140"
         />
         <div className="splash-award">&#127942; Best Nursery Award</div>
 
@@ -51,7 +50,6 @@ export default function Splash() {
               src="https://cdn.store-assets.com/s/1408881/f/16655809.png"
               alt="Oil Palm Seedling"
               className="splash-seedling"
-              width="240" height="280"
             />
           </div>
 

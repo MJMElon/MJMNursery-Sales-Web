@@ -83,6 +83,11 @@ export default function Admin() {
                   </div>
                 <div className="sb-footer">
                   <div className="sb-user"><strong id="admin-name">Admin</strong></div>
+                  <a className="sb-visit-store" href="/index.html" target="_blank" rel="noopener" title="Open MJM Nursery storefront in a new tab">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></svg>
+                    <span>Visit Online Store</span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '11px', height: '11px', opacity: '.7' }} aria-hidden="true"><path d="M7 17L17 7" /><polyline points="7 7 17 7 17 17" /></svg>
+                  </a>
                   <button className="sb-logout" onClick={(e) => { doLogout(); }}>Sign Out</button>
                   </div>
                 </aside>

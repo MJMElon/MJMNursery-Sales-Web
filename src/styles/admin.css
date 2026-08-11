@@ -37,6 +37,13 @@ input,select,textarea,button{font-family:inherit;}
 .sb-user strong{color:var(--ink2);font-weight:600;display:block;}
 .sb-logout{background:none;border:1px solid var(--border);color:var(--ink3);font-size:11px;font-weight:600;padding:.4rem .8rem;border-radius:6px;cursor:pointer;transition:all .15s;width:100%;text-align:center;}
 .sb-logout:hover{border-color:var(--red);color:var(--red);}
+/* Visit Online Store shortcut — opens the customer-facing storefront
+   in a new tab. Uses the admin's purple accent (matches the pagination
+   pill + favicon) so it reads as an admin-tool CTA rather than a
+   navigation item inside the sidebar list. */
+.sb-visit-store{display:flex;align-items:center;justify-content:center;gap:.4rem;background:#7c5cbf;color:#fff;border:none;font-size:11px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:.5rem .8rem;border-radius:6px;text-decoration:none;margin-bottom:.5rem;transition:background .15s, box-shadow .15s;}
+.sb-visit-store:hover{background:#6a4baa;box-shadow:0 4px 12px rgba(124,92,191,.35);}
+.sb-visit-store svg{width:14px;height:14px;flex-shrink:0;}
 .main{margin-left:var(--sidebar-w);flex:1;padding:1.5rem 2rem;}
 .main-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;}
 .main-title{font-size:1.4rem;font-weight:800;color:var(--ink);}

@@ -16,7 +16,7 @@ export default function Splash() {
         {/* LEFT — editorial headline + tagline */}
         <div className="splash-hero-left">
           <h1 className="splash-heading">
-            Oil Palm <span className="splash-heading-em">Seedling</span>
+            MJM Oil Palm <span className="splash-heading-em">Seedlings</span>
           </h1>
           <div className="splash-hero-rule" aria-hidden="true"></div>
           <div className="splash-tagline">Top Quality. High Yield. Stronger Future.</div>
@@ -73,7 +73,7 @@ export default function Splash() {
             </div>
           </div>
 
-          <div className="splash-caption">Oil Palm Seedling</div>
+          <div className="splash-caption">MJM Oil Palm Seedlings</div>
         </div>
       </div>
     </div>

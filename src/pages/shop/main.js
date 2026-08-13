@@ -429,8 +429,10 @@ export function initShopMain() {
       '<div class="quote-doc" id="quote-doc">'+
         '<div class="quote-doc-head">'+
           '<div>'+
-            '<div class="qd-brand"><img src="https://cdn.store-assets.com/s/1408881/f/16655641.png" alt="MJM Nursery" style="height:64px;width:auto;display:block;"></div>'+
-            '<div style="font-size:11px;color:var(--text-light);margin-top:.4rem;line-height:1.6;">MEGA JUTAMAS SDN BHD (663951-U)<br>2ND Floor (B), Lot 1180, Bangunan BEI, Lorong Dua, Krokop,<br>P.O. Box 163, 98007 Miri, Sarawak.<br>Tel: 085-419907 · Fax: 085-413264</div>'+
+            // No logo on the quotation — the letterhead is the company name
+            // in text, so the document prints cleanly in black and white.
+            '<div style="font-size:13px;font-weight:700;color:var(--text-dark);line-height:1.4;">MEGA JUTAMAS SDN BHD (663951-U)</div>'+
+            '<div style="font-size:11px;color:var(--text-light);margin-top:.25rem;line-height:1.6;">2ND Floor (B), Lot 1180, Bangunan BEI, Lorong Dua, Krokop,<br>P.O. Box 163, 98007 Miri, Sarawak.<br>Tel: 085-419907 · Fax: 085-413264</div>'+
           '</div>'+
           '<div class="qd-meta">'+
             '<div><strong>Quotation</strong></div>'+

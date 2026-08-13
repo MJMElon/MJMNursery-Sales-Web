@@ -774,9 +774,14 @@
   .quote-doc { background: var(--white); border-radius: 16px; padding: 2.5rem; border: 1px solid rgba(0,0,0,.06); box-shadow: 0 2px 8px rgba(0,0,0,.04); margin-top: 1.5rem; font-family: Georgia, 'Times New Roman', Times, serif; line-height: 1.55; color: var(--text-dark); }
   /* Uniform serif across the whole quotation document to match the PDF template. */
   .quote-doc, .quote-doc * { font-family: Georgia, 'Times New Roman', Times, serif; }
+  /* The site palette is green-tinted (--text-dark/-mid/-light are all greens),
+     which printed as green wording on the quotation PDF. Re-point those custom
+     properties to black for the document only — every rule and inline style
+     below keeps using var(--text-…), so all quotation copy prints black while
+     the rest of the site is untouched. --green-pale (rules/borders) is left
+     alone so the table keeps its light frame. */
+  .quote-doc { --text-dark: #000; --text-mid: #000; --text-light: #000; --green-dark: #000; --green-mid: #000; }
   .quote-doc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 2rem; padding-bottom: 1.5rem; border-bottom: 2px solid var(--green-pale); margin-bottom: 1.5rem; }
-  .quote-doc-head .qd-brand { font-family: Georgia, 'Times New Roman', Times, serif; font-weight: 700; font-size: 2rem; color: var(--green-dark); line-height: 1.1; }
-  .quote-doc-head .qd-brand em { color: var(--gold); font-style: italic; }
   .quote-doc-head .qd-meta { text-align: right; font-size: 12px; color: var(--text-mid); line-height: 1.7; }
   .quote-doc-head .qd-meta strong { color: var(--text-dark); }
   .quote-parties { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 1.5rem; font-size: 13px; line-height: 1.65; }

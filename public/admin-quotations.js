@@ -202,6 +202,71 @@ function removeQuotationItem(idx){
 }
 window.removeQuotationItem = removeQuotationItem;
 
+// ── Drag-to-reorder ──
+// Native HTML5 drag-and-drop on <tr>. The drag-source index is held
+// on window (not in a closure) so all four handlers on every row can
+// see it. On drop we re-read the DOM inputs into QUOT_STATE, splice
+// the moved item into its new position, then re-render — cheap
+// because we're only editing an in-memory array.
+window._qDragFromIdx = null;
+
+function qRowDragStart(ev, idx){
+  // Persist any keystrokes-in-progress before we rearrange the DOM.
+  _readEditorHeaderFromDOM();
+  _readEditorItemsFromDOM();
+  window._qDragFromIdx = Number(idx);
+  ev.dataTransfer.effectAllowed = 'move';
+  // Firefox needs setData to fire dragover/drop reliably.
+  try { ev.dataTransfer.setData('text/plain', String(idx)); } catch(_){}
+  // Ghost the source row so it's obvious what's being moved.
+  var tr = ev.currentTarget;
+  if (tr && tr.classList) tr.classList.add('qrow-dragging');
+}
+window.qRowDragStart = qRowDragStart;
+
+function qRowDragOver(ev){
+  // Necessary to allow a drop — default handler cancels the drop.
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect = 'move';
+  var tr = ev.currentTarget;
+  if (tr && tr.classList) tr.classList.add('qrow-drop-target');
+}
+window.qRowDragOver = qRowDragOver;
+
+function qRowDragLeave(ev){
+  var tr = ev.currentTarget;
+  if (tr && tr.classList) tr.classList.remove('qrow-drop-target');
+}
+window.qRowDragLeave = qRowDragLeave;
+
+function qRowDrop(ev, dropIdx){
+  ev.preventDefault();
+  var from = window._qDragFromIdx;
+  var to   = Number(dropIdx);
+  if (from == null || isNaN(to) || from === to){
+    // Nothing to do — still clean up hover state and re-render if needed.
+    document.querySelectorAll('.qrow-drop-target').forEach(function(el){ el.classList.remove('qrow-drop-target'); });
+    return;
+  }
+  var moved = QUOT_STATE.items.splice(from, 1)[0];
+  // If dragging DOWN past the removal point, the target index has
+  // shifted up by one — adjust so the item lands where the user aimed.
+  if (from < to) to = to - 1;
+  QUOT_STATE.items.splice(to, 0, moved);
+  window._qDragFromIdx = null;
+  renderQuotationEditor();
+}
+window.qRowDrop = qRowDrop;
+
+function qRowDragEnd(){
+  window._qDragFromIdx = null;
+  document.querySelectorAll('.qrow-dragging, .qrow-drop-target').forEach(function(el){
+    el.classList.remove('qrow-dragging');
+    el.classList.remove('qrow-drop-target');
+  });
+}
+window.qRowDragEnd = qRowDragEnd;
+
 function recomputeQuotationTotals(){
   _readEditorItemsFromDOM();
   _readEditorHeaderFromDOM();
@@ -227,7 +292,13 @@ function renderQuotationEditor(){
     isEdit ? ('Edit Quotation ' + (h.quotation_number ? '· '+h.quotation_number : '')) : 'New Quotation';
 
   var itemsRows = QUOT_STATE.items.map(function(it, idx){
-    return '<tr data-qidx="'+idx+'">'+
+    return '<tr data-qidx="'+idx+'" draggable="true" '+
+             'ondragstart="qRowDragStart(event,'+idx+')" '+
+             'ondragover="qRowDragOver(event)" '+
+             'ondragleave="qRowDragLeave(event)" '+
+             'ondrop="qRowDrop(event,'+idx+')" '+
+             'ondragend="qRowDragEnd()">'+
+      '<td class="qrow-handle" style="width:34px;text-align:center;cursor:grab;color:var(--ink4);user-select:none;" title="Drag to reorder">⋮⋮</td>'+
       '<td><input type="text" id="q-item-name-'+idx+'" class="form-input" value="'+esc(it.product_name||'')+'" placeholder="e.g. Oil Palm Seedling — Mar 2027" oninput="recomputeQuotationTotals()" style="font-size:12px;padding:5px 8px;width:100%;"></td>'+
       '<td style="width:90px;"><input type="number" step="1" min="0" id="q-item-qty-'+idx+'" class="form-input" value="'+(Number(it.quantity)||0)+'" oninput="recomputeQuotationTotals()" style="font-size:12px;padding:5px 8px;text-align:right;width:100%;"></td>'+
       '<td style="width:120px;"><input type="number" step="0.01" min="0" id="q-item-up-'+idx+'" class="form-input" value="'+(Number(it.unit_price)||0)+'" oninput="recomputeQuotationTotals()" style="font-size:12px;padding:5px 8px;text-align:right;width:100%;"></td>'+
@@ -252,8 +323,16 @@ function renderQuotationEditor(){
       '<div style="font-size:13px;font-weight:600;">Line Items</div>'+
       '<button class="btn btn-primary btn-sm" onclick="addQuotationItem()">+ Add Row</button>'+
     '</div>'+
+    '<style>'+
+      /* Drag-to-reorder visuals: source row dims, drop target gets a
+         highlighted top border so the admin sees where the row will
+         land. Scoped by #q-items-body prefix to avoid leaking. */
+      '#q-items-body tr.qrow-dragging{opacity:.35;}'+
+      '#q-items-body tr.qrow-drop-target{outline:2px dashed #7c5cbf;outline-offset:-2px;background:#f5f0ff;}'+
+      '#q-items-body td.qrow-handle:active{cursor:grabbing;}'+
+    '</style>'+
     '<table class="data-table" style="font-size:12px;margin-bottom:.9rem;">'+
-      '<thead><tr><th>Product / Description</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Unit Price (RM)</th><th style="text-align:right;">Line Total</th><th></th></tr></thead>'+
+      '<thead><tr><th style="width:34px;"></th><th>Product / Description</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Unit Price (RM)</th><th style="text-align:right;">Line Total</th><th></th></tr></thead>'+
       '<tbody id="q-items-body">'+itemsRows+'</tbody>'+
     '</table>'+
 

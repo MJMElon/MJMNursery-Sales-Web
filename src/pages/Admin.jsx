@@ -60,6 +60,10 @@ export default function Admin() {
                     <span className="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" /></svg></span>
                     <span>Payments</span>
                     </div>
+                  <div className="sb-item" id="sb-quotations-item" onClick={(e) => { switchTab('quotations',e.currentTarget); }}>
+                    <span className="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="9" y1="13" x2="15" y2="13" /><line x1="9" y1="17" x2="15" y2="17" /></svg></span>
+                    <span>Quotations</span>
+                    </div>
                   <div className="sb-item" id="sb-promos-item" onClick={(e) => { switchTab('promos',e.currentTarget); }}>
                     <span className="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 12 20 22 4 22 4 12" /><rect x="2" y="7" width="20" height="5" /><line x1="12" y1="22" x2="12" y2="7" /><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z" /><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" /></svg></span>
                     <span>Promotions</span>
@@ -345,6 +349,25 @@ export default function Admin() {
                       <button className="filter-chip" data-payment-view="einvoice" onClick={(e) => { window.setPaymentView('einvoice'); }}>E-Invoice Requests <span className="chip-count" id="pv-count-einvoice" data-color="purple"></span></button>
                       </div>
                     <div id="payments-table"><div className="loading">Loading payments...</div></div>
+                    </div>
+                  </div>
+                {/* QUOTATIONS — admin-only quotation generator with PDF download */}
+                <div className="tab-content" id="tab-quotations">
+                  <div className="main-header"><div className="main-title">Quotations</div><button className="btn btn-primary" onClick={(e) => { window.openNewQuotation(); }}>+ New Quotation</button></div>
+                  <div className="stats-grid" id="quotation-stats" />
+                  <div className="card">
+                    <div className="filter-bar">
+                      <input className="filter-input" id="quotation-search" placeholder="Search Q number, customer, email..." onInput={(e) => { window.loadQuotations(); }} />
+                      <select className="filter-select" id="quotation-filter" onChange={(e) => { window.loadQuotations(); }}>
+                        <option value="">All Status</option>
+                        <option value="Draft">Draft</option>
+                        <option value="Sent">Sent</option>
+                        <option value="Accepted">Accepted</option>
+                        <option value="Expired">Expired</option>
+                        <option value="Converted">Converted</option>
+                        </select>
+                      </div>
+                    <div id="quotations-table"><div className="loading">Loading quotations...</div></div>
                     </div>
                   </div>
                 {/* PROMOTIONS */}
@@ -715,6 +738,16 @@ export default function Admin() {
             <div className="modal-overlay" id="modal-cancel-stock" style={{ zIndex: '270' }}><div className="modal" style={{ maxWidth: '600px' }}><div className="modal-head" style={{ background: '#fef2f2' }}><h2 style={{ fontSize: '1.1rem', color: '#dc2626' }}>Cancel Order — Restore Stock</h2><button className="modal-close" onClick={(e) => { closeModal('modal-cancel-stock'); }}>✕</button></div><div className="modal-body" id="cancel-stock-body" style={{ maxHeight: '65vh', overflowY: 'auto' }} /><div className="modal-foot" id="cancel-stock-foot" /></div></div>
             {/* PAYMENT DETAIL MODAL — populated by openPaymentDetail() in admin-payments.js */}
             <div className="modal-overlay" id="modal-payment" style={{ zIndex: '255' }}><div className="modal" style={{ maxWidth: '960px' }}><div className="modal-head"><h2>Payment Review</h2><button className="modal-close" onClick={(e) => { closeModal('modal-payment'); }}>✕</button></div><div className="modal-body" id="payment-detail-body" style={{ maxHeight: '82vh', overflowY: 'auto' }} /></div></div>
+            {/* QUOTATION EDITOR MODAL — populated by renderQuotationEditor() in admin-quotations.js */}
+            <div className="modal-overlay" id="modal-quotation" style={{ zIndex: '255' }}><div className="modal" style={{ maxWidth: '900px' }}>
+                <div className="modal-head"><h2 id="modal-quotation-title">New Quotation</h2><button className="modal-close" onClick={(e) => { closeModal('modal-quotation'); }}>✕</button></div>
+                <div className="modal-body" id="quotation-body" style={{ maxHeight: '75vh', overflowY: 'auto', padding: '1rem 1.2rem' }} />
+                <div className="modal-foot" style={{ display: 'flex', justifyContent: 'flex-end', gap: '.5rem', padding: '.9rem 1.2rem', borderTop: '1px solid var(--border)', background: 'var(--bg)' }}>
+                  <button className="btn btn-outline btn-sm" onClick={(e) => { closeModal('modal-quotation'); }}>Cancel</button>
+                  <button className="btn btn-outline btn-sm" onClick={(e) => { window.saveAndPrintQuotation(); }}>💾 Save &amp; Download PDF</button>
+                  <button className="btn btn-primary btn-sm" onClick={(e) => { window.saveQuotation(); }}>Save Quotation</button>
+                  </div>
+                </div></div>
             {/* USER ACCESS MODAL — populated by openUserEdit() in admin-users.js */}
             <div className="modal-overlay" id="modal-user-access" style={{ zIndex: '255' }}><div className="modal" style={{ maxWidth: '520px' }}><div className="modal-head"><h2>Edit User Access</h2><button className="modal-close" onClick={(e) => { closeModal('modal-user-access'); }}>✕</button></div><div className="modal-body" id="user-access-body" style={{ maxHeight: '78vh', overflowY: 'auto' }} /></div></div>
             {/* PRODUCT FORM MODAL */}

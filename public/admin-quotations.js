@@ -467,94 +467,177 @@ async function printQuotation(id){
   var esc2 = function(s){
     return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   };
+  // "13 Aug 2026"-style date, matching the template.
+  var fmtDDMMMYYYY = function(iso){
+    if (!iso) return '—';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return String(iso).substring(0,10);
+    var mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()];
+    return d.getDate() + ' ' + mo + ' ' + d.getFullYear();
+  };
+
   var itemRowsHtml = (items||[]).map(function(it, i){
     var lineTotal = (Number(it.quantity)||0)*(Number(it.unit_price)||0);
     return '<tr>'+
-      '<td style="text-align:center;">'+(i+1)+'</td>'+
-      '<td>'+esc2(it.product_name)+'</td>'+
-      '<td style="text-align:right;">'+(Number(it.quantity)||0).toLocaleString('en-MY')+'</td>'+
-      '<td style="text-align:right;">RM '+_fmtQMYR(it.unit_price)+'</td>'+
-      '<td style="text-align:right;">RM '+_fmtQMYR(lineTotal)+'</td>'+
+      '<td class="c-no">'+(i+1)+'</td>'+
+      '<td class="c-desc"><strong>'+esc2(it.product_name)+'</strong></td>'+
+      '<td class="c-qty">'+(Number(it.quantity)||0).toLocaleString('en-MY')+'</td>'+
+      '<td class="c-up">'+_fmtQMYR(it.unit_price)+'</td>'+
+      '<td class="c-amt"><strong>'+_fmtQMYR(lineTotal)+'</strong></td>'+
     '</tr>';
   }).join('');
 
   var subtotal = Number(q.subtotal)||0;
-  var tax      = Number(q.tax_amount)||0;
   var total    = Number(q.total)||0;
+
+  var quotationNo = q.quotation_number || '';
 
   var html =
     '<!doctype html><html><head><meta charset="utf-8">'+
-    '<title>Quotation '+esc2(q.quotation_number||'')+'</title>'+
+    '<title>Quotation '+esc2(quotationNo)+'</title>'+
     '<style>'+
-      '@page { size: A4; margin: 18mm 16mm; }'+
+      '@page { size: A4; margin: 16mm 14mm 18mm 14mm; }'+
       '*{box-sizing:border-box;}'+
-      'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#222;margin:0;padding:0;font-size:12px;line-height:1.5;}'+
-      '.hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:14px;border-bottom:2px solid #2D4A30;margin-bottom:18px;}'+
-      '.brand{font-family:"Cormorant Garamond",Georgia,serif;font-size:26px;color:#2D4A30;font-weight:500;letter-spacing:.01em;}'+
-      '.brand small{display:block;font-size:11px;color:#666;letter-spacing:.14em;text-transform:uppercase;margin-top:4px;font-family:inherit;}'+
-      '.meta{text-align:right;font-size:11px;color:#444;}'+
-      '.meta .qn{font-size:18px;color:#2D4A30;font-weight:700;letter-spacing:.02em;}'+
-      '.meta .row{margin-top:4px;}'+
-      '.title{font-family:"Cormorant Garamond",Georgia,serif;font-size:22px;color:#2D4A30;margin-bottom:10px;}'+
-      '.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px;font-size:11.5px;}'+
-      '.box{border:1px solid #ddd;border-radius:6px;padding:10px 12px;}'+
-      '.box h4{font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.08em;margin:0 0 4px;}'+
-      '.box strong{font-size:12.5px;color:#222;}'+
-      'table{width:100%;border-collapse:collapse;font-size:11.5px;}'+
-      'thead th{background:#2D4A30;color:#fff;text-align:left;padding:8px 10px;font-weight:600;font-size:11px;letter-spacing:.02em;}'+
-      'thead th:first-child{width:36px;text-align:center;}'+
-      'tbody td{padding:8px 10px;border-bottom:1px solid #eee;vertical-align:top;}'+
-      'tbody tr:nth-child(even) td{background:#fbfbf7;}'+
-      '.totals{margin-top:14px;margin-left:auto;width:280px;font-size:12px;}'+
-      '.totals div{display:flex;justify-content:space-between;padding:5px 0;}'+
-      '.totals .grand{border-top:2px solid #2D4A30;padding-top:8px;margin-top:6px;font-weight:700;font-size:14px;color:#2D4A30;}'+
-      '.notes{margin-top:22px;padding:12px 14px;background:#fbfaf5;border-left:3px solid #C9A84C;border-radius:4px;font-size:11px;color:#555;}'+
-      '.notes h4{margin:0 0 6px;font-size:11px;color:#78350f;letter-spacing:.06em;text-transform:uppercase;}'+
-      '.footer{margin-top:28px;padding-top:12px;border-top:1px solid #ddd;font-size:10px;color:#888;text-align:center;}'+
-      '@media print { .noprint{display:none!important;} }'+
-      '.noprint{position:fixed;top:12px;right:12px;background:#2D4A30;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,.2);}'+
+      'html,body{margin:0;padding:0;}'+
+      'body{font-family:Georgia,"Times New Roman",serif;color:#111;font-size:12px;line-height:1.55;background:#fdfbf5;}'+
+
+      /* Header — vendor block left, quotation meta right */
+      '.hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:8px;}'+
+      '.vendor .name{font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:13px;letter-spacing:.02em;color:#111;margin-bottom:4px;}'+
+      '.vendor div{font-size:11px;color:#333;}'+
+      '.meta{text-align:right;font-size:11px;color:#333;}'+
+      '.meta .qlabel{font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:14px;color:#111;margin-bottom:6px;letter-spacing:.02em;}'+
+      '.meta .row{margin-top:2px;}'+
+      '.hr{border:none;border-top:1px solid #cbd3c3;margin:6px 0 14px;}'+
+
+      /* QUOTATION FOR band */
+      '.qfor{margin-bottom:14px;}'+
+      '.qfor .label{font-family:Helvetica,Arial,sans-serif;font-size:11px;color:#555;letter-spacing:.14em;text-transform:uppercase;margin-bottom:6px;}'+
+      '.qfor .who{font-size:12px;color:#111;line-height:1.6;}'+
+      '.qfor .who strong{font-size:12.5px;}'+
+      '.qfor .who .sub{color:#555;font-size:11px;}'+
+      '.qfor .who .dash{color:#666;}'+
+
+      /* Line-items table */
+      'table.li{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:6px;}'+
+      'table.li th{background:#f2efe6;border:1px solid #d9d3c4;padding:8px 10px;font-family:Helvetica,Arial,sans-serif;font-weight:700;color:#111;text-align:left;font-size:11px;letter-spacing:.02em;}'+
+      'table.li th.c-no,'+
+      'table.li th.c-qty,'+
+      'table.li th.c-up,'+
+      'table.li th.c-amt{text-align:right;}'+
+      'table.li th .u{display:block;font-weight:400;font-size:10px;color:#666;margin-top:2px;}'+
+      'table.li td{border:1px solid #e2ddce;padding:10px 10px;vertical-align:top;}'+
+      'table.li td.c-no{text-align:center;width:44px;color:#333;}'+
+      'table.li td.c-qty{text-align:right;width:80px;}'+
+      'table.li td.c-up{text-align:right;width:110px;}'+
+      'table.li td.c-amt{text-align:right;width:120px;}'+
+
+      /* Subtotal / total block — right-aligned, no borders */
+      '.totals{margin-top:14px;display:flex;flex-direction:column;align-items:flex-end;font-size:12px;}'+
+      '.totals .row{display:flex;justify-content:space-between;min-width:280px;padding:6px 4px;}'+
+      '.totals .row.grand{border-top:1px solid #111;font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:14px;color:#111;padding-top:10px;margin-top:4px;}'+
+
+      /* Terms & Conditions */
+      '.tc{margin-top:26px;}'+
+      '.tc .label{font-family:Helvetica,Arial,sans-serif;font-size:11px;color:#555;letter-spacing:.14em;text-transform:uppercase;margin-bottom:8px;}'+
+      '.tc ol{margin:0;padding-left:18px;font-size:11.5px;color:#222;line-height:1.65;}'+
+      '.tc ol li{margin-bottom:4px;}'+
+      '.tc ol ul{margin:.15rem 0 .25rem;padding-left:14px;list-style:none;color:#333;font-size:11px;}'+
+      '.tc ol ul li{margin-bottom:2px;}'+
+      '.tc ol ul li strong{font-family:Helvetica,Arial,sans-serif;font-weight:700;}'+
+
+      /* Footer — three-column, sticks to bottom of every page */
+      '.footer{position:fixed;bottom:8mm;left:14mm;right:14mm;border-top:1px solid #cbd3c3;padding-top:6px;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#555;font-family:Helvetica,Arial,sans-serif;}'+
+      '.footer .mid{font-style:italic;color:#666;font-family:Georgia,serif;}'+
+      '.footer .pg::after{content:" · Page " counter(page) " of " counter(pages);}'+
+
+      /* Print CTA (hidden on print) */
+      '@media print { .noprint{display:none!important;} .footer{page-break-inside:avoid;} }'+
+      '.noprint{position:fixed;top:12px;right:12px;background:#2D4A30;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-size:13px;cursor:pointer;font-family:Helvetica,Arial,sans-serif;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,.2);z-index:10;}'+
     '</style>'+
     '</head><body>'+
       '<button class="noprint" onclick="window.print()">🖨️ Print / Save as PDF</button>'+
+
+      /* HEADER */
       '<div class="hdr">'+
-        '<div class="brand">MJM Nursery<small>MPOB Certified Oil Palm Seedlings</small></div>'+
+        '<div class="vendor">'+
+          '<div class="name">MEGA JUTAMAS SDN BHD (663951-U)</div>'+
+          '<div>2ND Floor (B), Lot 1180, Bangunan BEI, Lorong Dua, Krokop,</div>'+
+          '<div>P.O. Box 163, 98007 Miri, Sarawak.</div>'+
+          '<div>Tel: 085-419907 · Fax: 085-413264</div>'+
+        '</div>'+
         '<div class="meta">'+
-          '<div class="qn">Quotation #'+esc2(q.quotation_number||'')+'</div>'+
-          '<div class="row"><strong>Issued:</strong> '+esc2(String(q.created_at||'').substring(0,10))+'</div>'+
-          (q.valid_until ? '<div class="row"><strong>Valid Until:</strong> '+esc2(String(q.valid_until).substring(0,10))+'</div>' : '')+
-          '<div class="row"><strong>Status:</strong> '+esc2(q.status||'Draft')+'</div>'+
+          '<div class="qlabel">Quotation</div>'+
+          '<div class="row">No: '+esc2(quotationNo)+'</div>'+
+          '<div class="row">Date: '+esc2(fmtDDMMMYYYY(q.created_at))+'</div>'+
+          '<div class="row">Valid Until: '+esc2(fmtDDMMMYYYY(q.valid_until))+'</div>'+
         '</div>'+
       '</div>'+
-      '<div class="title">Quotation</div>'+
-      '<div class="two-col">'+
-        '<div class="box">'+
-          '<h4>Prepared For</h4>'+
-          '<strong>'+esc2(q.customer_name)+'</strong>'+
-          (q.contact_person ? '<div>Attn: '+esc2(q.contact_person)+'</div>' : '')+
-          (q.contact_number ? '<div>Tel: '+esc2(q.contact_number)+'</div>' : '')+
-          (q.email ? '<div>Email: '+esc2(q.email)+'</div>' : '')+
-          (q.address ? '<div style="margin-top:4px;color:#444;">'+esc2(q.address)+'</div>' : '')+
-        '</div>'+
-        '<div class="box">'+
-          '<h4>From</h4>'+
-          '<strong>MJM Nursery</strong>'+
-          '<div>Niah Land District, Miri</div>'+
-          '<div>98000 Sarawak, Malaysia</div>'+
-          '<div>+60 11-2933 7889</div>'+
-          '<div>mjmnursery.com</div>'+
+      '<hr class="hr">'+
+
+      /* QUOTATION FOR */
+      '<div class="qfor">'+
+        '<div class="label">Quotation For</div>'+
+        '<div class="who">'+
+          (q.customer_name
+            ? '<strong>'+esc2(q.customer_name)+'</strong>'+
+              (q.contact_person ? '<div class="sub">Attn: '+esc2(q.contact_person)+'</div>' : '')+
+              (q.address        ? '<div class="sub">'+esc2(q.address)+'</div>' : '')+
+              (q.contact_number || q.email
+                ? '<div class="sub">'+
+                    (q.contact_number ? 'Tel: '+esc2(q.contact_number) : '')+
+                    (q.contact_number && q.email ? ' · ' : '')+
+                    (q.email ? esc2(q.email) : '')+
+                  '</div>'
+                : '')
+            : '<span class="dash">—</span>')+
         '</div>'+
       '</div>'+
-      '<table>'+
-        '<thead><tr><th>#</th><th>Product / Description</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Unit Price</th><th style="text-align:right;">Line Total</th></tr></thead>'+
+
+      /* LINE ITEMS */
+      '<table class="li">'+
+        '<thead><tr>'+
+          '<th class="c-no">No</th>'+
+          '<th class="c-desc">Description</th>'+
+          '<th class="c-qty">Qty<span class="u">(Palm)</span></th>'+
+          '<th class="c-up">Unit Price<span class="u">(RM)</span></th>'+
+          '<th class="c-amt">Amount<span class="u">(RM)</span></th>'+
+        '</tr></thead>'+
         '<tbody>'+(itemRowsHtml||'<tr><td colspan="5" style="text-align:center;color:#888;padding:20px;">No line items</td></tr>')+'</tbody>'+
       '</table>'+
+
+      /* TOTALS */
       '<div class="totals">'+
-        '<div><span>Subtotal</span><span>RM '+_fmtQMYR(subtotal)+'</span></div>'+
-        (tax > 0 ? '<div><span>Tax</span><span>RM '+_fmtQMYR(tax)+'</span></div>' : '')+
-        '<div class="grand"><span>Total</span><span>RM '+_fmtQMYR(total)+'</span></div>'+
+        '<div class="row"><span>Subtotal (RM)</span><span>'+_fmtQMYR(subtotal)+'</span></div>'+
+        '<div class="row grand"><span>TOTAL QUOTE (RM)</span><span>'+_fmtQMYR(total)+'</span></div>'+
       '</div>'+
-      (q.notes ? '<div class="notes"><h4>Notes / Terms</h4>'+esc2(q.notes).replace(/\n/g,'<br>')+'</div>' : '')+
-      '<div class="footer">This quotation is generated by MJM Nursery Admin Portal.</div>'+
+
+      /* TERMS & CONDITIONS — house standard, matches ops-supplied template */
+      '<div class="tc">'+
+        '<div class="label">Terms &amp; Conditions</div>'+
+        '<ol>'+
+          '<li>Payment Term: Cash Only.</li>'+
+          '<li>All payment should be crossed and made payable to:'+
+            '<ul>'+
+              '<li><strong>MEGA JUTAMAS SDN BHD</strong></li>'+
+              '<li>A/C No : HLBB 027-00-11609-6 · Hong Leong Bank Berhad</li>'+
+            '</ul>'+
+          '</li>'+
+          '<li>All payment made towards the purchase of oil palm seedlings are non-refundable.</li>'+
+          '<li>Collection must be made according to the scheduled collection date.</li>'+
+        '</ol>'+
+        (q.notes
+          ? '<div style="margin-top:12px;font-size:11px;color:#333;line-height:1.6;">'+esc2(q.notes).replace(/\n/g,'<br>')+'</div>'
+          : '')+
+      '</div>'+
+
+      /* FOOTER — three-column with page counter (CSS counter(page)/counter(pages)) */
+      '<div class="footer">'+
+        '<div>MJM NURSERY</div>'+
+        '<div class="mid">"This is a computer-generated quotation and no signature is required."</div>'+
+        '<div class="pg">'+esc2(quotationNo)+'</div>'+
+      '</div>'+
+
       '<script>window.addEventListener("load",function(){setTimeout(function(){window.print();},400);});<\/script>'+
     '</body></html>';
 

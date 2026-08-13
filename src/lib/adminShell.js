@@ -134,6 +134,7 @@ export function switchTab(tab,el){
   if(tab==='customers')window.loadCustomers();
   if(tab==='products')window.loadProducts();
   if(tab==='payments')window.loadPayments();
+  if(tab==='quotations')window.loadQuotations();
   if(tab==='promos')window.loadPromos();
   if(tab==='coupons')window.loadCoupons();
   if(tab==='webdesign')window.loadWebDesign();
@@ -436,6 +437,7 @@ var MODULE_SRCS = [
   '/admin-customers.js?v=2026-05-28-customer-groups',
   '/admin-products.js?v=2026-06-16-publish-race',
   '/admin-payments.js?v=2026-05-20-payment-verification',
+  '/admin-quotations.js?v=2026-08-13-init',
   '/admin-users.js?v=2026-05-21-tab-access-table',
   '/admin-promotions.js?v=2026-05-18-points-ledger',
   '/admin-coupons.js?v=2026-05-28-coupon-groups',

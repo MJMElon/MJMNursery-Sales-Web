@@ -496,7 +496,18 @@ async function printQuotation(id){
     '<!doctype html><html><head><meta charset="utf-8">'+
     '<title>Quotation '+esc2(quotationNo)+'</title>'+
     '<style>'+
-      '@page { size: A4; margin: 16mm 14mm 18mm 14mm; }'+
+      /* Page-margin footer via CSS Paged Media — the ONLY reliable place
+         counter(page)/counter(pages) evaluate correctly. A position:fixed
+         .footer div rendered "0 of 0" in Chrome/Firefox print. Each
+         margin box is a separate content region; strings are baked in
+         via JS template concatenation so the quotation number can vary. */
+      '@page {'+
+        'size: A4;'+
+        'margin: 16mm 14mm 22mm 14mm;'+
+        '@bottom-left  { content: "MJM NURSERY"; font-family: Helvetica,Arial,sans-serif; font-size:10px; color:#555; padding-top:4px; border-top:1px solid #cbd3c3; }'+
+        '@bottom-center{ content: "\\"This is a computer-generated quotation and no signature is required.\\""; font-family: Georgia,serif; font-style:italic; font-size:10px; color:#666; padding-top:4px; border-top:1px solid #cbd3c3; }'+
+        '@bottom-right { content: "'+esc2(quotationNo).replace(/"/g,'\\"')+' · Page " counter(page) " of " counter(pages); font-family: Helvetica,Arial,sans-serif; font-size:10px; color:#555; padding-top:4px; border-top:1px solid #cbd3c3; }'+
+      '}'+
       '*{box-sizing:border-box;}'+
       'html,body{margin:0;padding:0;}'+
       'body{font-family:Georgia,"Times New Roman",serif;color:#111;font-size:12px;line-height:1.55;background:#fdfbf5;}'+
@@ -546,13 +557,8 @@ async function printQuotation(id){
       '.tc ol ul li{margin-bottom:2px;}'+
       '.tc ol ul li strong{font-family:Helvetica,Arial,sans-serif;font-weight:700;}'+
 
-      /* Footer — three-column, sticks to bottom of every page */
-      '.footer{position:fixed;bottom:8mm;left:14mm;right:14mm;border-top:1px solid #cbd3c3;padding-top:6px;display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#555;font-family:Helvetica,Arial,sans-serif;}'+
-      '.footer .mid{font-style:italic;color:#666;font-family:Georgia,serif;}'+
-      '.footer .pg::after{content:" · Page " counter(page) " of " counter(pages);}'+
-
       /* Print CTA (hidden on print) */
-      '@media print { .noprint{display:none!important;} .footer{page-break-inside:avoid;} }'+
+      '@media print { .noprint{display:none!important;} }'+
       '.noprint{position:fixed;top:12px;right:12px;background:#2D4A30;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-size:13px;cursor:pointer;font-family:Helvetica,Arial,sans-serif;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,.2);z-index:10;}'+
     '</style>'+
     '</head><body>'+
@@ -631,12 +637,8 @@ async function printQuotation(id){
           : '')+
       '</div>'+
 
-      /* FOOTER — three-column with page counter (CSS counter(page)/counter(pages)) */
-      '<div class="footer">'+
-        '<div>MJM NURSERY</div>'+
-        '<div class="mid">"This is a computer-generated quotation and no signature is required."</div>'+
-        '<div class="pg">'+esc2(quotationNo)+'</div>'+
-      '</div>'+
+      /* Footer lives in the @page bottom-* margin boxes above — that's
+         the only place counter(page)/counter(pages) evaluate correctly. */
 
       '<script>window.addEventListener("load",function(){setTimeout(function(){window.print();},400);});<\/script>'+
     '</body></html>';

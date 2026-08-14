@@ -887,22 +887,41 @@ async function viewCustomer(id){
   var totalPurchases=orders.filter(function(o){return o.status!=='Cancelled';}).length;
 
   // Pull points totals from the ledger view — this is the single source of
-  // truth and reflects both earnings (from orders) and redemptions. Fall back
-  // to summing per-order points_issued if the view returns nothing.
-  var totalPtsEarned=0, totalPtsRedeemed=0, ptsBalance=0;
+  // truth and reflects both earnings (from orders) and redemptions. Fall
+  // back INDEPENDENTLY to summing per-order points_issued / points_redeemed
+  // when the view doesn't supply a figure. The old code only fell back on
+  // earned, so a customer whose view row had lifetime_earned but no
+  // lifetime_redeemed (older view build) showed Total Redeemed as 0 and
+  // Available Points as earned-0 — leaving the balance un-deducted after
+  // a real redemption.
+  var totalPtsEarned=0, totalPtsRedeemed=0, ptsBalance=null;
   try{
     var{data:bal}=await sb.from('salesweb_customer_points_balance')
       .select('balance,lifetime_earned,lifetime_redeemed')
       .eq('user_id',id).maybeSingle();
     if(bal){
-      ptsBalance=Number(bal.balance)||0;
-      totalPtsEarned=Number(bal.lifetime_earned)||0;
-      totalPtsRedeemed=Number(bal.lifetime_redeemed)||0;
+      if(bal.balance          != null) ptsBalance      = Number(bal.balance)         ||0;
+      if(bal.lifetime_earned  != null) totalPtsEarned  = Number(bal.lifetime_earned) ||0;
+      if(bal.lifetime_redeemed!= null) totalPtsRedeemed= Number(bal.lifetime_redeemed)||0;
     }
   }catch(e){}
+  // Fallback: sum orders.points_issued / points_redeemed for every
+  // non-cancelled order. Independent of each other so a partially-
+  // populated view row still gets the missing half filled in.
   if(!totalPtsEarned){
-    totalPtsEarned=orders.reduce(function(s,o){return s+(o.points_issued||0);},0);
-    if(!ptsBalance) ptsBalance=totalPtsEarned-totalPtsRedeemed;
+    totalPtsEarned = orders
+      .filter(function(o){ return o.status !== 'Cancelled'; })
+      .reduce(function(s,o){ return s + (Number(o.points_issued)||0); }, 0);
+  }
+  if(!totalPtsRedeemed){
+    totalPtsRedeemed = orders
+      .filter(function(o){ return o.status !== 'Cancelled'; })
+      .reduce(function(s,o){ return s + (Number(o.points_redeemed)||0); }, 0);
+  }
+  // Available balance derives from the two totals if the view didn't
+  // give us its own figure (which is authoritative when present).
+  if(ptsBalance == null){
+    ptsBalance = Math.max(0, totalPtsEarned - totalPtsRedeemed);
   }
   var activeOrders=orders.filter(function(o){return o.status!=='Completed'&&o.status!=='Cancelled';});
   var historyOrders=orders.filter(function(o){return o.status==='Completed'||o.status==='Cancelled';});
@@ -1008,9 +1027,13 @@ async function viewCustomer(id){
   html+='<div style="font-size:13px;font-weight:600;font-family:monospace;color:rgba(255,255,255,.8);">'+id.substring(0,12).toUpperCase()+'</div>';
   html+='</div>';
 
-  // Points breakdown
-  html+='<div style="background:var(--bg);border-radius:12px;padding:1.2rem;">';
-  html+='<div style="font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.8rem;">Points & Rewards</div>';
+  // Points breakdown — the whole card is a click target that opens
+  // the points-ledger modal (assign + earned/redeemed history).
+  html+='<div style="background:var(--bg);border-radius:12px;padding:1.2rem;cursor:pointer;transition:background .15s;" onclick="openCustomerPointsLedger(\''+id+'\')" onmouseover="this.style.background=\'#f5f0ff\'" onmouseout="this.style.background=\'var(--bg)\'" title="Click to open points history and assign points">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem;">';
+  html+='<div style="font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;">Points & Rewards</div>';
+  html+='<span style="font-size:11px;color:#7c5cbf;font-weight:600;">View →</span>';
+  html+='</div>';
   var ptsItems=[
     {label:'Available Points',value:ptsBalance.toLocaleString(),bold:true},
     {label:'Total Earned',value:totalPtsEarned.toLocaleString()},
@@ -1089,3 +1112,236 @@ async function setCustomerCreditLimit(id){
   toast(limit==null?'Credit limit cleared (no cap)':'Credit limit set to RM '+limit.toFixed(2));
   viewCustomer(id);
 }
+
+// ═══════════════════════════════════════
+//  CUSTOMER POINTS LEDGER — clicked from the Points & Rewards card
+// ═══════════════════════════════════════
+// Renders every ledger row (Earned / Redeemed / Adjusted) newest
+// first, with a running balance recomputed as the LATEST balance
+// walked backwards. Includes an "+ Assign points" affordance for
+// admin adjustments; positive numbers add, negative numbers deduct.
+//
+// Reads salesweb_points_ledger + salesweb_customer_points_balance,
+// writes salesweb_points_ledger rows with type='Adjusted' via the
+// admin INSERT policy from points_admin_insert.sql. On any read
+// falling short we mix in orders.points_issued / points_redeemed
+// so historical activity that never landed in the ledger still
+// shows up.
+async function openCustomerPointsLedger(customerId){
+  var modal = document.getElementById('modal-customer-points');
+  if (!modal){ toast('Points modal not initialised','error'); return; }
+  modal.classList.add('open');
+  document.getElementById('cpts-body').setAttribute('data-cust-id', customerId);
+  document.getElementById('cpts-body').innerHTML = '<div class="loading">Loading points history…</div>';
+
+  var { data: c } = await sb.from('shared_profiles').select('full_name,email').eq('id', customerId).maybeSingle();
+  document.getElementById('cpts-title').textContent =
+    'Customer Points — ' + (c ? (c.full_name || c.email || customerId.substring(0,8)) : customerId.substring(0,8));
+
+  await renderCustomerPointsLedgerBody(customerId);
+}
+window.openCustomerPointsLedger = openCustomerPointsLedger;
+
+async function renderCustomerPointsLedgerBody(customerId){
+  // Pull the ledger, the view (fastest correct balance), and the
+  // customer's orders in parallel so we can synthesise ledger-style
+  // rows for orders that never wrote to the ledger.
+  var [ledgerRes, balRes, ordersRes] = await Promise.all([
+    sb.from('salesweb_points_ledger').select('*').eq('user_id', customerId).order('created_at',{ascending:false}),
+    sb.from('salesweb_customer_points_balance').select('balance,lifetime_earned,lifetime_redeemed').eq('user_id',customerId).maybeSingle(),
+    sb.from('salesweb_customer_orders').select('id,order_number,points_issued,points_redeemed,points_discount_rm,total,status,created_at,updated_at').eq('customer_id', customerId).order('created_at',{ascending:false})
+  ]);
+
+  var ledger  = ledgerRes.data  || [];
+  var bal     = balRes.data     || {};
+  var orders  = ordersRes.data  || [];
+
+  // Build a set of order_ids already reflected in the ledger for a
+  // given type so we don't double-count when synthesising fallback rows.
+  var seen = {};
+  ledger.forEach(function(r){
+    if (r.order_id){ seen[r.order_id + '|' + r.type] = true; }
+  });
+
+  // Synthesise Earned / Redeemed rows for non-cancelled orders that
+  // never wrote to the ledger (older data, RLS-blocked writes, etc.)
+  var synth = [];
+  orders.forEach(function(o){
+    if (o.status === 'Cancelled') return;
+    if (Number(o.points_issued) > 0 && !seen[o.id + '|Earned']){
+      synth.push({
+        __synth: true,
+        user_id: customerId,
+        change: Number(o.points_issued),
+        type: 'Earned',
+        order_id: o.id,
+        order_number: o.order_number,
+        rm_value: Number(o.total)||0,
+        note: 'Earned from order (synthesised)',
+        created_by: 'system',
+        created_at: o.updated_at || o.created_at
+      });
+    }
+    if (Number(o.points_redeemed) > 0 && !seen[o.id + '|Redeemed']){
+      synth.push({
+        __synth: true,
+        user_id: customerId,
+        change: -Number(o.points_redeemed),
+        type: 'Redeemed',
+        order_id: o.id,
+        order_number: o.order_number,
+        rm_value: Number(o.points_discount_rm)||0,
+        note: 'Redeemed on order (synthesised)',
+        created_by: 'system',
+        created_at: o.updated_at || o.created_at
+      });
+    }
+  });
+
+  // Also attach order_number to real ledger rows that carry an order_id
+  // so the table can render "Earned from order #XXXX" like the mock.
+  var orderNoById = {};
+  orders.forEach(function(o){ orderNoById[o.id] = o.order_number || o.id.substring(0,8).toUpperCase(); });
+
+  var combined = ledger.concat(synth).map(function(r){
+    return Object.assign({}, r, { _orderNo: r.order_number || (r.order_id ? orderNoById[r.order_id] : null) });
+  });
+  combined.sort(function(a,b){ return new Date(b.created_at).getTime() - new Date(a.created_at).getTime(); });
+
+  // Balance/lifetime — trust the view if it returned something, else
+  // derive from combined rows (sum of change for balance; positive vs
+  // negative sums for earned/redeemed).
+  var balance = bal.balance != null ? Number(bal.balance)||0 : combined.reduce(function(s,r){ return s + (Number(r.change)||0); }, 0);
+  var lifetimeEarned   = bal.lifetime_earned   != null ? Number(bal.lifetime_earned)   ||0 : combined.reduce(function(s,r){ var v=Number(r.change)||0; return s + (v>0?v:0); }, 0);
+  var lifetimeRedeemed = bal.lifetime_redeemed != null ? Number(bal.lifetime_redeemed) ||0 : combined.reduce(function(s,r){ var v=Number(r.change)||0; return s + (v<0?-v:0); }, 0);
+  // If view lags reality, prefer the larger number for earned/redeemed
+  // so a freshly-synthesised row isn't hidden by a stale view figure.
+  var derivedEarned = combined.reduce(function(s,r){ var v=Number(r.change)||0; return s + (v>0?v:0); }, 0);
+  var derivedRedeemed = combined.reduce(function(s,r){ var v=Number(r.change)||0; return s + (v<0?-v:0); }, 0);
+  lifetimeEarned = Math.max(lifetimeEarned, derivedEarned);
+  lifetimeRedeemed = Math.max(lifetimeRedeemed, derivedRedeemed);
+  var derivedBalance = lifetimeEarned - lifetimeRedeemed;
+  // Only trust the view balance if it agrees with derived totals;
+  // otherwise show the derived one so 'Available' reflects reality.
+  if (Math.abs(balance - derivedBalance) > 0) balance = derivedBalance;
+  balance = Math.max(0, balance);
+
+  // Walk from OLDEST to NEWEST to compute the running balance at each
+  // row, then reverse for display.
+  var asc = combined.slice().reverse();
+  var running = 0;
+  asc.forEach(function(r){ running += Number(r.change)||0; r._runningBal = Math.max(0, running); });
+  var rowsDesc = asc.slice().reverse();
+
+  var rowsHtml = '';
+  if (!rowsDesc.length){
+    rowsHtml = '<tr><td colspan="4" style="text-align:center;color:var(--ink4);padding:1rem;font-size:12px;">No points activity yet.</td></tr>';
+  } else {
+    rowsHtml = rowsDesc.map(function(r){
+      var dt = String(r.created_at||'').substring(0,10);
+      var change = Number(r.change)||0;
+      var sign = change > 0 ? '+' : '';
+      var color = change > 0 ? '#047857' : (change < 0 ? '#b91c1c' : 'var(--ink3)');
+      var typeLabel = r.type === 'Earned' ? 'Earned' : r.type === 'Redeemed' ? 'Redeemed' : 'Adjusted';
+      var details = '';
+      if (r._orderNo){
+        var verb = r.type === 'Redeemed' ? 'Redeemed on order' : (r.type === 'Earned' ? 'Earned from order' : (r.type + ' — order'));
+        details = verb + ' <span style="color:#1d4ed8;">#'+esc(r._orderNo)+'</span>';
+      } else {
+        details = typeLabel + (r.note ? ' — <span style="color:var(--ink3);">'+esc(r.note)+'</span>' : '');
+      }
+      if (r.__synth){
+        details += ' <span style="font-size:10px;color:var(--ink4);">(from order snapshot)</span>';
+      }
+      return '<tr>'+
+        '<td style="white-space:nowrap;">'+esc(dt)+'</td>'+
+        '<td>'+details+'</td>'+
+        '<td style="text-align:right;font-weight:600;color:'+color+';">'+sign+change.toLocaleString('en-MY')+'</td>'+
+        '<td style="text-align:right;font-weight:600;">'+(r._runningBal).toLocaleString('en-MY')+'</td>'+
+      '</tr>';
+    }).join('');
+  }
+
+  var html =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem;flex-wrap:wrap;gap:.6rem;">'+
+      '<div style="font-size:14px;">Balance: <strong style="font-size:18px;color:var(--ink);">'+balance.toLocaleString('en-MY')+'</strong> <span style="color:var(--ink4);font-size:12px;">pts</span></div>'+
+      '<button class="btn btn-primary btn-sm" onclick="toggleAssignPointsForm(true)">+ Assign points</button>'+
+    '</div>'+
+
+    /* Sub-line with lifetime totals */
+    '<div style="display:flex;gap:1.2rem;font-size:11px;color:var(--ink4);margin-bottom:.9rem;">'+
+      '<span>Lifetime earned: <strong style="color:#047857;">'+lifetimeEarned.toLocaleString('en-MY')+'</strong></span>'+
+      '<span>Lifetime redeemed: <strong style="color:#b91c1c;">'+lifetimeRedeemed.toLocaleString('en-MY')+'</strong></span>'+
+    '</div>'+
+
+    /* Inline assign-points form (hidden by default) */
+    '<div id="cpts-assign-form" style="display:none;background:#faf6ff;border:1px solid #e3d5ff;border-radius:8px;padding:.75rem 1rem;margin-bottom:.9rem;">'+
+      '<div style="font-size:12px;font-weight:600;color:#5b21b6;margin-bottom:.5rem;">Manual adjustment</div>'+
+      '<div style="display:grid;grid-template-columns:120px 1fr auto auto;gap:.5rem;align-items:center;">'+
+        '<input type="number" id="cpts-amount" class="form-input" placeholder="+ or − pts" style="font-size:12px;padding:6px 10px;">'+
+        '<input type="text" id="cpts-note" class="form-input" placeholder="Reason (e.g. Compensation for delayed collection)" style="font-size:12px;padding:6px 10px;">'+
+        '<button class="btn btn-primary btn-sm" onclick="submitAssignPoints(\''+customerId+'\')">Save</button>'+
+        '<button class="btn btn-outline btn-sm" onclick="toggleAssignPointsForm(false)">Cancel</button>'+
+      '</div>'+
+      '<div style="font-size:10.5px;color:var(--ink4);margin-top:.4rem;">Positive numbers add points, negative numbers deduct.</div>'+
+    '</div>'+
+
+    /* Ledger table */
+    '<table class="data-table" style="font-size:12px;">'+
+      '<thead><tr>'+
+        '<th>Date</th>'+
+        '<th>Details</th>'+
+        '<th style="text-align:right;">Amount</th>'+
+        '<th style="text-align:right;">Balance</th>'+
+      '</tr></thead>'+
+      '<tbody>'+rowsHtml+'</tbody>'+
+    '</table>';
+
+  document.getElementById('cpts-body').innerHTML = html;
+}
+
+function toggleAssignPointsForm(open){
+  var el = document.getElementById('cpts-assign-form');
+  if (!el) return;
+  el.style.display = open ? 'block' : 'none';
+  if (open){
+    var amt = document.getElementById('cpts-amount'); if (amt) amt.focus();
+  } else {
+    var a = document.getElementById('cpts-amount'); if (a) a.value = '';
+    var n = document.getElementById('cpts-note');   if (n) n.value = '';
+  }
+}
+window.toggleAssignPointsForm = toggleAssignPointsForm;
+
+async function submitAssignPoints(customerId){
+  var amt = Number(document.getElementById('cpts-amount').value);
+  var note = (document.getElementById('cpts-note').value||'').trim();
+  if (!amt || isNaN(amt)){ toast('Enter a non-zero amount','error'); return; }
+  if (!note){ toast('Enter a reason for the adjustment','error'); return; }
+
+  var session = await sb.auth.getSession();
+  var actor   = session?.data?.session?.user?.email || 'admin';
+
+  var { error } = await sb.from('salesweb_points_ledger').insert([{
+    user_id:    customerId,
+    change:     Math.round(amt),
+    type:       'Adjusted',
+    rm_value:   null,
+    note:       note,
+    created_by: actor
+  }]);
+  if (error){
+    // Most likely cause: admin INSERT policy from points_admin_insert.sql
+    // isn't applied yet. Surface an actionable toast.
+    if (/violat|policy|permission|row-level/i.test(error.message||'')){
+      toast('Insert denied — apply points_admin_insert.sql and reload the schema','error');
+    } else {
+      toast('Save failed: '+error.message,'error');
+    }
+    return;
+  }
+  toast((amt > 0 ? 'Added ' : 'Deducted ')+Math.abs(amt).toLocaleString('en-MY')+' pts');
+  toggleAssignPointsForm(false);
+  await renderCustomerPointsLedgerBody(customerId);
+}
+window.submitAssignPoints = submitAssignPoints;

@@ -935,6 +935,8 @@ export default function Admin() {
                   </div><div className="modal-foot"><button className="btn btn-outline" onClick={(e) => { closeModal('modal-coupon-bulk'); }}>Cancel</button><button className="btn btn-primary" id="mcb-go" onClick={(e) => { window.bulkGenerateCoupons(); }}>Generate & Download CSV</button></div></div></div>
             {/* CUSTOMER DETAIL MODAL */}
             <div className="modal-overlay" id="modal-customer"><div className="modal" style={{ maxWidth: '900px' }}><div className="modal-head"><h2 id="mcu-title">Customer Profile</h2><button className="modal-close" onClick={(e) => { closeModal('modal-customer'); }}>✕</button></div><div className="modal-body" id="mcu-body" style={{ maxHeight: '80vh', overflowY: 'auto' }} /></div></div>
+            {/* CUSTOMER POINTS LEDGER MODAL — opened on top of modal-customer (z=260) via openCustomerPointsLedger() */}
+            <div className="modal-overlay" id="modal-customer-points" style={{ zIndex: '260' }}><div className="modal" style={{ maxWidth: '760px' }}><div className="modal-head"><h2 id="cpts-title">Customer Points</h2><button className="modal-close" onClick={(e) => { closeModal('modal-customer-points'); }}>✕</button></div><div className="modal-body" id="cpts-body" style={{ maxHeight: '76vh', overflowY: 'auto' }} /></div></div>
             {/* ADD CUSTOMER MODAL */}
             <div className="modal-overlay" id="modal-add-customer" style={{ zIndex: '255' }}><div className="modal" style={{ maxWidth: '480px' }}>
                 <div className="modal-head"><h2>+ Add Customer</h2><button className="modal-close" onClick={(e) => { closeModal('modal-add-customer'); }}>✕</button></div>

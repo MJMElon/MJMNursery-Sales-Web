@@ -324,11 +324,16 @@ function renderQuotationEditor(){
       '<button class="btn btn-primary btn-sm" onclick="addQuotationItem()">+ Add Row</button>'+
     '</div>'+
     '<style>'+
-      /* Drag-to-reorder visuals: source row dims, drop target gets a
-         highlighted top border so the admin sees where the row will
-         land. Scoped by #q-items-body prefix to avoid leaking. */
-      '#q-items-body tr.qrow-dragging{opacity:.35;}'+
-      '#q-items-body tr.qrow-drop-target{outline:2px dashed #7c5cbf;outline-offset:-2px;background:#f5f0ff;}'+
+      /* Drag-to-reorder visuals — applied to the <td> children because
+         browsers ignore outline/background on <tr>. The drop target
+         paints a soft purple fill on every cell plus a 2px purple line
+         above and below (inset box-shadow) so it reads as an insertion
+         zone. */
+      '#q-items-body tr.qrow-dragging td{opacity:.35;}'+
+      '#q-items-body tr.qrow-drop-target td{background:#f2ecff;box-shadow:inset 0 2px 0 0 #7c5cbf, inset 0 -2px 0 0 #7c5cbf;transition:background .1s;}'+
+      '#q-items-body tr.qrow-drop-target td:first-child{box-shadow:inset 0 2px 0 0 #7c5cbf, inset 0 -2px 0 0 #7c5cbf, inset 2px 0 0 0 #7c5cbf;}'+
+      '#q-items-body tr.qrow-drop-target td:last-child{box-shadow:inset 0 2px 0 0 #7c5cbf, inset 0 -2px 0 0 #7c5cbf, inset -2px 0 0 0 #7c5cbf;}'+
+      '#q-items-body td.qrow-handle{cursor:grab;}'+
       '#q-items-body td.qrow-handle:active{cursor:grabbing;}'+
     '</style>'+
     '<table class="data-table" style="font-size:12px;margin-bottom:.9rem;">'+

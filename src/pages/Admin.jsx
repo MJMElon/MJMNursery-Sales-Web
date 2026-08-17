@@ -802,6 +802,7 @@ export default function Admin() {
                         <button className="btn btn-primary" onClick={(e) => { window.executeTransfer(); }} style={{ width: '100%', padding: '10px' }}>Transfer Stock →</button>
                         </div>
                       <div id="mp-transfer-history" />
+                      <div id="mp-inventory-history" />
                       </div>
                     </div>
                   <div>

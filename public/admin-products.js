@@ -294,6 +294,7 @@ function openProductForm(p){
 
   var srcEl=document.getElementById('mp-stock-source');srcEl.innerHTML='';
   var histEl=document.getElementById('mp-transfer-history');histEl.innerHTML='';
+  var invEl=document.getElementById('mp-inventory-history'); if(invEl) invEl.innerHTML='';
   if(p&&p.id){
     loadTransferSourceDropdown(p.id);
     srcEl.innerHTML='<div style="font-size:12px;color:var(--ink4);">Loading...</div>';
@@ -303,6 +304,9 @@ function openProductForm(p){
       srcEl.innerHTML='';console.error('stock load error:',e);
       loadTransfersOnly(p.id).then(function(html){histEl.innerHTML=html;});
     });
+    // Inventory history — populated independently of the stock-source
+    // block so a slow order_items scan doesn't hold up the history table.
+    loadInventoryHistory(p.id);
   } else {
     loadTransferSourceDropdown(null);
   }
@@ -755,3 +759,96 @@ async function saveProductOrderFromDOM(){
   try{await Promise.all(promises);toast('Order saved');}
   catch(e){toast('Please run SQL: ALTER TABLE salesweb_products ADD COLUMN IF NOT EXISTS sort_order INTEGER;','error');}
 }
+
+// ═══════════════════════════════════════
+//  INVENTORY HISTORY (in Edit Product modal)
+// ═══════════════════════════════════════
+// Reads salesweb_inventory_history (populated by the trigger on
+// stock_qty changes + explicit inserts from hold_product_stock /
+// restore_order_stock). Shows the most-recent 90 movements — plenty
+// for a year of activity for any single product without dumping the
+// whole ledger. If the table doesn't exist yet (migration not run),
+// renders an actionable note instead of a raw error.
+async function loadInventoryHistory(productId){
+  var host = document.getElementById('mp-inventory-history');
+  if (!host) return;
+  host.innerHTML =
+    '<div style="margin-top:1.2rem;background:var(--surface);border-radius:10px;padding:1rem;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.2rem;">'+
+        '<div style="font-size:13px;font-weight:700;color:var(--ink);">Inventory history</div>'+
+        '<div style="font-size:10.5px;color:var(--ink4);">Latest 90 movements</div>'+
+      '</div>'+
+      '<div style="font-size:11px;color:var(--ink4);margin-bottom:.6rem;">Inventory in and out for this product</div>'+
+      '<div id="mp-inv-hist-body" style="font-size:12px;color:var(--ink3);">Loading…</div>'+
+    '</div>';
+
+  var res = await sb.from('salesweb_inventory_history')
+    .select('id, created_at, action, delta, balance_after, ref_id, ref_number, note, created_by')
+    .eq('product_id', productId)
+    .order('created_at', {ascending:false})
+    .limit(90);
+
+  var body = document.getElementById('mp-inv-hist-body');
+  if (!body) return;
+
+  if (res.error){
+    // Missing table / RLS / cache — surface the fix.
+    if (/salesweb_inventory_history|does not exist|schema cache/i.test(res.error.message||'')){
+      body.innerHTML =
+        '<div style="padding:.7rem .9rem;background:#fff8ec;border:1px solid #f5c078;border-radius:8px;color:#78350f;line-height:1.55;">'+
+          '<strong>Inventory history not installed yet.</strong> Run <code>supabase/migrations/salesweb_inventory_history.sql</code> in the SQL Editor, then <code>NOTIFY pgrst, \'reload schema\';</code>. Reopen this product to see the ledger.'+
+        '</div>';
+      return;
+    }
+    body.innerHTML = '<div style="color:var(--red);">'+esc(res.error.message)+'</div>';
+    return;
+  }
+
+  var rows = res.data || [];
+  if (!rows.length){
+    body.innerHTML = '<div style="color:var(--ink4);padding:.4rem 0;">No inventory activity yet for this product.</div>';
+    return;
+  }
+
+  var actionColour = function(a){
+    if (a === 'Order placed')     return '#b91c1c';   // stock going OUT
+    if (a === 'Order restored')   return '#047857';
+    if (a === 'Item restocked')   return '#047857';
+    return 'var(--ink3)';
+  };
+
+  var html =
+    '<table class="data-table" style="font-size:12px;">'+
+      '<thead><tr>'+
+        '<th>Date</th>'+
+        '<th>Action</th>'+
+        '<th style="text-align:right;">In</th>'+
+        '<th style="text-align:right;">Out</th>'+
+        '<th style="text-align:right;">Balance</th>'+
+      '</tr></thead>'+
+      '<tbody>'+
+        rows.map(function(r){
+          var d = new Date(r.created_at);
+          var pad = function(n){ return (n<10?'0':'')+n; };
+          var when = pad(d.getDate())+'-'+pad(d.getMonth()+1)+'-'+d.getFullYear()+', '+
+                     ((d.getHours()%12)||12)+':'+pad(d.getMinutes())+' '+(d.getHours()<12?'AM':'PM');
+          var refLabel = r.ref_number ? ('#'+esc(r.ref_number)) : '';
+          var actionLine = '<div style="font-weight:600;color:'+actionColour(r.action)+';">'+esc(r.action||'—')+'</div>'+
+                           (refLabel ? '<div style="font-size:11px;color:var(--ink4);margin-top:2px;">'+refLabel+'</div>' : '')+
+                           (r.note ? '<div style="font-size:10.5px;color:var(--ink4);margin-top:2px;">'+esc(r.note)+'</div>' : '');
+          var delta = Number(r.delta)||0;
+          var inCell  = delta > 0 ? '<span style="color:#047857;font-weight:700;">+ '+delta.toLocaleString('en-MY')+'</span>' : '';
+          var outCell = delta < 0 ? '<span style="color:#b91c1c;font-weight:700;">- '+Math.abs(delta).toLocaleString('en-MY')+'</span>' : '';
+          return '<tr>'+
+            '<td style="white-space:nowrap;">'+esc(when)+'</td>'+
+            '<td>'+actionLine+'</td>'+
+            '<td style="text-align:right;">'+inCell+'</td>'+
+            '<td style="text-align:right;">'+outCell+'</td>'+
+            '<td style="text-align:right;font-weight:600;">'+(Number(r.balance_after)||0).toLocaleString('en-MY')+'</td>'+
+          '</tr>';
+        }).join('')+
+      '</tbody>'+
+    '</table>';
+  body.innerHTML = html;
+}
+window.loadInventoryHistory = loadInventoryHistory;

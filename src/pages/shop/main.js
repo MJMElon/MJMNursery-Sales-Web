@@ -512,9 +512,21 @@ export function initShopMain() {
     if (target && target.classList) target.classList.add('active');
     var el = document.getElementById('pol-' + tab);
     if (el) el.classList.add('active');
+
+    // Push the tab into the address bar so this view is directly
+    // shareable — /?policy=<tab>. Skip when the URL already matches
+    // (deep-link init, popstate handler) so we don't stack duplicate
+    // history entries.
+    try {
+      var url = new URL(window.location.href);
+      if (url.searchParams.get('policy') !== tab) {
+        url.searchParams.set('policy', tab);
+        window.history.pushState({ page: 'information', policy: tab }, '', url.toString());
+      }
+    } catch(_){}
   }
 
-  // Deep-link handler: /index.html?policy=<key> auto-navigates to the
+  // Deep-link handler: /?policy=<key> auto-navigates to the
   // Information page and opens the requested tab. Used by the checkout
   // E-Invoice modal's "E-Invoice Policy" link so customers land on the
   // right section, not a generic policies page.
@@ -528,6 +540,17 @@ export function initShopMain() {
     }catch(_){}
   }
   setTimeout(applyPolicyDeepLink, 0);
+
+  // Back / Forward navigation between shared policy links — re-apply
+  // the URL's ?policy=<key> so browser history behaves like real
+  // page-to-page navigation.
+  window.addEventListener('popstate', function(){
+    try {
+      var params = new URLSearchParams(window.location.search);
+      var policy = params.get('policy');
+      if (policy){ showPage('information'); setTimeout(function(){ switchPolicyTab(policy); }, 40); }
+    } catch(_){}
+  });
 
   // ── PRODUCTS ──
   let products = [];

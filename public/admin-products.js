@@ -60,7 +60,14 @@ async function loadProducts(){
     var sell=p.sell_month?(p.sell_month+(p.sell_year?' '+p.sell_year:'')):'—';
     var pr='RM '+(p.price||0).toFixed(2);
     if(p.compare_price&&p.compare_price>p.price)pr='<span style="text-decoration:line-through;color:var(--ink4);font-size:11px;">RM '+p.compare_price.toFixed(2)+'</span> <span style="color:var(--red);font-weight:700;">RM '+(p.price||0).toFixed(2)+'</span>';
-    var pub='<label style="position:relative;display:inline-block;width:36px;height:20px;cursor:pointer;"><input type="checkbox" '+(p.is_published?'checked':'')+' onchange="togglePublish(\''+p.id+'\',this.checked)" style="opacity:0;width:0;height:0;"><span style="position:absolute;inset:0;background:'+(p.is_published?'var(--green)':'#ccc')+';border-radius:10px;transition:.2s;"></span><span style="position:absolute;left:'+(p.is_published?'18px':'2px')+';top:2px;width:16px;height:16px;background:#fff;border-radius:50%;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2);"></span></label>';
+    // Publish toggle. Visual state uses :checked sibling selectors so
+    // the knob slides across the moment the checkbox flips — no wait
+    // for the DB round-trip or a full re-render.
+    var pub='<label class="pub-toggle" style="position:relative;display:inline-block;width:36px;height:20px;cursor:pointer;">'+
+              '<input type="checkbox" class="pub-toggle-input" '+(p.is_published?'checked':'')+' onchange="togglePublish(\''+p.id+'\',this.checked,this)" style="opacity:0;width:0;height:0;">'+
+              '<span class="pub-toggle-track" style="position:absolute;inset:0;background:#ccc;border-radius:10px;transition:background .18s;"></span>'+
+              '<span class="pub-toggle-knob"  style="position:absolute;left:2px;top:2px;width:16px;height:16px;background:#fff;border-radius:50%;transition:transform .18s;box-shadow:0 1px 3px rgba(0,0,0,.2);"></span>'+
+            '</label>';
     var handle='<span class="drag-handle" title="Drag to reorder" style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;color:var(--ink4);cursor:grab;font-size:16px;line-height:1;user-select:none;">&#x2630;</span>';
     html+='<tr draggable="true" data-pid="'+p.id+'" data-idx="'+idx+'" ondragstart="onProductDragStart(event)" ondragover="onProductDragOver(event)" ondragleave="onProductDragLeave(event)" ondrop="onProductDrop(event)" ondragend="onProductDragEnd(event)" style="transition:background .15s;"><td style="text-align:center;">'+handle+'</td><td style="font-size:11px;font-weight:700;color:var(--ink4);text-align:center;">'+(idx+1)+'</td><td>'+img+'</td><td style="font-weight:600;">'+esc(p.name)+'</td><td><span class="badge '+(p.collection==='Promotion'?'badge-amber':'badge-grey')+'">'+esc(p.collection||'')+'</span></td><td>'+esc(sell)+'</td><td>'+pr+'</td><td style="font-weight:700;color:'+(p.stock_qty>0?'var(--green)':'var(--red)')+';">'+p.stock_qty+'</td><td>'+pub+'</td><td style="white-space:nowrap;"><button class="btn btn-outline btn-sm" onclick="editProduct(\''+p.id+'\')" >Edit</button> <button class="btn btn-outline btn-sm" onclick="refreshProductStock(\''+p.id+'\')">🔄</button> <button class="btn btn-outline btn-sm" onclick="deleteProduct(\''+p.id+'\')" style="color:var(--red);">✕</button></td></tr>';
   });
@@ -488,7 +495,19 @@ async function saveProduct(){
 async function editProduct(id){try{var{data}=await sb.from('salesweb_products').select('*').eq('id',id).single();if(data)openProductForm(data);}catch(e){toast('Error','error');}}
 async function deleteProduct(id){if(!confirm('Delete this product?'))return;await sb.from('salesweb_products').delete().eq('id',id);toast('Deleted');loadProducts();}
 
-async function togglePublish(id,pub){
+// Inject the toggle-track :checked styles once. Keeping this next to
+// the handler so anyone touching the toggle sees the styling contract.
+(function _injectPubToggleStyles(){
+  if (document.getElementById('pub-toggle-css')) return;
+  var s = document.createElement('style');
+  s.id = 'pub-toggle-css';
+  s.textContent =
+    '.pub-toggle-input:checked ~ .pub-toggle-track{background:#2E7D32 !important;}'+
+    '.pub-toggle-input:checked ~ .pub-toggle-knob{transform:translateX(16px);}';
+  document.head.appendChild(s);
+})();
+
+async function togglePublish(id,pub,inputEl){
   if(!pub){
     // Unpublish + auto-sink to the bottom of the list so the sidebar-like
     // grid keeps published seedlings on top. We push its sort_order to
@@ -504,9 +523,37 @@ async function togglePublish(id,pub){
     if(error && /sort_order/i.test(error.message||'')){
       // Column truly missing — retry without the sort_order write.
       delete patch.sort_order;
-      await sb.from('salesweb_products').update(patch).eq('id',id);
+      var retry=await sb.from('salesweb_products').update(patch).eq('id',id);
+      error=retry.error;
+    }
+    if(error){
+      // Roll the toggle back so the on-screen state matches reality.
+      if(inputEl) inputEl.checked=true;
+      toast('Unpublish failed: '+error.message,'error');
+      return;
     }
     toast('Unpublished');loadProducts();return;
+  }
+  // Publish path — the toggle just flipped ON visually. If the admin
+  // cancels the modal, the DB row still says unpublished, so revert
+  // the checkbox back to unchecked so the row's state stays truthful.
+  if(inputEl){
+    var _reset=function(){ if(inputEl) inputEl.checked=false; };
+    // Best-effort: watch for the modal close without a save. If the
+    // publish succeeds, loadProducts re-renders the row and this
+    // temporary listener falls away with the removed input.
+    var _modalEl=document.getElementById('modal-publish');
+    if(_modalEl){
+      var _mo=new MutationObserver(function(){
+        if(!_modalEl.classList.contains('open')){
+          // Refresh from DB so the toggle reflects the true state
+          // whether the admin confirmed or cancelled.
+          loadProducts();
+          _mo.disconnect();
+        }
+      });
+      _mo.observe(_modalEl, {attributes:true, attributeFilter:['class']});
+    }
   }
   openPublishModal(id);
 }
@@ -618,13 +665,31 @@ async function confirmPublish(){
   var sel=document.querySelector('input[name=mpb-strat]:checked');
   var btn=document.getElementById('mpb-confirm');btn.disabled=true;btn.textContent='Publishing...';
   var session=await sb.auth.getSession();var user=session?.data?.session?.user?.email||'admin';
-  var{error}=await sb.from('salesweb_products').update({
+  var nowIso=new Date().toISOString();
+  var fullPatch={
     is_published:true,is_active:true,stock_qty:qty,stock_source:'manual',
     published_qty:qty,publish_strategy:sel.value,
-    published_at:new Date().toISOString(),published_by:user,updated_at:new Date().toISOString()
-  }).eq('id',_publishCtx.product.id);
+    published_at:nowIso,published_by:user,updated_at:nowIso
+  };
+  var res=await sb.from('salesweb_products').update(fullPatch).eq('id',_publishCtx.product.id);
+  // Retry without the publish-meta columns if the migration
+  // (salesweb_products_publish_meta.sql) hasn't been applied yet — that
+  // was the silent-fail cause when Confirm & Publish appeared to do
+  // nothing. Minimal patch still flips is_published so the storefront
+  // updates; the audit fields simply stay NULL.
+  if(res.error && /published_qty|publish_strategy|published_at|published_by|schema cache|does not exist/i.test(res.error.message||'')){
+    console.warn('[publish] audit columns missing, retrying with minimal patch:', res.error.message);
+    var minPatch={is_published:true,is_active:true,stock_qty:qty,stock_source:'manual',updated_at:nowIso};
+    res=await sb.from('salesweb_products').update(minPatch).eq('id',_publishCtx.product.id);
+    if(!res.error){
+      toast('Published '+qty+' units (audit columns missing — run salesweb_products_publish_meta.sql to enable)');
+      closeModal('modal-publish');loadProducts();
+      btn.disabled=false;btn.textContent='Confirm & Publish';
+      return;
+    }
+  }
   btn.disabled=false;btn.textContent='Confirm & Publish';
-  if(error){toast('Publish failed: '+error.message,'error');return;}
+  if(res.error){toast('Publish failed: '+res.error.message,'error');return;}
   toast('Published '+qty+' units');closeModal('modal-publish');loadProducts();
 }
 

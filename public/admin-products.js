@@ -660,7 +660,12 @@ function updatePublishPreview(){
 }
 
 async function confirmPublish(){
-  if(!_publishCtx){closeModal('modal-publish');return;}
+  console.log('[publish] confirmPublish fired', {ctx: !!_publishCtx});
+  if(!_publishCtx){
+    toast('Publish context missing — reopen the modal','error');
+    closeModal('modal-publish');
+    return;
+  }
   var qty=getPublishChosenQty();if(qty===null||qty<0){toast('Pick a quantity','error');return;}
   var sel=document.querySelector('input[name=mpb-strat]:checked');
   var btn=document.getElementById('mpb-confirm');btn.disabled=true;btn.textContent='Publishing...';
@@ -692,6 +697,15 @@ async function confirmPublish(){
   if(res.error){toast('Publish failed: '+res.error.message,'error');return;}
   toast('Published '+qty+' units');closeModal('modal-publish');loadProducts();
 }
+
+// Belt-and-braces global bindings. Top-level `function` declarations in
+// a classic <script> already attach to window, but any future refactor
+// (module conversion, minifier collapse, etc.) would break the inline
+// onClick="window.confirmPublish()" wiring in Admin.jsx. Bind explicitly.
+window.confirmPublish   = confirmPublish;
+window.togglePublish    = togglePublish;
+window.openPublishModal = openPublishModal;
+window.updatePublishPreview = updatePublishPreview;
 
 // ═══════════════════════════════════════
 //  PUBLISH HELPERS

@@ -1070,7 +1070,7 @@ export default function Admin() {
                   </div>
                 <div className="modal-foot" id="mpb-foot">
                   <button className="btn btn-outline" onClick={(e) => { closeModal('modal-publish'); }}>Cancel</button>
-                  <button className="btn btn-primary" id="mpb-confirm" onClick={(e) => { window.confirmPublish(); }} disabled>Confirm & Publish</button>
+                  <button className="btn btn-primary" id="mpb-confirm" onClick={(e) => { if (typeof window.confirmPublish === 'function') { window.confirmPublish(); } else { alert('confirmPublish handler not loaded — hard-refresh (Cmd/Ctrl+Shift+R) and try again.'); } }}>Confirm & Publish</button>
                   </div>
                 </div></div>
             {/* TOAST */}

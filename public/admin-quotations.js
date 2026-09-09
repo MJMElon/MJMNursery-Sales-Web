@@ -298,7 +298,7 @@ function renderQuotationEditor(){
              'ondragleave="qRowDragLeave(event)" '+
              'ondrop="qRowDrop(event,'+idx+')" '+
              'ondragend="qRowDragEnd()">'+
-      '<td class="qrow-handle" style="width:34px;text-align:center;cursor:grab;color:var(--ink4);user-select:none;" title="Drag to reorder">⋮⋮</td>'+
+      '<td class="qrow-handle" title="Drag to reorder this row">⋮⋮</td>'+
       '<td><input type="text" id="q-item-name-'+idx+'" class="form-input" value="'+esc(it.product_name||'')+'" placeholder="e.g. Oil Palm Seedling — Mar 2027" oninput="recomputeQuotationTotals()" style="font-size:12px;padding:5px 8px;width:100%;"></td>'+
       '<td style="width:90px;"><input type="number" step="1" min="0" id="q-item-qty-'+idx+'" class="form-input" value="'+(Number(it.quantity)||0)+'" oninput="recomputeQuotationTotals()" style="font-size:12px;padding:5px 8px;text-align:right;width:100%;"></td>'+
       '<td style="width:120px;"><input type="number" step="0.01" min="0" id="q-item-up-'+idx+'" class="form-input" value="'+(Number(it.unit_price)||0)+'" oninput="recomputeQuotationTotals()" style="font-size:12px;padding:5px 8px;text-align:right;width:100%;"></td>'+
@@ -324,17 +324,21 @@ function renderQuotationEditor(){
       '<button class="btn btn-primary btn-sm" onclick="addQuotationItem()">+ Add Row</button>'+
     '</div>'+
     '<style>'+
-      /* Drag-to-reorder visuals — applied to the <td> children because
-         browsers ignore outline/background on <tr>. The drop target
-         paints a soft purple fill on every cell plus a 2px purple line
-         above and below (inset box-shadow) so it reads as an insertion
-         zone. */
-      '#q-items-body tr.qrow-dragging td{opacity:.35;}'+
-      '#q-items-body tr.qrow-drop-target td{background:#f2ecff;box-shadow:inset 0 2px 0 0 #7c5cbf, inset 0 -2px 0 0 #7c5cbf;transition:background .1s;}'+
-      '#q-items-body tr.qrow-drop-target td:first-child{box-shadow:inset 0 2px 0 0 #7c5cbf, inset 0 -2px 0 0 #7c5cbf, inset 2px 0 0 0 #7c5cbf;}'+
-      '#q-items-body tr.qrow-drop-target td:last-child{box-shadow:inset 0 2px 0 0 #7c5cbf, inset 0 -2px 0 0 #7c5cbf, inset -2px 0 0 0 #7c5cbf;}'+
-      '#q-items-body td.qrow-handle{cursor:grab;}'+
+      /* Drag handle — visibly styled at rest so admins spot it as a
+         draggable affordance. Purple pill on hover so it clearly reads
+         as interactive, even before any drag begins. */
+      '#q-items-body td.qrow-handle{width:34px;text-align:center;cursor:grab;color:#7c5cbf;user-select:none;font-size:16px;font-weight:700;line-height:1;padding:8px 6px;letter-spacing:-2px;}'+
+      '#q-items-body td.qrow-handle:hover{background:#f2ecff;color:#5b21b6;}'+
       '#q-items-body td.qrow-handle:active{cursor:grabbing;}'+
+
+      /* Drag-to-reorder visuals — applied to the <td> children because
+         browsers ignore outline/background on <tr>. !important beats the
+         .data-table tr:hover td rule that would otherwise repaint the
+         cell green under the cursor and swallow our purple highlight. */
+      '#q-items-body tr.qrow-dragging td{opacity:.35;}'+
+      '#q-items-body tr.qrow-drop-target td{background:#f2ecff !important;box-shadow:inset 0 2px 0 0 #7c5cbf, inset 0 -2px 0 0 #7c5cbf !important;transition:background .1s;}'+
+      '#q-items-body tr.qrow-drop-target td:first-child{box-shadow:inset 0 2px 0 0 #7c5cbf, inset 0 -2px 0 0 #7c5cbf, inset 2px 0 0 0 #7c5cbf !important;}'+
+      '#q-items-body tr.qrow-drop-target td:last-child{box-shadow:inset 0 2px 0 0 #7c5cbf, inset 0 -2px 0 0 #7c5cbf, inset -2px 0 0 0 #7c5cbf !important;}'+
     '</style>'+
     '<table class="data-table" style="font-size:12px;margin-bottom:.9rem;">'+
       '<thead><tr><th style="width:34px;"></th><th>Product / Description</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Unit Price (RM)</th><th style="text-align:right;">Line Total</th><th></th></tr></thead>'+

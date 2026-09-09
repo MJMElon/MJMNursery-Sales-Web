@@ -94,6 +94,14 @@ async function loadPayments(){
   }
   var orders = data || [];
 
+  // Hide soft-deleted and archived orders across every sub-tab.
+  // Manage Orders already does this by default (an admin ticking
+  // 'Deleted' in the filter drawer surfaces them there). Payments
+  // was ignoring these flags, so a soft-deleted Pending Payment
+  // order would still show up here as work-to-do — the classic
+  // 'why does Payments show XQ6H59 when Orders can't find it?'.
+  orders = orders.filter(function(o){ return !o.deleted_at && !o.archived_at; });
+
   if (q) {
     orders = orders.filter(function(o){
       return (o.order_number||'').toLowerCase().includes(q)
@@ -183,16 +191,20 @@ async function renderPaymentStats(){
   // Try the widest projection first; fall back through narrower ones
   // if newer migrations (einvoice_requests.sql, order_credit_note.sql)
   // haven't been applied yet, so the KPI grid keeps rendering.
+  // Include deleted_at + archived_at in the projection so the chip
+  // counts skip soft-deleted / archived rows — same rule as the tab
+  // tables. Fallbacks below keep the widest set of columns that the
+  // schema actually has.
   var res = await sb.from('salesweb_customer_orders')
-    .select('id,status,total,amount_paid,updated_at,einvoice_requested_at,einvoice_uploaded_at,credit_note_flagged_at,credit_note_issued_at');
+    .select('id,status,total,amount_paid,updated_at,deleted_at,archived_at,einvoice_requested_at,einvoice_uploaded_at,credit_note_flagged_at,credit_note_issued_at');
   if (res.error && /credit_note_|does not exist/i.test(res.error.message||'')){
     res = await sb.from('salesweb_customer_orders')
-      .select('id,status,total,amount_paid,updated_at,einvoice_requested_at,einvoice_uploaded_at');
+      .select('id,status,total,amount_paid,updated_at,deleted_at,archived_at,einvoice_requested_at,einvoice_uploaded_at');
   }
   if (res.error && /einvoice_requested_at|does not exist/i.test(res.error.message||'')){
-    res = await sb.from('salesweb_customer_orders').select('id,status,total,amount_paid,updated_at');
+    res = await sb.from('salesweb_customer_orders').select('id,status,total,amount_paid,updated_at,deleted_at,archived_at');
   }
-  var all = res.data || [];
+  var all = (res.data || []).filter(function(o){ return !o.deleted_at && !o.archived_at; });
 
   var awaiting = all.filter(function(o){ return o.status==='Pending Payment'; });
   var einvReqs = all.filter(function(o){ return o.einvoice_requested_at && !o.einvoice_uploaded_at; });

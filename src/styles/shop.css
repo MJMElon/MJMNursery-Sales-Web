@@ -556,13 +556,13 @@
   .policy-card p { font-size: 13px; color: var(--text-light); line-height: 1.6; }
 
   /* Policy tabs — segmented bar. All tabs sit inside a shared strip
-     with a soft-cream background; the active tab is a white "raised"
-     card that flushes into the content panel below, so the two feel
-     like one continuous surface. Keeps the brand green as the active-
-     tab label + underline accent. */
+     on a white background (the green tint was asked off, Sep 2026);
+     the active tab is a bordered card that flushes into the content
+     panel below, so the two feel like one continuous surface. Keeps
+     the brand green as the active-tab label + underline accent. */
   .policy-tabs {
     display: flex; flex-wrap: wrap; gap: 0;
-    background: rgba(200,223,201,.35);
+    background: var(--white);
     border: 1px solid var(--green-pale);
     border-radius: 12px 12px 0 0;
     padding: .35rem .35rem 0;

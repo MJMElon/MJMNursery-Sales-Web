@@ -22,9 +22,11 @@ export default function InformationPage() {
           <span className="section-label">Legal Documents</span>
           <h2 className="section-title">Our <em>Policies</em></h2>
 
-          {/* Policy tabs */}
-          <div style={css('display:flex;gap:.5rem;margin-bottom:1.5rem;flex-wrap:wrap;')}>
-            <button className="policy-tab active" onClick={(e) => window.switchPolicyTab('terms', e.currentTarget)}>Terms & Conditions</button>
+          {/* Policy tabs — segmented tab-bar style. Active tab reads
+              like a raised card that sits flush with the content
+              panel below, matching the reference design. */}
+          <div className="policy-tabs">
+            <button className="policy-tab active" onClick={(e) => window.switchPolicyTab('terms', e.currentTarget)}>Terms &amp; Conditions</button>
             <button className="policy-tab" onClick={(e) => window.switchPolicyTab('privacy', e.currentTarget)}>Privacy Policy</button>
             <button className="policy-tab" onClick={(e) => window.switchPolicyTab('refund', e.currentTarget)}>Non Refund Policy</button>
             <button className="policy-tab" onClick={(e) => window.switchPolicyTab('collection', e.currentTarget)}>Customer Collection Policy</button>

@@ -555,35 +555,39 @@
   .policy-card h3 { font-family: 'Cormorant Garamond', serif; font-size: 20px; font-weight: 600; color: var(--text-dark); margin-bottom: .5rem; }
   .policy-card p { font-size: 13px; color: var(--text-light); line-height: 1.6; }
 
-  /* Policy tabs — five standalone chips, no shared strip behind them
-     (the full-width white bar was asked off, Sep 2026). Each tab is
-     its own bordered white chip; the active one carries the brand
-     green as border + label + a short underline accent inside it. */
+  /* Policy tabs — five separate chips standing ON the content panel,
+     no shared strip behind them. The ACTIVE chip has an open bottom
+     and overlaps the panel's top border by 1px, so the two read as
+     one connected shape (browser-tab style); inactive chips keep
+     their bottom edge closed. The chip borders match the panel's
+     border color so the joined outline reads as one line; the brand
+     green marks the active label. */
   .policy-tabs {
     display: flex; flex-wrap: wrap; gap: .6rem;
     background: transparent;
     border: none;
-    padding: 0;
-    margin-bottom: 1.25rem;
+    /* keep the first chip clear of the panel's 16px rounded corner */
+    padding: 0 0 0 1.25rem;
+    margin-bottom: 0;
     position: relative; z-index: 1;
   }
   .policy-tab {
     padding: .65rem 1.4rem;
-    border-radius: 8px;
+    border-radius: 8px 8px 0 0;
     font-size: 13px; font-weight: 600;
     background: var(--white);
-    border: 1px solid var(--green-pale);
+    border: 1px solid rgba(0,0,0,.06); /* same as the panel card's border */
     color: var(--text-mid);
     cursor: pointer;
-    transition: border-color .18s, color .18s, box-shadow .18s;
+    transition: border-color .18s, color .18s;
     font-family: 'DM Sans', sans-serif;
   }
   .policy-tab:hover { color: var(--green-dark); border-color: var(--green-mid); }
   .policy-tab.active {
-    background: var(--white);
     color: var(--green-dark);
-    border-color: var(--green-dark);
-    box-shadow: 0 -2px 0 0 var(--green-dark) inset;
+    border-bottom-color: transparent;
+    margin-bottom: -1px;
+    position: relative; z-index: 2;
   }
   .policy-content { display: none; }
   .policy-content.active { display: block; animation: fadeIn .3s ease; }

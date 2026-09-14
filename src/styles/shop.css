@@ -555,42 +555,56 @@
   .policy-card h3 { font-family: 'Cormorant Garamond', serif; font-size: 20px; font-weight: 600; color: var(--text-dark); margin-bottom: .5rem; }
   .policy-card p { font-size: 13px; color: var(--text-light); line-height: 1.6; }
 
-  /* Policy tabs — five separate chips standing ON the content panel,
-     no shared strip behind them. The ACTIVE chip has an open bottom
-     and overlaps the panel's top border by 1px, so the two read as
-     one connected shape (browser-tab style); inactive chips keep
-     their bottom edge closed. The chip borders match the panel's
-     border color so the joined outline reads as one line; the brand
-     green marks the active label. */
+  /* Policy tabs — classic "chrome tab" bar. All tabs sit on a green
+     baseline (2px underline). The active tab is a raised WHITE card
+     that overlaps the baseline by 2px — its own white bottom hides
+     the green line just under it, opening the tab into the content
+     panel below. The content card gets a matching green top-border
+     so the baseline continues as one line across the row. */
   .policy-tabs {
-    display: flex; flex-wrap: wrap; gap: .6rem;
-    background: transparent;
-    border: none;
-    /* keep the first chip clear of the panel's 16px rounded corner */
-    padding: 0 0 0 1.25rem;
+    display: flex; flex-wrap: wrap; gap: 4px;
+    padding: 0 8px;
+    border-bottom: 2px solid var(--green-dark);
     margin-bottom: 0;
-    position: relative; z-index: 1;
+    position: relative; z-index: 2;
   }
   .policy-tab {
-    padding: .65rem 1.4rem;
-    border-radius: 8px 8px 0 0;
-    font-size: 13px; font-weight: 600;
-    background: var(--white);
-    border: 1px solid rgba(0,0,0,.06); /* same as the panel card's border */
+    padding: .75rem 1.4rem;
+    background: rgba(255,255,255,.35);
+    border: 1px solid var(--green-pale);
+    border-bottom: none;
+    border-radius: 10px 10px 0 0;
+    font-size: 13px; font-weight: 500;
     color: var(--text-mid);
     cursor: pointer;
-    transition: border-color .18s, color .18s;
+    transition: background .18s, color .18s;
     font-family: 'DM Sans', sans-serif;
+    margin-bottom: -2px;   /* overlap the green baseline by 2px */
+    position: relative;
   }
-  .policy-tab:hover { color: var(--green-dark); border-color: var(--green-mid); }
-  .policy-tab.active {
+  .policy-tab:hover {
+    background: rgba(255,255,255,.75);
     color: var(--green-dark);
-    border-bottom-color: transparent;
-    margin-bottom: -1px;
-    position: relative; z-index: 2;
+  }
+  .policy-tab.active {
+    background: var(--white);
+    color: var(--green-dark);
+    font-weight: 700;
+    border-color: var(--green-dark);
+    border-bottom: 2px solid var(--white);   /* hides the green baseline under THIS tab */
+    z-index: 3;
+    box-shadow: 0 -2px 6px rgba(0,0,0,.03);
   }
   .policy-content { display: none; }
   .policy-content.active { display: block; animation: fadeIn .3s ease; }
+  /* Content panel merges with the active tab — square top corners so
+     the tab opens down into the card below. */
+  .policy-content.active > div:first-child {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    border-top: 1px solid var(--green-dark);   /* one continuous green baseline with the tab bar */
+    margin-top: 0;
+  }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
   /* Partners section */

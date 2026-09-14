@@ -555,16 +555,48 @@
   .policy-card h3 { font-family: 'Cormorant Garamond', serif; font-size: 20px; font-weight: 600; color: var(--text-dark); margin-bottom: .5rem; }
   .policy-card p { font-size: 13px; color: var(--text-light); line-height: 1.6; }
 
-  /* Policy tabs */
-  .policy-tab {
-    padding: .6rem 1.4rem; border-radius: 8px; font-size: 13px; font-weight: 600;
-    background: var(--white); border: 1px solid var(--green-pale); color: var(--text-mid);
-    cursor: pointer; transition: all .2s; font-family: 'DM Sans', sans-serif;
+  /* Policy tabs — segmented bar. All tabs sit inside a shared strip
+     with a soft-cream background; the active tab is a white "raised"
+     card that flushes into the content panel below, so the two feel
+     like one continuous surface. Keeps the brand green as the active-
+     tab label + underline accent. */
+  .policy-tabs {
+    display: flex; flex-wrap: wrap; gap: 0;
+    background: rgba(200,223,201,.35);
+    border: 1px solid var(--green-pale);
+    border-radius: 12px 12px 0 0;
+    padding: .35rem .35rem 0;
+    margin-bottom: 0;
+    position: relative; z-index: 1;
   }
-  .policy-tab:hover { border-color: var(--green-mid); color: var(--green-dark); }
-  .policy-tab.active { background: var(--green-dark); color: #fff; border-color: var(--green-dark); }
+  .policy-tab {
+    padding: .75rem 1.4rem;
+    border-radius: 10px 10px 0 0;
+    font-size: 13px; font-weight: 600;
+    background: transparent;
+    border: 1px solid transparent;
+    border-bottom: none;
+    color: var(--text-light);
+    cursor: pointer;
+    transition: background .18s, color .18s;
+    font-family: 'DM Sans', sans-serif;
+    margin-bottom: -1px;
+  }
+  .policy-tab:hover { color: var(--green-dark); background: rgba(255,255,255,.5); }
+  .policy-tab.active {
+    background: var(--white);
+    color: var(--green-dark);
+    border-color: var(--green-pale);
+    box-shadow: 0 -2px 0 0 var(--green-dark) inset;
+    /* raised card look — sits flush with the content panel below */
+  }
   .policy-content { display: none; }
   .policy-content.active { display: block; animation: fadeIn .3s ease; }
+  /* Match the top corners of the content panel to the tab bar so the
+     two read as one continuous card. Only applied to the FIRST child
+     inside .policy-content.active — the card wrappers InformationPage
+     already renders. */
+  .policy-content.active > div:first-child { border-top-left-radius: 0; border-top-right-radius: 0; }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
   /* Partners section */

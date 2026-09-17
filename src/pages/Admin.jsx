@@ -5,7 +5,7 @@ import {
   toggleSidebar, switchTab, toggleSbSub, doLogout, closeModal,
   showSettingsSubTab, addProductType, addCollection, addTag,
   savePaymentDetails, uploadPaymentQr, removePaymentQr,
-  saveNotificationConfig, saveAutoReleaseConfig,
+  saveNotificationConfig, saveAutoReleaseConfig, addAutorelTier,
 } from '../lib/adminShell.js';
 
 // MJM NURSERY — ADMIN PORTAL (React shell + settings)
@@ -553,6 +553,18 @@ export default function Admin() {
                           </div>
                         </div>
                       <div style={{ fontSize: '10.5px', color: 'var(--ink4)', marginTop: '.6rem' }}>e.g. 48 = release after 2 days, 24 = after 1 day, 72 = after 3 days. Cleanup runs whenever this Orders page is opened, and on the optional pg_cron schedule.</div>
+
+                      {/* ─── Tiered auto-release by order qty ─── */}
+                      <div style={{ marginTop: '1.4rem', paddingTop: '1rem', borderTop: '1px dashed var(--border)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '.6rem', gap: '1rem' }}>
+                          <div>
+                            <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--ink2)', marginBottom: '.2rem' }}>Cancel-window by order quantity</div>
+                            <div style={{ fontSize: '11px', color: 'var(--ink4)', lineHeight: '1.5' }}>Add tiers to give large orders a longer window before auto-cancel. Small orders (e.g. 1 – 1,000 seedlings) can cancel after 7 days, larger orders after 14, and so on. When an order matches a tier, that tier's day-count is used instead of the flat hours above. Orders that don't match any tier fall back to the flat setting.</div>
+                          </div>
+                          <button className="btn btn-outline btn-sm" onClick={(e) => { addAutorelTier(); }} style={{ whiteSpace: 'nowrap' }}>+ Add Tier</button>
+                        </div>
+                        <div id="autorel-tiers-body" />
+                      </div>
                       </div>
                     </div>{/* /orders */}
                   {/* Visible build stamp so an admin can verify they're on the new

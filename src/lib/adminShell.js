@@ -181,30 +181,116 @@ export async function loadSettings(){
 // ═══════════════════════════════════════
 //  STOCK AUTO-RELEASE CONFIG
 //  Stored in salesweb_app_settings.key='order_auto_release' as JSON:
-//    { enabled: true, hours: 48 }
+//    { enabled: true, hours: 48, tiers: [{min_qty, max_qty, days}, ...] }
 //  Read by the release_abandoned_cash_orders() SQL function.
+//
+//  Tiers: qty-based cancel window. When set, the RPC picks the matching
+//  tier for each order (based on SUM(salesweb_order_items.quantity))
+//  and uses its days-count instead of the flat 'hours'. Orders that
+//  don't match any tier fall back to the flat window.
 // ═══════════════════════════════════════
 export async function loadAutoReleaseConfig(){
   var dbg=document.getElementById('autorel-debug');
   try{
     var{data}=await sb.from('salesweb_app_settings').select('value').eq('key','order_auto_release').maybeSingle();
-    var cfg={enabled:true,hours:48};
+    var cfg={enabled:true,hours:48,tiers:[]};
     if(data&&data.value){ try{ cfg={...cfg,...(typeof data.value==='string'?JSON.parse(data.value):data.value)}; }catch(e){} }
+    if(!Array.isArray(cfg.tiers)) cfg.tiers=[];
     document.getElementById('autorel-enabled').checked = cfg.enabled!==false;
     document.getElementById('autorel-hours').value = cfg.hours||48;
-    if(dbg){ dbg.textContent = cfg.enabled!==false ? ('Active — releasing after '+(cfg.hours||48)+'h.') : 'Disabled — stock is never auto-released.'; dbg.style.color='var(--ink4)'; }
+    renderAutorelTiers(cfg.tiers);
+    if(dbg){
+      var tierLine = cfg.tiers.length ? (' · '+cfg.tiers.length+' qty tier'+(cfg.tiers.length===1?'':'s')) : '';
+      dbg.textContent = cfg.enabled!==false ? ('Active — releasing after '+(cfg.hours||48)+'h fallback'+tierLine+'.') : 'Disabled — stock is never auto-released.';
+      dbg.style.color='var(--ink4)';
+    }
   }catch(e){ if(dbg){ dbg.textContent='Could not load setting — defaults shown.'; dbg.style.color='var(--red)'; } }
 }
 export async function saveAutoReleaseConfig(){
   var enabled=document.getElementById('autorel-enabled').checked;
   var hours=parseInt(document.getElementById('autorel-hours').value,10);
   if(isNaN(hours)||hours<1){ toast('Enter a valid number of hours (≥ 1)','error'); return; }
+  var tiers=readAutorelTiersFromDOM();
+  var tierErr=validateAutorelTiers(tiers);
+  if(tierErr){ toast(tierErr,'error'); return; }
   var btn=document.getElementById('autorel-save-btn'); btn.disabled=true; btn.textContent='Saving…';
-  var{error}=await sb.from('salesweb_app_settings').upsert({key:'order_auto_release',value:JSON.stringify({enabled:enabled,hours:hours})},{onConflict:'key'});
+  var{error}=await sb.from('salesweb_app_settings').upsert({key:'order_auto_release',value:JSON.stringify({enabled:enabled,hours:hours,tiers:tiers})},{onConflict:'key'});
   btn.disabled=false; btn.textContent='Save';
   if(error){ toast('Error: '+error.message,'error'); return; }
   toast('Auto-release setting saved');
   loadAutoReleaseConfig();
+}
+
+// ── Tier UI helpers ──
+function renderAutorelTiers(tiers){
+  var host=document.getElementById('autorel-tiers-body');
+  if(!host) return;
+  if(!tiers.length){
+    host.innerHTML='<div style="font-size:11.5px;color:var(--ink4);padding:.55rem .7rem;background:var(--bg);border-radius:6px;">No tiers yet. Add one to override the flat hours setting for large / small orders. Example: <em>1–1,000 seedlings → 7 days · 1,001+ seedlings → 14 days</em>.</div>';
+    return;
+  }
+  host.innerHTML=
+    '<table class="data-table" style="font-size:12px;">'+
+      '<thead><tr>'+
+        '<th style="width:120px;">Min Qty</th>'+
+        '<th style="width:140px;">Max Qty <span style="font-weight:400;color:var(--ink4);">(blank = ∞)</span></th>'+
+        '<th style="width:110px;">Cancel After</th>'+
+        '<th style="width:44px;"></th>'+
+      '</tr></thead>'+
+      '<tbody id="autorel-tiers-tbody">'+
+        tiers.map(function(t,i){ return renderAutorelTierRow(t,i); }).join('')+
+      '</tbody>'+
+    '</table>';
+}
+function renderAutorelTierRow(t,i){
+  var minV = (t && t.min_qty != null) ? String(t.min_qty) : '';
+  var maxV = (t && t.max_qty != null) ? String(t.max_qty) : '';
+  var days = (t && t.days    != null) ? String(t.days)    : '';
+  return '<tr data-tier-idx="'+i+'">'+
+    '<td><input type="number" class="form-input autorel-tier-min" min="0" step="1" value="'+minV+'" placeholder="0" style="font-size:12px;padding:5px 8px;width:100%;"></td>'+
+    '<td><input type="number" class="form-input autorel-tier-max" min="0" step="1" value="'+maxV+'" placeholder="∞" style="font-size:12px;padding:5px 8px;width:100%;"></td>'+
+    '<td><div style="display:flex;gap:.3rem;align-items:center;"><input type="number" class="form-input autorel-tier-days" min="1" step="1" value="'+days+'" placeholder="7" style="font-size:12px;padding:5px 8px;width:70px;text-align:right;"><span style="font-size:11px;color:var(--ink3);">days</span></div></td>'+
+    '<td><button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red);font-size:11px;padding:2px 8px;" onclick="removeAutorelTier('+i+')" title="Remove this tier">✕</button></td>'+
+  '</tr>';
+}
+export function addAutorelTier(){
+  var tiers=readAutorelTiersFromDOM();
+  // Sensible default: continue from the last tier's max_qty.
+  var lastMax = tiers.length ? (tiers[tiers.length-1].max_qty || null) : null;
+  tiers.push({ min_qty: lastMax!=null ? (Number(lastMax)+1) : (tiers.length ? '' : 1), max_qty: null, days: 7 });
+  renderAutorelTiers(tiers);
+}
+function readAutorelTiersFromDOM(){
+  var rows=document.querySelectorAll('#autorel-tiers-tbody tr[data-tier-idx]');
+  var out=[];
+  rows.forEach(function(tr){
+    var min = tr.querySelector('.autorel-tier-min').value;
+    var max = tr.querySelector('.autorel-tier-max').value;
+    var days= tr.querySelector('.autorel-tier-days').value;
+    out.push({
+      min_qty: min===''||min==null ? 0 : Number(min),
+      max_qty: max===''||max==null ? null : Number(max),
+      days:    days===''||days==null ? null : Number(days)
+    });
+  });
+  return out;
+}
+function validateAutorelTiers(tiers){
+  for(var i=0;i<tiers.length;i++){
+    var t=tiers[i];
+    if(t.days==null||isNaN(t.days)||t.days<1) return 'Tier '+(i+1)+': enter days (≥ 1).';
+    if(t.min_qty==null||isNaN(t.min_qty)||t.min_qty<0) return 'Tier '+(i+1)+': Min Qty must be 0 or more.';
+    if(t.max_qty!=null && (isNaN(t.max_qty) || t.max_qty<t.min_qty)) return 'Tier '+(i+1)+': Max Qty must be ≥ Min Qty (or blank for no cap).';
+  }
+  return null;
+}
+// Row-remove — inline onclick calls window.removeAutorelTier(idx).
+if (typeof window !== 'undefined') {
+  window.removeAutorelTier = function(idx){
+    var tiers=readAutorelTiersFromDOM();
+    tiers.splice(idx, 1);
+    renderAutorelTiers(tiers);
+  };
 }
 
 // ═══════════════════════════════════════

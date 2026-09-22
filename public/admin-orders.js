@@ -286,22 +286,22 @@ async function loadOrders(){
   var completed=all.filter(function(o){return o.status==='Completed';}).length;
   var revenue=all.filter(function(o){return o.status!=='Cancelled';}).reduce(function(s,o){return s+(o.total||0);},0);
   var creditOutstanding=all.filter(function(o){return o.payment_terms==='credit'&&!o.credit_billed_at&&o.status!=='Cancelled';}).reduce(function(s,o){return s+(o.total||0);},0);
-  // Seedlings sold today: sum of quantity across order_items whose parent
-  // order was placed today AND is in a "paid or later" status. Skips
-  // Pending Payment and Cancelled/Refunded — those aren't real sales yet.
+  // Seedlings ordered today: sum of quantity across every order_items whose
+  // parent order was placed today. Every status counts — Pending Payment,
+  // Paid, Completed, even Cancelled — since the tile answers "how many
+  // seedlings did today's orders ask for". Soft-deleted orders are skipped.
   var _todayStart=new Date(); _todayStart.setHours(0,0,0,0);
   var _todayStartMs=_todayStart.getTime();
   var _tomorrowStartMs=_todayStartMs+86400000;
-  var _paidStatuses={'Paid':1,'Ready for Collection':1,'Completed':1};
   var _todayIds=all.filter(function(o){
-    if(!o.created_at || !_paidStatuses[o.status]) return false;
+    if(!o.created_at || o.deleted_at) return false;
     var t=new Date(o.created_at).getTime();
     return t>=_todayStartMs && t<_tomorrowStartMs;
   }).map(function(o){return o.id;});
   document.getElementById('order-stats').innerHTML=
     '<div class="stat-box stat-orders" title="All orders"><div class="stat-icon">📦</div><div class="stat-body"><div class="stat-label">Total Orders</div><div class="stat-val">'+all.length+'</div></div></div>'+
     '<div class="stat-box stat-pending" title="Pending Payment"><div class="stat-icon">⏳</div><div class="stat-body"><div class="stat-label">Pending Payment</div><div class="stat-val" style="color:var(--amber);">'+pending+'</div></div></div>'+
-    '<div class="stat-box stat-today" title="Seedlings sold today (paid / ready for collection / completed)"><div class="stat-icon">🌱</div><div class="stat-body"><div class="stat-label">Sold Today</div><div class="stat-val" id="stat-sold-today" style="color:var(--blue);">…</div></div></div>'+
+    '<div class="stat-box stat-today" title="Seedlings across every order placed today"><div class="stat-icon">🌱</div><div class="stat-body"><div class="stat-label">Sold Today</div><div class="stat-val" id="stat-sold-today" style="color:var(--blue);">…</div></div></div>'+
     '<div class="stat-box stat-completed" title="Completed"><div class="stat-icon">✅</div><div class="stat-body"><div class="stat-label">Completed</div><div class="stat-val green">'+completed+'</div></div></div>'+
     '<div class="stat-box stat-credit" title="Credit Outstanding"><div class="stat-icon">💳</div><div class="stat-body"><div class="stat-label">Credit Outstanding</div><div class="stat-val" style="color:#a16207;">RM '+fmtMYR(creditOutstanding)+'</div></div></div>'+
     '<div class="stat-box stat-revenue" title="Revenue"><div class="stat-icon">📈</div><div class="stat-body"><div class="stat-label">Revenue</div><div class="stat-val" style="color:#047857;">RM '+fmtMYR(revenue)+'</div></div></div>';

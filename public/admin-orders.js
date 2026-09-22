@@ -283,14 +283,22 @@ async function loadOrders(){
   // Stats
   var all=data||[];
   var pending=all.filter(function(o){return o.status==='Pending Payment';}).length;
-  var paid=all.filter(function(o){return o.status==='Paid';}).length;
   var completed=all.filter(function(o){return o.status==='Completed';}).length;
   var revenue=all.filter(function(o){return o.status!=='Cancelled';}).reduce(function(s,o){return s+(o.total||0);},0);
   var creditOutstanding=all.filter(function(o){return o.payment_terms==='credit'&&!o.credit_billed_at&&o.status!=='Cancelled';}).reduce(function(s,o){return s+(o.total||0);},0);
+  // Orders placed today (local time). Cancelled orders still count as "placed".
+  var _todayStart=new Date(); _todayStart.setHours(0,0,0,0);
+  var _todayStartMs=_todayStart.getTime();
+  var _tomorrowStartMs=_todayStartMs+86400000;
+  var todayCount=all.filter(function(o){
+    if(!o.created_at) return false;
+    var t=new Date(o.created_at).getTime();
+    return t>=_todayStartMs && t<_tomorrowStartMs;
+  }).length;
   document.getElementById('order-stats').innerHTML=
     '<div class="stat-box stat-orders" title="All orders"><div class="stat-icon">📦</div><div class="stat-body"><div class="stat-label">Total Orders</div><div class="stat-val">'+all.length+'</div></div></div>'+
     '<div class="stat-box stat-pending" title="Pending Payment"><div class="stat-icon">⏳</div><div class="stat-body"><div class="stat-label">Pending Payment</div><div class="stat-val" style="color:var(--amber);">'+pending+'</div></div></div>'+
-    '<div class="stat-box stat-paid" title="Paid"><div class="stat-icon">💵</div><div class="stat-body"><div class="stat-label">Paid</div><div class="stat-val" style="color:var(--blue);">'+paid+'</div></div></div>'+
+    '<div class="stat-box stat-today" title="Orders placed today"><div class="stat-icon">🗓️</div><div class="stat-body"><div class="stat-label">Today\'s Orders</div><div class="stat-val" style="color:var(--blue);">'+todayCount+'</div></div></div>'+
     '<div class="stat-box stat-completed" title="Completed"><div class="stat-icon">✅</div><div class="stat-body"><div class="stat-label">Completed</div><div class="stat-val green">'+completed+'</div></div></div>'+
     '<div class="stat-box stat-credit" title="Credit Outstanding"><div class="stat-icon">💳</div><div class="stat-body"><div class="stat-label">Credit Outstanding</div><div class="stat-val" style="color:#a16207;">RM '+fmtMYR(creditOutstanding)+'</div></div></div>'+
     '<div class="stat-box stat-revenue" title="Revenue"><div class="stat-icon">📈</div><div class="stat-body"><div class="stat-label">Revenue</div><div class="stat-val" style="color:#047857;">RM '+fmtMYR(revenue)+'</div></div></div>';

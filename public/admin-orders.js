@@ -286,22 +286,37 @@ async function loadOrders(){
   var completed=all.filter(function(o){return o.status==='Completed';}).length;
   var revenue=all.filter(function(o){return o.status!=='Cancelled';}).reduce(function(s,o){return s+(o.total||0);},0);
   var creditOutstanding=all.filter(function(o){return o.payment_terms==='credit'&&!o.credit_billed_at&&o.status!=='Cancelled';}).reduce(function(s,o){return s+(o.total||0);},0);
-  // Orders placed today (local time). Cancelled orders still count as "placed".
+  // Seedlings sold today: sum of quantity across order_items whose parent
+  // order was placed today AND is in a "paid or later" status. Skips
+  // Pending Payment and Cancelled/Refunded — those aren't real sales yet.
   var _todayStart=new Date(); _todayStart.setHours(0,0,0,0);
   var _todayStartMs=_todayStart.getTime();
   var _tomorrowStartMs=_todayStartMs+86400000;
-  var todayCount=all.filter(function(o){
-    if(!o.created_at) return false;
+  var _paidStatuses={'Paid':1,'Ready for Collection':1,'Completed':1};
+  var _todayIds=all.filter(function(o){
+    if(!o.created_at || !_paidStatuses[o.status]) return false;
     var t=new Date(o.created_at).getTime();
     return t>=_todayStartMs && t<_tomorrowStartMs;
-  }).length;
+  }).map(function(o){return o.id;});
   document.getElementById('order-stats').innerHTML=
     '<div class="stat-box stat-orders" title="All orders"><div class="stat-icon">📦</div><div class="stat-body"><div class="stat-label">Total Orders</div><div class="stat-val">'+all.length+'</div></div></div>'+
     '<div class="stat-box stat-pending" title="Pending Payment"><div class="stat-icon">⏳</div><div class="stat-body"><div class="stat-label">Pending Payment</div><div class="stat-val" style="color:var(--amber);">'+pending+'</div></div></div>'+
-    '<div class="stat-box stat-today" title="Orders placed today"><div class="stat-icon">🗓️</div><div class="stat-body"><div class="stat-label">Today\'s Orders</div><div class="stat-val" style="color:var(--blue);">'+todayCount+'</div></div></div>'+
+    '<div class="stat-box stat-today" title="Seedlings sold today (paid / ready for collection / completed)"><div class="stat-icon">🌱</div><div class="stat-body"><div class="stat-label">Sold Today</div><div class="stat-val" id="stat-sold-today" style="color:var(--blue);">…</div></div></div>'+
     '<div class="stat-box stat-completed" title="Completed"><div class="stat-icon">✅</div><div class="stat-body"><div class="stat-label">Completed</div><div class="stat-val green">'+completed+'</div></div></div>'+
     '<div class="stat-box stat-credit" title="Credit Outstanding"><div class="stat-icon">💳</div><div class="stat-body"><div class="stat-label">Credit Outstanding</div><div class="stat-val" style="color:#a16207;">RM '+fmtMYR(creditOutstanding)+'</div></div></div>'+
     '<div class="stat-box stat-revenue" title="Revenue"><div class="stat-icon">📈</div><div class="stat-body"><div class="stat-label">Revenue</div><div class="stat-val" style="color:#047857;">RM '+fmtMYR(revenue)+'</div></div></div>';
+  // Fill the Sold Today tile once we've summed today's order_items quantities.
+  (async function(){
+    var el=document.getElementById('stat-sold-today');
+    if(!el) return;
+    if(!_todayIds.length){ el.textContent='0'; return; }
+    try{
+      var{data:qtyRows,error:qtyErr}=await sb.from('salesweb_order_items').select('quantity').in('order_id',_todayIds);
+      if(qtyErr){ el.textContent='—'; return; }
+      var soldToday=(qtyRows||[]).reduce(function(s,r){return s+(Number(r.quantity)||0);},0);
+      el.textContent=soldToday.toLocaleString('en-MY');
+    }catch(e){ el.textContent='—'; }
+  })();
 
   // Count indicator above the table — shows how many orders match the
   // current search/filter and the total in the DB. Filter button badge

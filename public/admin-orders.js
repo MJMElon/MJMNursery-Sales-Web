@@ -2514,6 +2514,78 @@ var _newOrderSelectedCustomerId=null;   // null = walk-in / create new on save
 var _newOrderCustSearchTimer=null;
 var _newOrderCustResultsCache={};
 
+// ── Points redemption (admin-entered orders) ────────────────────────
+// Mirrors the customer checkout (public/payment.html): balance comes
+// from the ledger view with the same orders-table fallback, the redeem
+// ratio is the live admin Points Settings, and the RM value is
+// proportional to any integer number of points. The deduction itself is
+// NOT written here — issuePoints() writes the Redeemed ledger row when
+// the order reaches Paid, same as a storefront redemption.
+var _newOrderPtsBalance=0;               // spendable points of the LINKED customer
+var _newOrderPtsRatio={pts:100,rm:1};    // redeem_pts points = redeem_rm RM
+
+function _noPtsToRm(pts){
+  if(!(_newOrderPtsRatio.pts>0) || !(_newOrderPtsRatio.rm>0)) return 0;
+  return Math.round((Number(pts)||0)*(_newOrderPtsRatio.rm/_newOrderPtsRatio.pts)*100)/100;
+}
+
+async function _noLoadPtsRatio(){
+  try{
+    var{data}=await sb.from('salesweb_app_settings').select('value').eq('key','points_config').maybeSingle();
+    if(data&&data.value){
+      var cfg=typeof data.value==='string'?JSON.parse(data.value):data.value;
+      if(cfg){
+        if(Number(cfg.redeem_pts)>0) _newOrderPtsRatio.pts=Number(cfg.redeem_pts);
+        if(Number(cfg.redeem_rm) >0) _newOrderPtsRatio.rm =Number(cfg.redeem_rm);
+      }
+    }
+  }catch(e){ console.warn('[Add Order] points config load failed:', e); }
+}
+
+function _noResetPoints(){
+  _newOrderPtsBalance=0;
+  var input=document.getElementById('no-points-redeem');
+  if(input){ input.value='0'; input.disabled=true; input.max=''; }
+  var hint=document.getElementById('no-points-hint');
+  if(hint) hint.textContent='Link a customer to redeem points';
+}
+
+async function _noLoadPtsBalance(userId){
+  var bal=0;
+  try{
+    // Ledger view first; older installs lack pending_redeemed, retry plain.
+    var r=await sb.from('salesweb_customer_points_balance')
+      .select('balance,pending_redeemed').eq('user_id',userId).maybeSingle();
+    if(r.error && /pending_redeemed/i.test(r.error.message||'')){
+      r=await sb.from('salesweb_customer_points_balance')
+        .select('balance').eq('user_id',userId).maybeSingle();
+    }
+    if(r.data) bal=Math.max(0,Number(r.data.balance)||0);
+    if(bal<=0){
+      // Same fallback as checkout: historical orders whose Earned ledger
+      // rows never landed still count via points_issued on the orders.
+      var earned=0, redeemedOrd=0, redeemedLed=0;
+      var o=await sb.from('salesweb_customer_orders')
+        .select('points_issued,points_redeemed,status').eq('customer_id',userId);
+      (o.data||[]).forEach(function(x){
+        if(x.status==='Cancelled') return;
+        earned+=Number(x.points_issued)||0;
+        redeemedOrd+=Number(x.points_redeemed)||0;
+      });
+      var l=await sb.from('salesweb_points_ledger')
+        .select('change').eq('user_id',userId).lt('change',0);
+      (l.data||[]).forEach(function(x){ redeemedLed+=Math.abs(Number(x.change)||0); });
+      bal=Math.max(0, earned-Math.max(redeemedOrd,redeemedLed));
+    }
+  }catch(e){ console.warn('[Add Order] points balance load failed:', e); }
+  // The admin may have unlinked or re-linked while this loaded.
+  if(_newOrderSelectedCustomerId!==userId) return;
+  _newOrderPtsBalance=bal;
+  var input=document.getElementById('no-points-redeem');
+  if(input){ input.disabled=(bal<=0); input.max=bal; }
+  recalcNewOrderTotal();
+}
+
 function genOrderNumberAdmin(){
   // 5 random alphanumeric chars (no I,O) + 1 random 0–9 digit. Used only
   // as a fallback if next_order_number() RPC fails.
@@ -2542,6 +2614,8 @@ async function openNewOrder(){
   document.getElementById('no-terms').value='cash';
   document.getElementById('no-internal-note').value='';
   document.getElementById('no-discount').value='0';
+  _noResetPoints();
+  _noLoadPtsRatio();
   resetNewOrderBilling();
   document.getElementById('no-cust-results').style.display='none';
   document.getElementById('no-cust-status').style.display='none';
@@ -2571,6 +2645,8 @@ function onNewOrderCustNameInput(){
   // Any edit invalidates a previous selection — the admin is either
   // searching for a different customer or typing in a new name.
   _newOrderSelectedCustomerId=null;
+  _noResetPoints();          // points belong to the (now unlinked) customer
+  recalcNewOrderTotal();
   updateNewOrderCustStatus();
 
   var q=document.getElementById('no-cust-name').value.trim();
@@ -2637,6 +2713,7 @@ function selectNewOrderCustomer(id){
   document.getElementById('no-cust-results').style.display='none';
   updateNewOrderCustStatus();
   prefillNewOrderBilling(id);
+  _noLoadPtsBalance(id);
 }
 
 // Pull the customer's most recent saved billing profile and populate the
@@ -2814,7 +2891,31 @@ function noDrop(e,toIdx){
 function recalcNewOrderTotal(){
   var subtotal=_newOrderItems.reduce(function(s,it){return s+(Number(it.quantity)||0)*(Number(it.unit_price)||0);},0);
   var discount=parseFloat(document.getElementById('no-discount').value)||0;
-  var total=Math.max(0,subtotal-discount);
+  var remaining=Math.max(0,subtotal-discount);
+
+  // Points redeem — clamp what's keyed to BOTH the linked customer's
+  // balance and what the order can still absorb after the RM discount,
+  // so no point is ever deducted without producing discount.
+  var ptsRm=0;
+  var input=document.getElementById('no-points-redeem');
+  if(input){
+    var pts=Math.max(0,Math.floor(Number(input.value)||0));
+    var maxByOrder=(_newOrderPtsRatio.rm>0)
+      ? Math.floor(remaining*_newOrderPtsRatio.pts/_newOrderPtsRatio.rm)
+      : 0;
+    var maxPts=Math.min(_newOrderPtsBalance,maxByOrder);
+    if(pts>maxPts){ pts=maxPts; input.value=pts; }
+    ptsRm=Math.min(_noPtsToRm(pts),remaining);
+    var hint=document.getElementById('no-points-hint');
+    if(hint){
+      hint.textContent=_newOrderSelectedCustomerId
+        ? ('Available: '+Number(_newOrderPtsBalance).toLocaleString()+' pts'
+           +(pts>0?' · redeeming '+pts.toLocaleString()+' = −RM '+fmtMYR(ptsRm):''))
+        : 'Link a customer to redeem points';
+    }
+  }
+
+  var total=Math.max(0,subtotal-discount-ptsRm);
   document.getElementById('no-subtotal').textContent='RM '+fmtMYR(subtotal);
   document.getElementById('no-total').textContent='RM '+fmtMYR(total);
 }
@@ -2858,7 +2959,23 @@ async function submitNewOrder(){
   if(!validItems.length){toast('Add at least one item with quantity > 0','error');return;}
 
   var subtotal=validItems.reduce(function(s,it){return s+(Number(it.quantity)||0)*(Number(it.unit_price)||0);},0);
-  var total=Math.max(0,Math.round((subtotal-discount)*100)/100);
+
+  // Points redemption — only for an explicitly LINKED existing customer
+  // (that is whose balance was checked). Re-clamp here so a stale DOM
+  // value can never over-redeem; the ledger deduction itself is written
+  // by issuePoints() when the order reaches Paid.
+  var ptsRedeem=0, ptsRm=0;
+  var _ptsInput=document.getElementById('no-points-redeem');
+  if(_ptsInput) ptsRedeem=Math.max(0,Math.floor(Number(_ptsInput.value)||0));
+  if(ptsRedeem>0){
+    if(!custId){toast('Points can only be redeemed for a linked existing customer — pick one from the name search','error');return;}
+    if(ptsRedeem>_newOrderPtsBalance){toast('Only '+Number(_newOrderPtsBalance).toLocaleString()+' points available to redeem','error');return;}
+    var _remainingForPts=Math.max(0,Math.round((subtotal-discount)*100)/100);
+    ptsRm=Math.min(_noPtsToRm(ptsRedeem),_remainingForPts);
+    if(ptsRm<=0){ ptsRedeem=0; }
+  }
+
+  var total=Math.max(0,Math.round((subtotal-discount-ptsRm)*100)/100);
 
   // Zero-total order = nothing to pay → auto-mark Paid (the existing
   // paid-at-creation branch below fires AL + confirmation email so the
@@ -2997,8 +3114,8 @@ async function submitNewOrder(){
       billing_tax_id:billingTin||null,
       payment_terms:terms,
       discount_amount:discount,
-      points_redeemed:0,
-      points_discount_rm:0,
+      points_redeemed:ptsRedeem,
+      points_discount_rm:ptsRm,
     };
     // Backdated / postdated order date — parsed once outside the retry loop
     // via `orderDateIso`. If the admin left it as "now" (within a second),
@@ -3050,7 +3167,8 @@ async function submitNewOrder(){
   var by=user?.email||'admin';
   sb.from('salesweb_order_timeline').insert([{
     order_id:order.id, status:status,
-    note:'Order created via admin panel ('+terms+' · RM '+total.toFixed(2)+')',
+    note:'Order created via admin panel ('+terms+' · RM '+total.toFixed(2)+')'
+      +(ptsRedeem>0?' · '+ptsRedeem+' pts redeemed (−RM '+ptsRm.toFixed(2)+')':''),
     changed_by:by
   }]).then(function(){});
 

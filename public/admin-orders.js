@@ -880,6 +880,13 @@ async function viewOrder(id){
     html+='<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 8px;color:var(--red);border-color:var(--red);" onclick="removeCoupon(\''+id+'\')">✕ Remove</button>';
     html+='</div>';
   }
+  if(Number(order.points_redeemed||0) > 0 || Number(order.points_discount_rm||0) > 0){
+    var _ptsShown = Number(order.points_redeemed||0).toLocaleString();
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem .6rem;background:#fff;border:1px solid var(--border);border-radius:6px;margin-bottom:.4rem;font-size:12px;">';
+    html+='<span><strong>Points redeemed:</strong> '+_ptsShown+' pts &nbsp;·&nbsp; -RM '+fmtMYR(order.points_discount_rm||0)+'</span>';
+    html+='<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 8px;color:var(--red);border-color:var(--red);" onclick="removePointsRedemption(\''+id+'\')">✕ Remove</button>';
+    html+='</div>';
+  }
   adjustments.forEach(function(adj){
     var aid=String(adj.id||'').replace(/[\\'"<>]/g,'');
     if(adj.kind==='discount'){
@@ -903,6 +910,7 @@ async function viewOrder(id){
   html+='<div style="display:flex;gap:.5rem;flex-wrap:wrap;">';
   html+='<button class="btn btn-outline btn-sm" onclick="var el=document.getElementById(\'mo-discount-panel\');el.style.display=el.style.display===\'none\'?\'flex\':\'none\';" style="font-size:11px;">+ Add Discount</button>';
   html+='<button class="btn btn-outline btn-sm" onclick="var el=document.getElementById(\'mo-coupon-panel\');el.style.display=el.style.display===\'none\'?\'flex\':\'none\';" style="font-size:11px;">+ Add Coupon</button>';
+  html+='<button class="btn btn-outline btn-sm" onclick="openPointsRedemption(\''+id+'\')" style="font-size:11px;">+ Redeem Points</button>';
   html+='</div>';
 
   // Discount panel — RM/% toggle determines how the typed value is
@@ -921,6 +929,16 @@ async function viewOrder(id){
   html+='<div id="mo-coupon-panel" style="display:none;gap:.5rem;align-items:center;margin-top:.5rem;flex-wrap:wrap;">';
   html+='<input class="form-input" id="mo-coupon" type="text" value="'+esc(order.coupon_code||'')+'" style="width:120px;font-size:12px;padding:6px 10px;text-transform:uppercase;" placeholder="Coupon code"><button class="btn btn-primary btn-sm" onclick="applyCoupon(\''+id+'\')">Apply Coupon</button>';
   html+='</div>';
+
+  // Points redemption panel — hidden by default. Populated by
+  // openPointsRedemption() which loads the customer's spendable balance
+  // and the redeem ratio from salesweb_app_settings.
+  html+='<div id="mo-points-panel" style="display:none;gap:.5rem;align-items:center;margin-top:.5rem;flex-wrap:wrap;">';
+  html+='<input class="form-input" id="mo-points" type="number" min="0" step="1" value="'+(Number(order.points_redeemed)||0)+'" style="width:120px;font-size:12px;padding:6px 10px;" placeholder="Points">';
+  html+='<span id="mo-points-hint" style="font-size:11px;color:var(--ink3);flex:1;min-width:200px;">Loading balance…</span>';
+  html+='<button class="btn btn-primary btn-sm" onclick="applyPointsRedemption(\''+id+'\')">Apply Points</button>';
+  html+='</div>';
+
   html+='</div>';
 
   // ── Payment Tracking — one section to monitor everything about money:
@@ -1664,6 +1682,148 @@ async function applyCoupon(orderId){
   }
   await _recomputeOrderTotal(orderId);
   toast('Coupon applied: -RM '+fmtMYR(discount));
+  viewOrder(orderId);
+}
+
+// ═══════════════════════════════════════
+//  ADJUSTMENTS — POINTS REDEMPTION
+// ═══════════════════════════════════════
+// Reads the redeem ratio from salesweb_app_settings.points_config and the
+// order's linked customer balance, then shows the panel with the max
+// spendable count. The effective balance = current balance + whatever
+// this order already redeems (so the admin can change an existing
+// redemption instead of only adding to it).
+async function openPointsRedemption(orderId){
+  var panel=document.getElementById('mo-points-panel');
+  if(!panel) return;
+  panel.style.display = panel.style.display==='none' ? 'flex' : 'none';
+  if(panel.style.display==='none') return;
+
+  var hint=document.getElementById('mo-points-hint');
+  var input=document.getElementById('mo-points');
+  if(hint) hint.textContent='Loading balance…';
+
+  var{data:order}=await sb.from('salesweb_customer_orders')
+    .select('customer_id,points_redeemed,discount_amount,coupon_discount,total').eq('id',orderId).single();
+  if(!order || !order.customer_id){
+    if(hint) hint.textContent='This order has no linked customer — points redemption needs one.';
+    if(input){ input.disabled=true; }
+    return;
+  }
+
+  // Load ratio (100 pts = 1 RM by default).
+  var ratio={pts:100, rm:1};
+  try{
+    var{data:cfg}=await sb.from('salesweb_app_settings').select('value').eq('key','points_config').maybeSingle();
+    if(cfg && cfg.value){
+      var c = typeof cfg.value==='string' ? JSON.parse(cfg.value) : cfg.value;
+      if(c && Number(c.redeem_pts)>0) ratio.pts=Number(c.redeem_pts);
+      if(c && Number(c.redeem_rm) >0) ratio.rm =Number(c.redeem_rm);
+    }
+  }catch(e){ /* keep defaults */ }
+
+  // Spendable balance from the ledger view; fall back to the same
+  // synthesised balance the checkout uses if the view is missing.
+  var bal=0;
+  try{
+    var r=await sb.from('salesweb_customer_points_balance').select('balance').eq('user_id',order.customer_id).maybeSingle();
+    if(r.data) bal=Math.max(0,Number(r.data.balance)||0);
+    if(bal<=0){
+      var earned=0, redeemedOrd=0, redeemedLed=0;
+      var o=await sb.from('salesweb_customer_orders').select('points_issued,points_redeemed,status').eq('customer_id',order.customer_id);
+      (o.data||[]).forEach(function(x){
+        if(x.status==='Cancelled') return;
+        earned+=Number(x.points_issued)||0;
+        redeemedOrd+=Number(x.points_redeemed)||0;
+      });
+      var l=await sb.from('salesweb_points_ledger').select('change').eq('user_id',order.customer_id).lt('change',0);
+      (l.data||[]).forEach(function(x){ redeemedLed+=Math.abs(Number(x.change)||0); });
+      bal=Math.max(0, earned-Math.max(redeemedOrd,redeemedLed));
+    }
+  }catch(e){ /* leave bal at 0 */ }
+
+  // Effective balance the admin can spend on THIS order = spendable +
+  // whatever this order already sits on (since editing it releases the
+  // old redemption first).
+  var alreadyOnOrder = Number(order.points_redeemed)||0;
+  var effective = bal + alreadyOnOrder;
+
+  // Cap by the remaining bill (subtotal − discount − coupon), so we
+  // don't let the admin push the total below zero.
+  var{data:items}=await sb.from('salesweb_order_items').select('subtotal').eq('order_id',orderId);
+  var subtotal=(items||[]).reduce(function(s,i){return s+(Number(i.subtotal)||0);},0);
+  var remainingRm = Math.max(0, subtotal - Number(order.discount_amount||0) - Number(order.coupon_discount||0));
+  // Add back current points_discount_rm since that also comes off the
+  // total — allow re-applying up to the pre-points remaining.
+  // (_recomputeOrderTotal already skips points here; we're just bounding
+  // the max spendable count.)
+  var maxByBill = ratio.rm > 0 ? Math.floor(remainingRm * ratio.pts / ratio.rm) : 0;
+  var maxPts = Math.min(effective, maxByBill);
+
+  window._moPtsRatio = ratio;
+  window._moPtsEffective = effective;
+  window._moPtsMax = maxPts;
+
+  if(input){ input.disabled=false; input.max=maxPts; }
+  var _rmVal = ratio.pts>0 ? (Number(input && input.value || 0) * ratio.rm / ratio.pts) : 0;
+  if(hint){
+    hint.textContent = 'Balance: '+effective.toLocaleString()+' pts · '
+                     + 'Rate: '+ratio.pts+' pts = RM '+ratio.rm+' · '
+                     + 'Max: '+maxPts.toLocaleString()+' pts (-RM '+fmtMYR(Math.round(maxPts*ratio.rm/ratio.pts*100)/100)+')';
+  }
+  if(input){
+    input.oninput = function(){
+      var pts = Math.max(0, Math.floor(Number(input.value)||0));
+      var rm = ratio.pts>0 ? Math.round(pts*ratio.rm/ratio.pts*100)/100 : 0;
+      if(hint){
+        hint.textContent = 'Balance: '+effective.toLocaleString()+' pts · '
+                         + pts.toLocaleString()+' pts = -RM '+fmtMYR(rm)+' · '
+                         + 'Max: '+maxPts.toLocaleString()+' pts';
+      }
+    };
+  }
+}
+
+async function applyPointsRedemption(orderId){
+  var input=document.getElementById('mo-points');
+  var pts = Math.max(0, Math.floor(Number(input && input.value || 0)));
+  var ratio = window._moPtsRatio || {pts:100, rm:1};
+  var maxPts = Number(window._moPtsMax||0);
+  if(pts > maxPts){ toast('Only '+maxPts.toLocaleString()+' points available for this order','error'); return; }
+  var rm = ratio.pts>0 ? Math.round(pts*ratio.rm/ratio.pts*100)/100 : 0;
+
+  var{error}=await sb.from('salesweb_customer_orders')
+    .update({points_redeemed:pts, points_discount_rm:rm, updated_at:new Date().toISOString()})
+    .eq('id',orderId);
+  if(error){ toast('Error: '+error.message,'error'); return; }
+  await _recomputeOrderTotal(orderId);
+
+  try{
+    var session=await sb.auth.getSession();
+    var user=session?.data?.session?.user?.email||'admin';
+    var note = pts>0
+      ? ('Points redemption set to '+pts.toLocaleString()+' pts (-RM '+fmtMYR(rm)+')')
+      : 'Points redemption cleared';
+    await sb.from('salesweb_order_timeline').insert([{order_id:orderId,status:null,note:note,changed_by:user}]);
+  }catch(e){ /* timeline non-fatal */ }
+
+  toast(pts>0 ? ('Redeemed '+pts.toLocaleString()+' pts (-RM '+fmtMYR(rm)+')') : 'Points redemption removed');
+  viewOrder(orderId);
+}
+
+async function removePointsRedemption(orderId){
+  if(!confirm('Remove the points redemption from this order?')) return;
+  var{error}=await sb.from('salesweb_customer_orders')
+    .update({points_redeemed:0, points_discount_rm:0, updated_at:new Date().toISOString()})
+    .eq('id',orderId);
+  if(error){ toast('Error: '+error.message,'error'); return; }
+  await _recomputeOrderTotal(orderId);
+  try{
+    var session=await sb.auth.getSession();
+    var user=session?.data?.session?.user?.email||'admin';
+    await sb.from('salesweb_order_timeline').insert([{order_id:orderId,status:null,note:'Points redemption cleared',changed_by:user}]);
+  }catch(e){ /* non-fatal */ }
+  toast('Points redemption removed');
   viewOrder(orderId);
 }
 

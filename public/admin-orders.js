@@ -768,9 +768,33 @@ async function viewOrder(id){
   }
   html+='</div>';
   html+='</div>';
+  // Edit mode — full billing / e-Invoice form mirroring the storefront
+  // checkout, so an admin can amend every field that customer_remark
+  // stores (address, I/C, Reg No, MPOB) plus the columns (billing_name,
+  // billing_tax_id, billing_type). Personal/Company toggle swaps
+  // between the I/C (personal) and Reg No (company) input.
+  var _editType = _isCompany ? 'company' : 'personal';
   html+='<div id="mo-billing-edit" style="display:none;">';
-  html+='<input class="form-input" id="mo-bill-name" placeholder="Billing name" value="'+esc(order.billing_name||'')+'" style="font-size:12px;padding:6px 10px;margin-bottom:.3rem;">';
-  html+='<input class="form-input" id="mo-bill-tax" placeholder="Tax ID" value="'+esc(order.billing_tax_id||'')+'" style="font-size:12px;padding:6px 10px;margin-bottom:.3rem;">';
+  html+='<div style="display:flex;gap:.4rem;margin-bottom:.5rem;">';
+  html+='<button type="button" class="btn '+(_editType==='personal'?'btn-primary':'btn-outline')+' btn-sm" id="mo-bill-type-personal" onclick="switchEditBillingType(\'personal\')" style="font-size:11px;">Personal</button>';
+  html+='<button type="button" class="btn '+(_editType==='company'?'btn-primary':'btn-outline')+' btn-sm" id="mo-bill-type-company" onclick="switchEditBillingType(\'company\')" style="font-size:11px;">Company</button>';
+  html+='</div>';
+  html+='<div style="font-size:11px;color:var(--ink4);margin-bottom:.15rem;">'+(_editType==='company'?'Company Name':'Full Name')+'</div>';
+  html+='<input class="form-input" id="mo-bill-name" placeholder="'+(_editType==='company'?'Company name':'Full name')+'" value="'+esc(order.billing_name||'')+'" style="font-size:12px;padding:6px 10px;margin-bottom:.4rem;">';
+  html+='<div id="mo-bill-ic-wrap" style="display:'+(_editType==='personal'?'block':'none')+';">';
+  html+='<div style="font-size:11px;color:var(--ink4);margin-bottom:.15rem;">I/C Number (NRIC)</div>';
+  html+='<input class="form-input" id="mo-bill-ic" placeholder="e.g. 900101-14-1234" value="'+esc(_parsed.billIc||'')+'" style="font-size:12px;padding:6px 10px;margin-bottom:.4rem;">';
+  html+='</div>';
+  html+='<div id="mo-bill-reg-wrap" style="display:'+(_editType==='company'?'block':'none')+';">';
+  html+='<div style="font-size:11px;color:var(--ink4);margin-bottom:.15rem;">Registration No.</div>';
+  html+='<input class="form-input" id="mo-bill-reg" placeholder="e.g. 202301012345" value="'+esc(_parsed.billReg||'')+'" style="font-size:12px;padding:6px 10px;margin-bottom:.4rem;">';
+  html+='</div>';
+  html+='<div style="font-size:11px;color:var(--ink4);margin-bottom:.15rem;">TIN (Tax ID)</div>';
+  html+='<input class="form-input" id="mo-bill-tax" placeholder="e.g. IG123456789" value="'+esc(order.billing_tax_id||'')+'" style="font-size:12px;padding:6px 10px;margin-bottom:.4rem;">';
+  html+='<div style="font-size:11px;color:var(--ink4);margin-bottom:.15rem;">MPOB License No.</div>';
+  html+='<input class="form-input" id="mo-bill-mpob" placeholder="optional" value="'+esc(_parsed.billMpob||'')+'" style="font-size:12px;padding:6px 10px;margin-bottom:.4rem;">';
+  html+='<div style="font-size:11px;color:var(--ink4);margin-bottom:.15rem;">Billing Address</div>';
+  html+='<textarea class="form-input" id="mo-bill-addr" rows="2" placeholder="Street, City, Postcode, State, Country" style="font-size:12px;padding:6px 10px;margin-bottom:.5rem;width:100%;">'+esc(_parsed.billAddr||'')+'</textarea>';
   html+='<div style="display:flex;gap:.4rem;"><button class="btn btn-primary btn-sm" onclick="saveBillingDetails(\''+id+'\')">Save</button><button class="btn btn-outline btn-sm" onclick="toggleEditBilling()">Cancel</button></div>';
   html+='</div></div>';
 
@@ -2148,16 +2172,103 @@ function toggleEditBilling(){
   edit.style.display=isEditing?'none':'';
 }
 
+// Personal/Company switch inside the billing edit block. Swaps the
+// active-button colour, hides the field that doesn't apply, and
+// re-labels the name input to match. IDs are ephemeral (rebuilt every
+// viewOrder), so this reads whatever's currently in the DOM.
+function switchEditBillingType(type){
+  var isCompany = type === 'company';
+  var pBtn=document.getElementById('mo-bill-type-personal');
+  var cBtn=document.getElementById('mo-bill-type-company');
+  if(pBtn){ pBtn.className='btn '+(isCompany?'btn-outline':'btn-primary')+' btn-sm'; }
+  if(cBtn){ cBtn.className='btn '+(isCompany?'btn-primary':'btn-outline')+' btn-sm'; }
+  var icWrap=document.getElementById('mo-bill-ic-wrap');
+  var regWrap=document.getElementById('mo-bill-reg-wrap');
+  if(icWrap)  icWrap.style.display  = isCompany?'none':'block';
+  if(regWrap) regWrap.style.display = isCompany?'block':'none';
+  var nameLabel = document.querySelector('#mo-billing-edit > div:nth-of-type(2)');
+  var nameInput = document.getElementById('mo-bill-name');
+  if(nameLabel) nameLabel.textContent = isCompany?'Company Name':'Full Name';
+  if(nameInput) nameInput.placeholder = isCompany?'Company name':'Full name';
+  // Remember the active type on the wrapper so saveBillingDetails
+  // knows which side to persist without another lookup.
+  var editRoot=document.getElementById('mo-billing-edit');
+  if(editRoot) editRoot.dataset.type = isCompany?'company':'personal';
+}
+
 async function saveBillingDetails(orderId){
-  var name=(document.getElementById('mo-bill-name').value||'').trim();
-  var tax=(document.getElementById('mo-bill-tax').value||'').trim();
-  var{data:order}=await sb.from('salesweb_customer_orders').select('billing_name,billing_tax_id,status').eq('id',orderId).single();
-  if(!order){toast('Order not found','error');return;}
-  var{error}=await sb.from('salesweb_customer_orders').update({billing_name:name,billing_tax_id:tax,updated_at:new Date().toISOString()}).eq('id',orderId);
-  if(error){toast('Error: '+error.message,'error');return;}
+  var editRoot=document.getElementById('mo-billing-edit');
+  var type = (editRoot && editRoot.dataset.type) ||
+             (document.getElementById('mo-bill-type-company') &&
+              /btn-primary/.test(document.getElementById('mo-bill-type-company').className)
+              ? 'company' : 'personal');
+  var name = (document.getElementById('mo-bill-name').value||'').trim();
+  var tax  = (document.getElementById('mo-bill-tax').value||'').trim();
+  var mpob = (document.getElementById('mo-bill-mpob').value||'').trim();
+  var addr = (document.getElementById('mo-bill-addr').value||'').trim();
+  var ic   = type==='personal' ? (document.getElementById('mo-bill-ic').value||'').trim() : '';
+  var reg  = type==='company'  ? (document.getElementById('mo-bill-reg').value||'').trim() : '';
+
+  var{data:order,error:loadErr}=await sb.from('salesweb_customer_orders')
+    .select('billing_name,billing_tax_id,billing_type,customer_remark,status').eq('id',orderId).single();
+  if(loadErr || !order){toast('Order not found','error');return;}
+
+  // Rebuild customer_remark: keep non-billing parts (Admin-created marker,
+  // Phone, and any free-text user remark) and rewrite the billing pieces
+  // (Billing Addr, IC, Reg, MPOB) from the form. Matches the format
+  // written by the storefront checkout so both sides parse the same way.
+  var keep = [];
+  var hadAdminMarker = false;
+  var phoneLine = '';
+  if(order.customer_remark){
+    String(order.customer_remark).split(' | ').forEach(function(p){
+      p = p.trim();
+      if(!p) return;
+      if      (p === 'Admin-created order')      { hadAdminMarker = true; }
+      else if (p.indexOf('Billing Addr: ')===0)  { /* replaced */ }
+      else if (p.indexOf('IC: ')===0)            { /* replaced */ }
+      else if (p.indexOf('Reg: ')===0)           { /* replaced */ }
+      else if (p.indexOf('MPOB: ')===0)          { /* replaced */ }
+      else if (p.indexOf('Phone: ')===0)         { phoneLine = p; }
+      else                                        { keep.push(p); }
+    });
+  }
+  var parts = [];
+  if(hadAdminMarker) parts.push('Admin-created order');
+  if(phoneLine)      parts.push(phoneLine);
+  if(addr) parts.push('Billing Addr: '+addr);
+  if(ic)   parts.push('IC: '+ic);
+  if(reg)  parts.push('Reg: '+reg);
+  if(mpob) parts.push('MPOB: '+mpob);
+  // Preserve any leftover free-text remark at the end so it isn't lost.
+  keep.forEach(function(k){ parts.push(k); });
+  var remark = parts.join(' | ');
+
+  var patch = {
+    billing_name: name || null,
+    billing_tax_id: tax || null,
+    billing_type: type,
+    customer_remark: remark || null,
+    updated_at: new Date().toISOString(),
+  };
+  var{error}=await sb.from('salesweb_customer_orders').update(patch).eq('id',orderId);
+  if(error){
+    // billing_type may not exist yet on older schemas — retry without it.
+    if(/billing_type/i.test(error.message||'')){
+      delete patch.billing_type;
+      var r2=await sb.from('salesweb_customer_orders').update(patch).eq('id',orderId);
+      if(r2.error){ toast('Error: '+r2.error.message,'error'); return; }
+    } else {
+      toast('Error: '+error.message,'error'); return;
+    }
+  }
+
+  // Timeline entry — summarise which fields the admin actually changed.
   var changes=[];
-  if(name!==(order.billing_name||''))changes.push('billing name');
-  if(tax!==(order.billing_tax_id||''))changes.push('tax ID');
+  if(name !== (order.billing_name||''))     changes.push('name');
+  if(tax  !== (order.billing_tax_id||''))   changes.push('TIN');
+  if((order.billing_type||'personal') !== type) changes.push('type');
+  if(remark !== (order.customer_remark||'')) changes.push('address/IC/Reg/MPOB');
   if(changes.length){
     var session=await sb.auth.getSession();
     var user=session?.data?.session?.user?.email||'admin';

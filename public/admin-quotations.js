@@ -218,8 +218,10 @@ function qRowDragStart(ev, idx){
   ev.dataTransfer.effectAllowed = 'move';
   // Firefox needs setData to fire dragover/drop reliably.
   try { ev.dataTransfer.setData('text/plain', String(idx)); } catch(_){}
-  // Ghost the source row so it's obvious what's being moved.
-  var tr = ev.currentTarget;
+  // The drag starts from the handle cell, so currentTarget is a <td>.
+  // Ghost the parent row so it's obvious what's being moved.
+  var handle = ev.currentTarget;
+  var tr = handle && handle.closest ? handle.closest('tr') : (handle && handle.parentElement);
   if (tr && tr.classList) tr.classList.add('qrow-dragging');
 }
 window.qRowDragStart = qRowDragStart;
@@ -292,13 +294,20 @@ function renderQuotationEditor(){
     isEdit ? ('Edit Quotation ' + (h.quotation_number ? '· '+h.quotation_number : '')) : 'New Quotation';
 
   var itemsRows = QUOT_STATE.items.map(function(it, idx){
-    return '<tr data-qidx="'+idx+'" draggable="true" '+
-             'ondragstart="qRowDragStart(event,'+idx+')" '+
+    // Row stays as the drop target, but the DRAG STARTS only from the
+    // handle cell. Making the whole row draggable turned every mousedown
+    // on an input into a drag gesture, so the admin couldn't select text
+    // inside "Product / Description", Qty, or Unit Price — anywhere they
+    // tried to click-and-drag over characters, the row started sliding
+    // instead of the cursor selecting.
+    return '<tr data-qidx="'+idx+'" '+
              'ondragover="qRowDragOver(event)" '+
              'ondragleave="qRowDragLeave(event)" '+
              'ondrop="qRowDrop(event,'+idx+')" '+
              'ondragend="qRowDragEnd()">'+
-      '<td class="qrow-handle" title="Drag to reorder this row">⋮⋮</td>'+
+      '<td class="qrow-handle" draggable="true" '+
+          'ondragstart="qRowDragStart(event,'+idx+')" '+
+          'title="Drag to reorder this row">⋮⋮</td>'+
       '<td><input type="text" id="q-item-name-'+idx+'" class="form-input" value="'+esc(it.product_name||'')+'" placeholder="e.g. Oil Palm Seedling — Mar 2027" oninput="recomputeQuotationTotals()" style="font-size:12px;padding:5px 8px;width:100%;"></td>'+
       '<td style="width:90px;"><input type="number" step="1" min="0" id="q-item-qty-'+idx+'" class="form-input" value="'+(Number(it.quantity)||0)+'" oninput="recomputeQuotationTotals()" style="font-size:12px;padding:5px 8px;text-align:right;width:100%;"></td>'+
       '<td style="width:120px;"><input type="number" step="0.01" min="0" id="q-item-up-'+idx+'" class="form-input" value="'+(Number(it.unit_price)||0)+'" oninput="recomputeQuotationTotals()" style="font-size:12px;padding:5px 8px;text-align:right;width:100%;"></td>'+

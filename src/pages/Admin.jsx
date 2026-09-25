@@ -540,7 +540,7 @@ export default function Admin() {
                         <h3 style={{ margin: '0' }}>Stock Auto-Release (Unpaid Cash Orders)</h3>
                         <button className="btn btn-primary btn-sm" id="autorel-save-btn" onClick={(e) => { saveAutoReleaseConfig(); }}>Save</button>
                         </div>
-                      <p style={{ fontSize: '11px', color: 'var(--ink4)', marginBottom: '.8rem' }}>A <b>cash-term</b> order left unpaid (Pending Payment) for longer than the window below is automatically cancelled and its held stock returned. <b>Credit-term orders are never auto-released</b> — their stock is always kept.</p>
+                      <p style={{ fontSize: '11px', color: 'var(--ink4)', marginBottom: '.8rem' }}>A <b>cash-term</b> order left unpaid (Pending Payment) for longer than the window below is automatically cancelled and its held stock returned. <b>Credit-term orders and Partially Paid orders are never auto-released</b> — once a customer has paid any amount, their stock is held indefinitely.</p>
                       <p id="autorel-debug" style={{ fontSize: '11px', fontWeight: '600', marginBottom: '.8rem' }}>Loading saved values…</p>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem', flexWrap: 'wrap' }}>
                         <label style={{ display: 'flex', alignItems: 'center', gap: '.5rem', fontSize: '13px', fontWeight: '600', color: 'var(--ink2)', cursor: 'pointer' }}>

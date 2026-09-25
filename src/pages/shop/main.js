@@ -687,13 +687,18 @@ export function initShopMain() {
     // Qty +/-, qty input, and Add-to-Cart are clickable directly on the card —
     // stopPropagation prevents those clicks from bubbling up to the popup
     // opener. Description NEVER renders on the card by spec.
-    var qtyRow = canAdd
-      ? '<div class="card-qty-row" onclick="event.stopPropagation();">'
-        + '<button class="card-qty-btn" type="button" onclick="event.stopPropagation();changeCardQty(' + idx + ',-1)" aria-label="Decrease quantity">−</button>'
-        + '<input type="text" class="card-qty-input" id="cardQty-' + idx + '" value="1" inputmode="numeric" onclick="event.stopPropagation()" onkeydown="if(event.key===\'Enter\')this.blur();" onblur="setCardQty(' + idx + ',this.value)">'
-        + '<button class="card-qty-btn" type="button" onclick="event.stopPropagation();changeCardQty(' + idx + ',1)" aria-label="Increase quantity">+</button>'
-        + '</div>'
-      : '';
+    // The qty stepper renders on every card. When the product can't be
+    // added to cart, the row is aria-hidden and visually hidden with
+    // visibility:hidden, so the space is RESERVED — that keeps the
+    // stepper row and the Add-to-Cart / Sold Out button aligned across
+    // every card in the row instead of floating up on sold-out cards.
+    var qtyRowClass = canAdd ? 'card-qty-row' : 'card-qty-row is-placeholder';
+    var qtyRow = '<div class="' + qtyRowClass + '" onclick="event.stopPropagation();"'
+      + (canAdd ? '' : ' aria-hidden="true"') + '>'
+      + '<button class="card-qty-btn" type="button" ' + (canAdd ? '' : 'tabindex="-1" disabled ') + 'onclick="event.stopPropagation();changeCardQty(' + idx + ',-1)" aria-label="Decrease quantity">−</button>'
+      + '<input type="text" class="card-qty-input" id="cardQty-' + idx + '" value="1" inputmode="numeric" ' + (canAdd ? '' : 'tabindex="-1" disabled ') + 'onclick="event.stopPropagation()" onkeydown="if(event.key===\'Enter\')this.blur();" onblur="setCardQty(' + idx + ',this.value)">'
+      + '<button class="card-qty-btn" type="button" ' + (canAdd ? '' : 'tabindex="-1" disabled ') + 'onclick="event.stopPropagation();changeCardQty(' + idx + ',1)" aria-label="Increase quantity">+</button>'
+      + '</div>';
     var addLabel = p.status === 'sold-out' ? 'Sold Out' : p.status === 'coming-soon' ? 'Coming Soon' : 'Add to Cart';
     var addBtn = '<button class="btn-add card-add-btn" type="button" ' + (canAdd ? '' : 'disabled ') + 'onclick="event.stopPropagation();addCardToCart(' + idx + ')">' + addLabel + '</button>';
     var cardClass = 'product-card' + (p.status === 'sold-out' ? ' is-sold-out' : '');

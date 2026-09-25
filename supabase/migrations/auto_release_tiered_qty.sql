@@ -74,6 +74,11 @@ BEGIN
     SELECT o.id, o.created_at
     FROM   salesweb_customer_orders o
     WHERE  o.status = 'Pending Payment'
+      -- Belt-and-braces: an order that has received any payment (deposit,
+      -- first instalment, etc.) must never be auto-cancelled, even if
+      -- some future path lets the effective status stay 'Pending Payment'
+      -- while amount_paid has moved above zero.
+      AND  COALESCE(o.amount_paid, 0) = 0
       AND  COALESCE(o.payment_terms, 'cash') <> 'credit'
       AND  o.deleted_at IS NULL
   LOOP

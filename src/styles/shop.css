@@ -464,6 +464,11 @@
 
   /* In-card qty + Add controls (main page can add to cart without opening popup) */
   .card-qty-row { display:flex; align-items:center; justify-content:center; gap:.4rem; margin: .7rem 0 .5rem; }
+  /* Reserved-space placeholder on Sold Out / Coming Soon cards so the
+     stepper row occupies the same vertical space as an interactive one,
+     keeping every card's stepper AND Add-to-Cart button on the same
+     baseline across the grid row. */
+  .card-qty-row.is-placeholder { visibility: hidden; pointer-events: none; }
   .card-qty-btn { width:28px; height:28px; border-radius:6px; border:1.5px solid var(--green-pale); background:#fff; color:var(--green-dark); font-size:1rem; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; line-height:1; font-family:inherit; user-select:none; transition: all .15s; }
   .card-qty-btn:hover { background: var(--green-pale); }
   .card-qty-btn:active { transform: scale(.95); }

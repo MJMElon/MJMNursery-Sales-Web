@@ -703,11 +703,15 @@ export function initShopMain() {
     var addBtn = '<button class="btn-add card-add-btn" type="button" ' + (canAdd ? '' : 'disabled ') + 'onclick="event.stopPropagation();addCardToCart(' + idx + ')">' + addLabel + '</button>';
     var cardClass = 'product-card' + (p.status === 'sold-out' ? ' is-sold-out' : '');
 
+    // Always emit the month row (empty when missing) so every card's
+    // name+month block occupies the same vertical space — that keeps
+    // the price / stock / stepper / button rows on identical baselines
+    // across the grid regardless of whether a card has a month label.
     return '<div class="' + cardClass + '" onclick="openProductPopup(' + idx + ')">'
          +   '<div class="product-img">' + badge + imgHtml + '</div>'
          +   '<div class="product-info">'
          +     '<div class="product-name">' + esc(p.name) + '</div>'
-         +     (p.month ? '<div class="product-month">' + esc(p.month) + '</div>' : '')
+         +     '<div class="product-month">' + esc(p.month || '') + '</div>'
          +     '<div class="product-price" style="margin-top:.3rem;">' + esc(p.price) + '</div>'
          +     '<div class="product-stock">' + (p.stock > 0 ? p.stock.toLocaleString() + ' left' : 'Out of stock') + '</div>'
          +     qtyRow

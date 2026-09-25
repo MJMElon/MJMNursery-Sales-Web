@@ -20,6 +20,15 @@
 -- inclusive on both ends. If two tiers overlap, the first one that
 -- matches wins (JSONB array preserves order).
 --
+-- Filters candidate orders on the legacy `status` column, which is
+-- guaranteed present and kept in sync with payment_status/order_status
+-- by the salesweb_orders_dual_write_status trigger. This makes the RPC
+-- work on any Supabase instance regardless of whether the split-columns
+-- backfill has run.
+--
+-- Emits RAISE NOTICE lines so runs are visible in Supabase logs even
+-- when the caller ignores the return value.
+--
 -- Safe to re-run: replaces the function definition, no data loss.
 
 CREATE OR REPLACE FUNCTION release_abandoned_cash_orders()
@@ -30,6 +39,7 @@ SET search_path = public
 AS $$
 DECLARE
   v_count   integer := 0;
+  v_scanned integer := 0;
   v_hours   numeric := 48;
   v_enabled boolean := true;
   v_raw     text;
@@ -56,19 +66,18 @@ BEGIN
   END IF;
 
   IF NOT v_enabled THEN
+    RAISE NOTICE 'release_abandoned_cash_orders: disabled';
     RETURN 0;
   END IF;
 
   FOR r IN
     SELECT o.id, o.created_at
     FROM   salesweb_customer_orders o
-    WHERE  o.payment_status = 'Pending Payment'
-      AND  o.order_status IS NULL
+    WHERE  o.status = 'Pending Payment'
       AND  COALESCE(o.payment_terms, 'cash') <> 'credit'
       AND  o.deleted_at IS NULL
   LOOP
-    -- Pick the day count for this specific order.
-    -- Priority: matching tier by total qty  →  flat 'hours' setting.
+    v_scanned := v_scanned + 1;
     v_days    := NULL;
     v_matched := false;
 
@@ -109,28 +118,35 @@ BEGIN
       v_note := 'Auto-cancelled — cash order (qty ' || v_qty || ') unpaid for ' || v_days || ' days; stock returned';
     END IF;
 
-    -- Restore stock, flip status, log timeline.
-    UPDATE salesweb_products p
-    SET stock_qty  = COALESCE(p.stock_qty, 0) + oi.qty,
-        updated_at = now()
-    FROM (
-      SELECT product_id, SUM(quantity) AS qty
-      FROM   salesweb_order_items
-      WHERE  order_id = r.id AND product_id IS NOT NULL
-      GROUP  BY product_id
-    ) oi
-    WHERE p.id = oi.product_id;
+    -- Restore stock, flip status, log timeline. Wrap in a sub-block so
+    -- that a per-row failure (e.g. a stray constraint on a single
+    -- order's items) doesn't kill the whole cleanup pass.
+    BEGIN
+      UPDATE salesweb_products p
+      SET stock_qty  = COALESCE(p.stock_qty, 0) + oi.qty,
+          updated_at = now()
+      FROM (
+        SELECT product_id, SUM(quantity) AS qty
+        FROM   salesweb_order_items
+        WHERE  order_id = r.id AND product_id IS NOT NULL
+        GROUP  BY product_id
+      ) oi
+      WHERE p.id = oi.product_id;
 
-    UPDATE salesweb_customer_orders
-    SET order_status = 'Cancelled', updated_at = now()
-    WHERE id = r.id;
+      UPDATE salesweb_customer_orders
+      SET status = 'Cancelled', updated_at = now()
+      WHERE id = r.id;
 
-    INSERT INTO salesweb_order_timeline (order_id, status, note, changed_by)
-    VALUES (r.id, 'Cancelled', v_note, 'system');
+      INSERT INTO salesweb_order_timeline (order_id, status, note, changed_by)
+      VALUES (r.id, 'Cancelled', v_note, 'system');
 
-    v_count := v_count + 1;
+      v_count := v_count + 1;
+    EXCEPTION WHEN others THEN
+      RAISE NOTICE 'release_abandoned_cash_orders: order % skipped: %', r.id, SQLERRM;
+    END;
   END LOOP;
 
+  RAISE NOTICE 'release_abandoned_cash_orders: scanned %, cancelled %', v_scanned, v_count;
   RETURN v_count;
 END;
 $$;

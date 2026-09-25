@@ -712,7 +712,7 @@ export function initShopMain() {
          +   '<div class="product-info">'
          +     '<div class="product-name">' + esc(p.name) + '</div>'
          +     '<div class="product-month">' + esc(p.month || '') + '</div>'
-         +     '<div class="product-price" style="margin-top:.3rem;">' + esc(p.price) + '</div>'
+         +     '<div class="product-price">' + esc(p.price) + '</div>'
          +     '<div class="product-stock">' + (p.stock > 0 ? p.stock.toLocaleString() + ' left' : 'Out of stock') + '</div>'
          +     qtyRow
          +     addBtn

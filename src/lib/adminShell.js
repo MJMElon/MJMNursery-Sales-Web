@@ -518,7 +518,7 @@ Object.assign(window, {
 // public/ (still frozen in legacy_urls.txt, still minified by
 // scripts/clean_static.mjs) until each is migrated in its own PR.
 var MODULE_SRCS = [
-  '/admin-orders.js?v=2026-09-23-points-adjust',
+  '/admin-orders.js?v=2026-09-25-autorel-log',
   '/admin-reports.js?v=2026-06-15-charts',
   '/admin-customers.js?v=2026-08-13-points-ledger',
   '/admin-products.js?v=2026-08-21-publish-window-bind',

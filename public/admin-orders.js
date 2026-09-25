@@ -192,7 +192,15 @@ async function loadOrders(){
   // the DB function isn't installed yet this just no-ops. A pg_cron schedule
   // (see supabase/migrations/auto_release_abandoned_cash_orders.sql) covers
   // the case where no admin opens this page.
-  try{ await sb.rpc('release_abandoned_cash_orders'); }catch(e){ /* function not installed / no-op */ }
+  //
+  // Log the result to the console so a silently-broken cleanup (missing
+  // migration, table-level RLS surprise, timeline-insert constraint) is
+  // visible while poking around, instead of failing invisibly.
+  try{
+    var _rel = await sb.rpc('release_abandoned_cash_orders');
+    if(_rel && _rel.error) console.warn('[auto-release] rpc error:', _rel.error.message);
+    else                    console.log('[auto-release] cancelled', _rel && _rel.data, 'order(s)');
+  }catch(e){ console.warn('[auto-release] threw:', e && e.message); }
   var q=document.getElementById('order-search').value.trim().toLowerCase();
   var status=document.getElementById('order-filter').value;
   var f = ORDER_FILTERS || {};

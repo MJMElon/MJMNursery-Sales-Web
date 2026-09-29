@@ -851,13 +851,20 @@ async function saveProductOrderFromDOM(){
 async function loadInventoryHistory(productId){
   var host = document.getElementById('mp-inventory-history');
   if (!host) return;
+  // Header doubles as a collapse toggle. Whole strip is clickable; the
+  // chevron flips ▾ / ▸ and the body + subtitle hide/show. Default is
+  // expanded so existing muscle memory keeps working; admins who don't
+  // need the ledger for a given product can fold it away.
   host.innerHTML =
-    '<div style="margin-top:1.2rem;background:var(--surface);border-radius:10px;padding:1rem;">'+
-      '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.2rem;">'+
-        '<div style="font-size:13px;font-weight:700;color:var(--ink);">Inventory history</div>'+
+    '<div id="mp-inv-hist-card" data-collapsed="false" style="margin-top:1.2rem;background:var(--surface);border-radius:10px;padding:1rem;">'+
+      '<div id="mp-inv-hist-header" onclick="toggleInventoryHistory()" style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.2rem;cursor:pointer;user-select:none;" title="Click to expand or collapse">'+
+        '<div style="font-size:13px;font-weight:700;color:var(--ink);display:flex;align-items:center;gap:.4rem;">'+
+          '<span id="mp-inv-hist-chevron" style="font-size:10px;color:var(--ink4);transition:transform .15s;display:inline-block;">▾</span>'+
+          'Inventory history'+
+        '</div>'+
         '<div style="font-size:10.5px;color:var(--ink4);">Latest 90 movements</div>'+
       '</div>'+
-      '<div style="font-size:11px;color:var(--ink4);margin-bottom:.6rem;">Inventory in and out for this product</div>'+
+      '<div id="mp-inv-hist-sub" style="font-size:11px;color:var(--ink4);margin-bottom:.6rem;">Inventory in and out for this product</div>'+
       '<div id="mp-inv-hist-body" style="font-size:12px;color:var(--ink3);">Loading…</div>'+
     '</div>';
 
@@ -931,3 +938,21 @@ async function loadInventoryHistory(productId){
   body.innerHTML = html;
 }
 window.loadInventoryHistory = loadInventoryHistory;
+
+// Flip the Inventory-history card between expanded and collapsed.
+// Called from the header's inline onclick. Chevron rotates; the
+// subtitle + body hide together so nothing awkwardly floats when
+// collapsed.
+function toggleInventoryHistory(){
+  var card = document.getElementById('mp-inv-hist-card');
+  var body = document.getElementById('mp-inv-hist-body');
+  var sub  = document.getElementById('mp-inv-hist-sub');
+  var chev = document.getElementById('mp-inv-hist-chevron');
+  if (!card || !body) return;
+  var nowCollapsed = card.dataset.collapsed !== 'true';
+  card.dataset.collapsed = nowCollapsed ? 'true' : 'false';
+  body.style.display = nowCollapsed ? 'none' : '';
+  if (sub)  sub.style.display  = nowCollapsed ? 'none' : '';
+  if (chev) chev.style.transform = nowCollapsed ? 'rotate(-90deg)' : '';
+}
+window.toggleInventoryHistory = toggleInventoryHistory;

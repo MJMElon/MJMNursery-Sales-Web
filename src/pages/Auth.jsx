@@ -112,7 +112,7 @@ export default function Auth() {
       const { data: signUpData, error } = await supabase.auth.signUp({ email: id, password, options: { data: { full_name: name, user_type: 'customer' } } });
       if (error) {
         if (error.message.toLowerCase().includes('database')) {
-          const { data: retryData, error: retryErr } = await supabase.auth.signUp({ email: id, password, options: { data: { user_type: 'customer' } } });
+          const { data: retryData, error: retryErr } = await supabase.auth.signUp({ email: id, password, options: { data: { full_name: name, user_type: 'customer' } } });
           if (retryErr) { showStatus(retryErr.message, 'error'); return; }
           if (retryData && retryData.user) {
             await supabase.from('shared_profiles').upsert({ id: retryData.user.id, email: id, full_name: name, role: 'customer', user_type: 'customer' }, { onConflict: 'id' });

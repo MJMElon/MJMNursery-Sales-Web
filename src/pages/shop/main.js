@@ -3368,7 +3368,7 @@ export function initShopMain() {
       var { data: signUpData, error } = await _sb.auth.signUp({ email: identity, password: pw, options: { data: { full_name: name, user_type: 'customer' } } });
       if (error) {
         if (error.message.toLowerCase().includes('database')) {
-          var { data: retryData, error: retryErr } = await _sb.auth.signUp({ email: identity, password: pw });
+          var { data: retryData, error: retryErr } = await _sb.auth.signUp({ email: identity, password: pw, options: { data: { full_name: name, user_type: 'customer' } } });
           if (retryErr) { clShowStatus(retryErr.message, 'error'); return; }
           if (retryData && retryData.user) {
             await _sb.from('shared_profiles').upsert({ id: retryData.user.id, email: identity, full_name: name, role: 'customer', user_type: 'customer' }, { onConflict: 'id' });

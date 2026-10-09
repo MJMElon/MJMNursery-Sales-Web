@@ -1099,12 +1099,18 @@ export function initShopMain() {
     baja: 'linear-gradient(135deg, #4a148c, #7b1fa2)'
   };
   var _passionEmoji = { plantation:'🌴', nursery:'🌱', mill:'🏭', collection:'🚛', baja:'♻️' };
+  // _default marks these as the built-in placeholders, and it is what step 3
+  // below tests to skip the image fetch. It used to test id.startsWith('d')
+  // instead — but real rows have UUID ids, UUIDs are hex, and one in sixteen
+  // begins with a d. Any such row (the Baja card, in production) was silently
+  // never asked for its image, while the admin page showed the upload fine.
+  // A flag the database can never have on a real row cannot collide.
   var _passionDefaults = [
-    { id:'d1', key:'plantation', label:'Oil Palm Plantation', description:'Where it all begins' },
-    { id:'d2', key:'nursery', label:'MJM Nursery', description:'Premium seedling supplier' },
-    { id:'d3', key:'mill', label:'MJM Palm Oil Mill', description:'Processing into crude palm oil' },
-    { id:'d4', key:'collection', label:'MJM Collection Center', description:'Collection points for planters' },
-    { id:'d5', key:'baja', label:'SawitGro Baja Kompos', description:'Completing the cycle' }
+    { id:'d1', key:'plantation', label:'Oil Palm Plantation', description:'Where it all begins', _default:true },
+    { id:'d2', key:'nursery', label:'MJM Nursery', description:'Premium seedling supplier', _default:true },
+    { id:'d3', key:'mill', label:'MJM Palm Oil Mill', description:'Processing into crude palm oil', _default:true },
+    { id:'d4', key:'collection', label:'MJM Collection Center', description:'Collection points for planters', _default:true },
+    { id:'d5', key:'baja', label:'SawitGro Baja Kompos', description:'Completing the cycle', _default:true }
   ];
 
   async function loadPassionSection() {
@@ -1143,9 +1149,11 @@ export function initShopMain() {
     });
     container.innerHTML = html;
 
-    // Step 3: Load each image individually in background (non-blocking)
+    // Step 3: Load each image individually in background (non-blocking).
+    // Skip only the built-in defaults — they have no row to fetch. See the
+    // note on _passionDefaults for why this must NOT be an id test.
     items.forEach(function(item) {
-      if (item.id && !item.id.startsWith('d')) loadPassionPanelImg(item.id, item.key);
+      if (item.id && !item._default) loadPassionPanelImg(item.id, item.key);
     });
   }
 

@@ -22,8 +22,19 @@
 --
 -- Safe to run twice: CREATE OR REPLACE and DROP TRIGGER IF EXISTS, and the
 -- backfill only inserts where nothing already matches the order_number.
+--
+-- shared_al_orders.id is bigint, not uuid - the first version of this file
+-- guessed uuid (salesweb_customer_orders.id really is one, which is
+-- probably where the guess came from) and Postgres refused the backfill
+-- with "function public.ensure_order_for_al(bigint) does not exist" the
+-- moment it was actually run. The DROP below removes that wrongly-typed
+-- function before recreating it with the type the column actually has, so
+-- a database that already ran the first version does not end up with two
+-- overloads sitting side by side.
 
-CREATE OR REPLACE FUNCTION public.ensure_order_for_al(_al_id uuid)
+DROP FUNCTION IF EXISTS public.ensure_order_for_al(uuid);
+
+CREATE OR REPLACE FUNCTION public.ensure_order_for_al(_al_id bigint)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -72,7 +83,7 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.ensure_order_for_al(uuid) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.ensure_order_for_al(bigint) TO anon, authenticated;
 
 CREATE OR REPLACE FUNCTION public.shared_al_orders_ensure_order_trigger()
 RETURNS trigger

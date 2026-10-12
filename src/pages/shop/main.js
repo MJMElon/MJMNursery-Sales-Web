@@ -18,7 +18,8 @@
 //      gives the same earlier-availability guarantee.
 // Everything else — including the checkout redirects to payment.html /
 // payment-proof.html and every sessionStorage key — is verbatim.
-import { supabase as sharedSupabaseClient } from '../../lib/supabase.js';
+import { supabase as sharedSupabaseClient, SUPABASE_URL as SHOP_SB_URL, SUPABASE_ANON_KEY as SHOP_SB_KEY } from '../../lib/supabase.js';
+import { createClient as shopCreateClient } from '@supabase/supabase-js';
 
 // Global mobile-menu close helper — inline onclicks in the mobile nav drawer
 // (Log In, My Account, Sign Out) call this. Defining it here, BEFORE the
@@ -172,7 +173,7 @@ export function initShopMain() {
         } catch(e){}
       }, 0);
     }
-    if (page === 'contact') { setTimeout(prefillContactForm, 0); }
+    if (page === 'contact') { setTimeout(function(){ resetContactForm(); prefillContactForm(); }, 0); }
     if (page === 'quotation') {
       setTimeout(function(){
         try {
@@ -1000,14 +1001,41 @@ export function initShopMain() {
   // customer typed and says what went wrong.
   var CONTACT_PHOTO_MAX = 5 * 1024 * 1024;
 
+  // "Signed in" on the shop means what the nav bar means: the customer
+  // logged in HERE (mjm_user_name in sessionStorage). The Supabase session
+  // in localStorage is shared with the admin portal on the same site, so it
+  // can belong to a staff member who never signed in to the shop — reading
+  // that would attach a guest message to the staff account.
+  function shopSignedIn(){ return !!sessionStorage.getItem('mjm_user_name'); }
+
+  // A guest message goes through a client with NO session at all, so the
+  // database records it as a guest message whatever login is lying around.
+  var _guestSb = null;
+  function guestClient(){
+    if(!_guestSb) _guestSb = shopCreateClient(SHOP_SB_URL, SHOP_SB_KEY, { auth: { persistSession:false, autoRefreshToken:false, detectSessionInUrl:false, storageKey:'mjm-guest-contact' } });
+    return _guestSb;
+  }
+
+  // Coming back to Contact Us after a send shows a clean form again.
+  function resetContactForm(){
+    var form=document.getElementById('contact-form'), done=document.getElementById('cf-done');
+    if(!form || !done || form.style.display!=='none') return;
+    form.reset();
+    var err=document.getElementById('cf-error'); if(err){ err.style.display='none'; err.innerHTML=''; }
+    var btn=document.getElementById('cf-submit'); if(btn){ btn.disabled=false; btn.textContent='Send Message'; }
+    contactSubjectChanged();
+    done.style.display='none'; done.innerHTML='';
+    form.style.display='';
+  }
+
   async function prefillContactForm(){
     try{
       var nameEl=document.getElementById('cf-name'), emailEl=document.getElementById('cf-email'), phoneEl=document.getElementById('cf-phone');
-      if(!nameEl) return;
+      if(!nameEl || !shopSignedIn()) return;
       var n=sessionStorage.getItem('mjm_user_name'), em=sessionStorage.getItem('mjm_user_email');
       if(n && !nameEl.value) nameEl.value=n;
       if(em && !emailEl.value) emailEl.value=em;
-      if(em && !phoneEl.value){
+      if(!phoneEl.value){
         await loadSupabaseSdk();
         var sess=await _sb.auth.getSession(); var uid=sess?.data?.session?.user?.id;
         if(uid){ var r=await _sb.from('shared_profiles').select('phone').eq('id',uid).maybeSingle(); if(r.data&&r.data.phone&&!phoneEl.value) phoneEl.value=r.data.phone; }
@@ -1072,13 +1100,20 @@ export function initShopMain() {
     if(!subject) return showErr('Please select a topic.');
     if(!message) return showErr('Please write your message.');
 
-    var done=function(ref, loggedIn){
-      form.innerHTML='<div style="text-align:center;padding:3rem 1rem"><div style="font-size:3rem;margin-bottom:1rem">✅</div>'+
+    var done=function(ref, signedIn){
+      var box=document.getElementById('cf-done');
+      var follow = signedIn
+        ? '<p style="color:var(--text-mid);margin-top:.6rem">You can follow this message under <a onclick="showPage(\'portal\');setTimeout(function(){var b=document.getElementById(\'ptab-messages\');if(b)pShowOrderView(\'messages\',b);},120);" style="color:var(--green-dark);font-weight:600;cursor:pointer;text-decoration:underline">My Account → Messages</a>.</p>'
+        : (ref ? '<p style="color:var(--text-mid);margin-top:.6rem;font-size:13px;line-height:1.6">Please keep this reference number. To follow your message online, <a onclick="openLoginModal()" style="color:var(--green-dark);font-weight:600;cursor:pointer;text-decoration:underline">sign in or create an account</a>, then go to <strong>My Account → Messages → Add a Case</strong> and enter this reference with the phone number you used.</p>' : '');
+      box.innerHTML='<div style="text-align:center;padding:3rem 1rem"><div style="font-size:3rem;margin-bottom:1rem">✅</div>'+
         '<h3 style="font-family:Cormorant Garamond,serif;font-size:1.8rem;color:var(--green-dark);margin-bottom:.5rem">Message Sent!</h3>'+
         (ref?'<p style="color:var(--text-dark);font-size:15px;margin-bottom:.6rem">Your reference: <strong>'+escContact(ref)+'</strong></p>':'')+
         '<p style="color:var(--text-mid)">Thank you for reaching out. A member of our team will contact you on WhatsApp shortly.</p>'+
-        (loggedIn?'<p style="color:var(--text-mid);margin-top:.6rem">You can follow this message under <a onclick="showPage(\'portal\');setTimeout(function(){var b=document.getElementById(\'ptab-messages\');if(b)pShowOrderView(\'messages\',b);},120);" style="color:var(--green-dark);font-weight:600;cursor:pointer;text-decoration:underline">My Account → Messages</a>.</p>':'')+
+        follow+
+        '<button type="button" class="portal-tab" onclick="resetContactForm()" style="margin-top:1.4rem">Send another message</button>'+
         '</div>';
+      form.style.display='none';
+      box.style.display='block';
     };
 
     // Bots fill the hidden field; give them the same screen and save nothing.
@@ -1087,7 +1122,8 @@ export function initShopMain() {
     btn.disabled=true; btn.textContent='Sending…';
     try{
       await loadSupabaseSdk();
-      var sess=await _sb.auth.getSession(); var loggedIn=!!(sess && sess.data && sess.data.session);
+      var signedIn=shopSignedIn();
+      var client=signedIn ? _sb : guestClient();
 
       var photoPath=null;
       if(photo){
@@ -1096,13 +1132,13 @@ export function initShopMain() {
         if(file.size>CONTACT_PHOTO_MAX) return showErr('That photo is larger than 5 MB. Please choose a smaller one, or send it to us on WhatsApp.');
         var ext=(file.type==='image/jpeg')?'jpg':((file.name||'').split('.').pop()||'jpg').toLowerCase().slice(0,5);
         var path='incoming/'+contactUuid()+'.'+ext;
-        var up=await _sb.storage.from('contact-message-photos').upload(path, file, {contentType:file.type||'image/jpeg', upsert:false});
+        var up=await client.storage.from('contact-message-photos').upload(path, file, {contentType:file.type||'image/jpeg', upsert:false});
         if(up.error) return showErr('We could not upload your photo ('+escContact(up.error.message)+'). Remove it and try again, or send it to us on WhatsApp.');
         photoPath=path;
         btn.textContent='Sending…';
       }
 
-      var res=await _sb.rpc('salesweb_submit_message',{
+      var res=await client.rpc('salesweb_submit_message',{
         p_name:name, p_email:email, p_phone:phone, p_subject:subject, p_message:message,
         p_order_number:order||null, p_photo_path:photoPath
       });
@@ -1110,9 +1146,9 @@ export function initShopMain() {
       var row=Array.isArray(res.data)?res.data[0]:res.data;
 
       // Email to the office. Fire and forget — the message is already safe.
-      try{ _sb.functions.invoke('notify-new-message',{body:{id:row.id}}).catch(function(){}); }catch(_){}
+      try{ client.functions.invoke('notify-new-message',{body:{id:row.id}}).catch(function(){}); }catch(_){}
 
-      done(row && row.ref, loggedIn);
+      done(row && row.ref, signedIn);
     }catch(err){
       showErr('Sorry, your message could not be sent ('+escContact(err && err.message || err)+'). Please try again, or reach us on <a href="https://wa.me/601129337889" target="_blank" rel="noopener">WhatsApp</a>.');
     }
@@ -1567,9 +1603,36 @@ export function initShopMain() {
   // waNumber() is the same rule as public/admin-messages.js.
   function pWaNumber(raw){ var d=String(raw||'').replace(/\D/g,''); if(!d) return ''; if(d.indexOf('60')===0) return d; if(d.charAt(0)==='0') return '6'+d; if(d.charAt(0)==='1'&&d.length>=9&&d.length<=10) return '60'+d; return d; }
   function pMsgEsc(s){ var d=document.createElement('div'); d.textContent=s==null?'':String(s); return d.innerHTML; }
+  async function pClaimMessage(){
+    var ref=(document.getElementById('pc-ref').value||'').trim(), phone=(document.getElementById('pc-phone').value||'').trim();
+    var msg=document.getElementById('pc-msg'), btn=document.getElementById('pc-btn');
+    var say=function(text, ok){ msg.textContent=text; msg.style.color=ok?'#15803d':'#b91c1c'; msg.style.display='block'; };
+    if(!ref) return say('Please enter the reference number, e.g. MSG-00001.');
+    if(phone.replace(/\D/g,'').length<9) return say('Please enter the phone number you used on that message.');
+    btn.disabled=true; btn.textContent='Adding…';
+    try{
+      await loadSupabaseSdk();
+      var r=await _sb.rpc('salesweb_claim_message',{p_ref:ref, p_phone:phone});
+      if(r.error) throw r.error;
+      var row=Array.isArray(r.data)?r.data[0]:r.data;
+      await pRenderMessages();
+      showPortalToast(row && row.result==='already_yours' ? (row.message_ref+' is already in your messages') : ((row&&row.message_ref)+' added to your messages'));
+    }catch(e){
+      say(e && e.message || String(e));
+      btn.disabled=false; btn.textContent='Add';
+    }
+  }
+
   async function pRenderMessages(){
     var host=document.getElementById('pp-messages'); if(!host) return;
-    var newBtn='<button class="portal-tab" onclick="showPage(\'contact\')" style="width:100%;text-align:center;padding:.6rem;border-style:dashed;margin-bottom:1rem;">+ Send a New Message</button>';
+    var newBtn='<button class="portal-tab" onclick="showPage(\'contact\')" style="width:100%;text-align:center;padding:.6rem;border-style:dashed;margin-bottom:1rem;">+ Send a New Message</button>'+
+      // A message sent before signing in belongs to nobody. The customer
+      // links it here with its reference AND the phone number on it: the
+      // reference alone counts up and could be guessed.
+      '<div class="p-card p-claim" style="margin-bottom:1rem;"><div style="font-weight:700;font-size:13px;color:var(--text-dark);margin-bottom:.25rem;">Add a Case</div>'+
+      '<div style="font-size:12px;color:var(--text-light);line-height:1.5;margin-bottom:.7rem;">Sent us a message before signing in? Enter its reference number and the phone number you used, and it will appear here.</div>'+
+      '<div class="p-claim-row"><input id="pc-ref" placeholder="Reference, e.g. MSG-00001" autocomplete="off"><input id="pc-phone" type="tel" placeholder="Phone number used"><button class="p-save-btn" id="pc-btn" onclick="pClaimMessage()">Add</button></div>'+
+      '<div id="pc-msg" style="font-size:12px;margin-top:.5rem;display:none;"></div></div>';
     host.innerHTML=newBtn+'<div class="p-card" style="text-align:center;padding:1.5rem;font-size:13px;color:var(--text-light);">Loading your messages…</div>';
     try{
       await loadSupabaseSdk();
@@ -3962,7 +4025,7 @@ export function initShopMain() {
     // information page
     switchPolicyTab,
     // contact page
-    submitContactForm, contactSubjectChanged,
+    submitContactForm, contactSubjectChanged, resetContactForm, pClaimMessage,
     // calculator (form inputs + generated result card)
     calcSeedlings, shareCalcToWhatsApp, addCalcToCart, addCalcToCartAndQuote,
     // quotation (form inputs + generated empty-state)

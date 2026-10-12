@@ -134,7 +134,8 @@ AS $$
 $$;
 
 -- ── History trigger ────────────────────────────────────────────
--- Every status change and every assignment writes an event row.
+-- Every status change, assignment and order number change writes an
+-- event row.
 -- Also keeps updated_at, resolved_at and assigned_at honest.
 CREATE OR REPLACE FUNCTION public.salesweb_messages_track()
 RETURNS TRIGGER
@@ -156,6 +157,14 @@ BEGIN
     END IF;
     INSERT INTO public.salesweb_message_events (message_id, kind, body, actor_id, actor_name)
     VALUES (NEW.id, 'status', OLD.status || ' to ' || NEW.status, v_uid, v_name);
+  END IF;
+
+  IF NEW.order_number IS DISTINCT FROM OLD.order_number THEN
+    INSERT INTO public.salesweb_message_events (message_id, kind, body, actor_id, actor_name)
+    VALUES (NEW.id, 'order',
+            CASE WHEN NEW.order_number IS NULL THEN 'Order number removed'
+                 ELSE 'Order linked: #' || NEW.order_number END,
+            v_uid, v_name);
   END IF;
 
   IF NEW.assigned_name IS DISTINCT FROM OLD.assigned_name
@@ -296,6 +305,66 @@ AS $$
    ORDER BY m.created_at DESC
 $$;
 GRANT EXECUTE ON FUNCTION public.salesweb_my_messages() TO authenticated;
+
+-- ── Customer adds a case sent before signing in ─────────────────
+-- A message sent as a guest belongs to nobody. A signed-in customer can
+-- link it to their account with its reference AND the phone number on
+-- it. References count up and could be guessed, the phone number is
+-- what makes it theirs. A wrong reference and a wrong phone give the
+-- same answer, so neither can be found out on its own. The reference
+-- can be typed loosely (MSG-00001, msg 1, 00001).
+CREATE OR REPLACE FUNCTION public.salesweb_claim_message(p_ref TEXT, p_phone TEXT)
+RETURNS TABLE (result TEXT, message_ref TEXT)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_uid     UUID := auth.uid();
+  v_refin   TEXT := btrim(COALESCE(p_ref, ''));
+  v_refnum  TEXT;
+  v_ref     TEXT;
+  v_phone   TEXT := COALESCE(p_phone, '');
+  v_digits  TEXT;
+  v_row     public.salesweb_messages%ROWTYPE;
+  v_rowdig  TEXT;
+BEGIN
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'Please sign in first.';
+  END IF;
+  v_refnum := translate(v_refin, translate(v_refin, '0123456789', ''), '');
+  IF v_refnum = '' OR length(v_refnum) > 9 THEN
+    RAISE EXCEPTION 'Please enter the reference number, e.g. MSG-00001.';
+  END IF;
+  v_ref := 'MSG-' || lpad((v_refnum::BIGINT)::TEXT, 5, '0');
+  v_digits := translate(v_phone, translate(v_phone, '0123456789', ''), '');
+  IF length(v_digits) < 9 THEN
+    RAISE EXCEPTION 'Please enter the phone number you used on that message.';
+  END IF;
+
+  SELECT * INTO v_row FROM public.salesweb_messages m WHERE m.ref = v_ref;
+  v_rowdig := translate(COALESCE(v_row.phone, ''), translate(COALESCE(v_row.phone, ''), '0123456789', ''), '');
+  IF NOT FOUND OR length(v_rowdig) < 9 OR right(v_rowdig, 9) <> right(v_digits, 9) THEN
+    RAISE EXCEPTION 'We could not find a message with that reference and phone number. Please check both and try again.';
+  END IF;
+
+  IF v_row.user_id = v_uid THEN
+    RETURN QUERY SELECT 'already_yours'::TEXT, v_ref::TEXT;
+    RETURN;
+  END IF;
+  IF v_row.user_id IS NOT NULL THEN
+    RAISE EXCEPTION 'This message is already linked to another account. Please contact us on WhatsApp.';
+  END IF;
+
+  UPDATE public.salesweb_messages SET user_id = v_uid WHERE salesweb_messages.id = v_row.id;
+  INSERT INTO public.salesweb_message_events (message_id, kind, body, actor_id, actor_name)
+  VALUES (v_row.id, 'linked', 'Customer added this case to their account', v_uid,
+          COALESCE(public.salesweb_actor_name(v_uid), 'Customer'));
+
+  RETURN QUERY SELECT 'linked'::TEXT, v_ref::TEXT;
+END $$;
+GRANT EXECUTE ON FUNCTION public.salesweb_claim_message(TEXT, TEXT) TO authenticated;
+REVOKE EXECUTE ON FUNCTION public.salesweb_claim_message(TEXT, TEXT) FROM anon;
 
 -- ── Row Level Security ─────────────────────────────────────────
 ALTER TABLE public.salesweb_messages              ENABLE ROW LEVEL SECURITY;

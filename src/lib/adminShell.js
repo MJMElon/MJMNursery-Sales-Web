@@ -85,7 +85,7 @@ export async function checkAdmin(){
 
 // Set of tabs that exist in the salesweb admin. Update both sides if you
 // add a new tab — the sidebar id pattern is sb-<key>-item.
-var SALESWEB_TAB_KEYS = ['orders','messages','reports','customers','products','payments','promos','coupons','webdesign','settings','users'];
+var SALESWEB_TAB_KEYS = ['orders','reports','customers','products','payments','messages','promos','coupons','webdesign','settings','users'];
 
 export function canSeeTab(key){
   if (key === 'users') return !!window.__SW_IS_ADMIN__;     // User Access is admin-locked
@@ -531,7 +531,7 @@ var MODULE_SRCS = [
   '/admin-products.js?v=2026-09-29-invhist-collapse',
   '/admin-payments.js?v=2026-09-09-hide-deleted',
   '/admin-quotations.js?v=2026-09-25-handle-only-drag',
-  '/admin-users.js?v=2026-10-12-messages-tab',
+  '/admin-users.js?v=2026-10-12-messages-order',
   '/admin-promotions.js?v=2026-05-18-points-ledger',
   '/admin-coupons.js?v=2026-05-28-coupon-groups',
   '/admin-web-design.js?v=2026-05-20-port-from-umbrella',

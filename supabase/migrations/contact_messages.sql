@@ -149,6 +149,11 @@ DECLARE
 BEGIN
   NEW.updated_at := NOW();
 
+  IF OLD.read_at IS NULL AND NEW.read_at IS NOT NULL THEN
+    INSERT INTO public.salesweb_message_events (message_id, kind, body, actor_id, actor_name)
+    VALUES (NEW.id, 'opened', 'First opened on the Messages tab', v_uid, v_name);
+  END IF;
+
   IF NEW.status IS DISTINCT FROM OLD.status THEN
     IF NEW.status IN ('Resolved','Closed') AND OLD.status NOT IN ('Resolved','Closed') THEN
       NEW.resolved_at := NOW();

@@ -209,28 +209,107 @@ function startMessagesBadge() {
 }
 
 // ── Detail ──────────────────────────────────────────────────────────
+// ── Case pop-up ─────────────────────────────────────────────────────
+// Left: ① customer (name, phone, email, order #), ② the message (category,
+// content, photo). Right: case handling (assigned to, status), ③ the
+// timeline of the case, then a new internal note. Nothing is written until
+// the one Save button at the bottom right: assignee, status, linked order
+// and the note all go together, and every change lands in the timeline
+// (the database trigger writes status, assignment, order and first-opened
+// entries; the note is its own entry).
+var MSG_PENDING_ORDER;       // undefined = unchanged, null = remove, 'K3M7B0' = link
+var MSG_DIRTY = false;
+
 async function openMessage(id) {
   var m = MSG_ROWS.find(function (r) { return r.id === id; });
   if (!m) return;
   MSG_CURRENT = m;
+  MSG_PENDING_ORDER = undefined;
+  MSG_DIRTY = false;
+  var note = document.getElementById('mmsg-note'); if (note) note.value = '';
   document.getElementById('mmsg-title').textContent = m.ref + ' — ' + m.subject;
   document.getElementById('mmsg-body').innerHTML = '<div class="loading">Loading…</div>';
+  document.getElementById('mmsg-foot').innerHTML = '';
   openModal('modal-message');
 
   if (!m.read_at) {
     var now = new Date().toISOString();
     m.read_at = now;
-    sb.from('salesweb_messages').update({ read_at: now }).eq('id', id).then(function () { renderMessagesTable(); updateMessagesBadge(); });
+    await sb.from('salesweb_messages').update({ read_at: now }).eq('id', id);
+    renderMessagesTable(); updateMessagesBadge();
   }
   await loadMessageHandlers();
   await renderMessageDetail();
 }
 
+// Closing with something typed or picked and not saved asks first.
+function closeMessageModal() {
+  if (MSG_DIRTY && !confirm('You have changes that are not saved. Close without saving?')) return;
+  MSG_DIRTY = false;
+  closeModal('modal-message');
+}
+
+function msgMarkDirty() {
+  MSG_DIRTY = true;
+  var b = document.getElementById('mmsg-save'); if (b) { b.disabled = false; b.textContent = 'Save Changes'; }
+  var w = document.getElementById('mmsg-dirty'); if (w) w.style.display = '';
+}
+
+function msgDur(ms) {
+  if (ms == null || isNaN(ms) || ms < 0) return '';
+  var m = Math.round(ms / 60000);
+  if (m < 60) return m + 'm';
+  var h = Math.floor(m / 60);
+  if (h < 48) return h + 'h' + (m % 60 ? ' ' + (m % 60) + 'm' : '');
+  var d = Math.floor(h / 24);
+  return d + 'd' + (h % 24 ? ' ' + (h % 24) + 'h' : '');
+}
+
+var MSG_EV_ICON = { created: '📩', opened: '👁', assign: '👤', status: '🔄', order: '🧾', note: '📝', whatsapp: '💬', linked: '🔗' };
+var MSG_EV_LABEL = { created: 'Received', opened: 'Opened', assign: 'Assignment', status: 'Status', order: 'Order', note: 'Internal note', whatsapp: 'WhatsApp', linked: 'Customer account' };
+
+function msgTimelineHtml(m, events) {
+  var t0 = new Date(m.created_at).getTime();
+  var firstOf = function (kinds) { return events.find(function (e) { return kinds.indexOf(e.kind) >= 0; }); };
+  var opened = firstOf(['opened']);
+  var assigned = events.filter(function (e) { return e.kind === 'assign' && e.body !== 'Unassigned'; })[0];
+  var response = firstOf(['note', 'whatsapp']);
+  var steps = [
+    { label: 'Received', at: m.created_at, who: m.name },
+    { label: 'First opened', at: m.read_at, who: opened && opened.actor_name },
+    { label: 'Assigned', at: assigned ? assigned.created_at : m.assigned_at, who: assigned ? assigned.body.replace(/^Assigned to /, '') : m.assigned_name },
+    { label: 'First response', at: response && response.created_at, who: response && response.actor_name },
+    { label: (m.status === 'Closed' ? 'Closed' : 'Resolved'), at: m.resolved_at, who: null },
+  ];
+  var summary = '<div class="msg-steps">' + steps.map(function (s, i) {
+    var done = !!s.at;
+    var after = done && i > 0 ? msgDur(new Date(s.at).getTime() - t0) : '';
+    return '<div class="msg-step' + (done ? ' done' : '') + '">' +
+      '<div class="msg-step-dot"></div>' +
+      '<div class="msg-step-body"><div class="msg-step-label">' + s.label + (after ? ' <span class="msg-step-after">+' + after + '</span>' : '') + '</div>' +
+      '<div class="msg-step-when">' + (done ? msgWhen(s.at) + (s.who ? ' · ' + esc(s.who) : '') : 'Not yet') + '</div></div>' +
+    '</div>';
+  }).join('') + '</div>';
+
+  var log = events.length ? events.slice().reverse().map(function (e) {
+    return '<div class="msg-ev msg-ev-' + esc(e.kind) + '">' +
+      '<div class="msg-ev-head">' + (MSG_EV_ICON[e.kind] || '•') + ' <strong>' + esc(MSG_EV_LABEL[e.kind] || e.kind) + '</strong> · ' + esc(e.actor_name || 'System') + ' · ' + msgWhen(e.created_at) + '</div>' +
+      '<div class="msg-ev-body">' + esc(e.body) + '</div></div>';
+  }).join('') : '<div style="font-size:12px;color:var(--ink4);">Nothing yet.</div>';
+
+  return summary + '<div class="msg-subtitle">Every entry <span>newest first</span></div><div class="msg-history">' + log + '</div>';
+}
+
 async function renderMessageDetail() {
   var m = MSG_CURRENT;
   if (!m) return;
-  var ev = await sb.from('salesweb_message_events').select('kind,body,actor_name,created_at').eq('message_id', m.id).order('created_at', { ascending: true });
+  var ev = await sb.from('salesweb_message_events').select('kind,body,actor_name,created_at').eq('message_id', m.id).order('created_at', { ascending: true }).order('id', { ascending: true });
   var events = ev.data || [];
+
+  // Anything picked or typed and not yet saved survives a redraw.
+  var keep = {};
+  ['mmsg-note', 'mmsg-handler', 'mmsg-status'].forEach(function (id) { var el = document.getElementById(id); if (el && MSG_DIRTY) keep[id] = el.value; });
+  var keepNotify = document.getElementById('mmsg-notify'); keepNotify = keepNotify ? keepNotify.checked : true;
 
   var waCust = waNumber(m.phone);
   // Assigned To lists the portal users with Messages access (User Access
@@ -249,67 +328,78 @@ async function renderMessageDetail() {
   var waLine = '';
   if (m.wa_status === 'sent') waLine = '<div class="msg-wa msg-wa-ok">✓ Customer was told on WhatsApp who is handling this (' + msgWhen(m.wa_sent_at) + ').</div>';
   else if (m.wa_status === 'not_configured') waLine = '<div class="msg-wa msg-wa-warn">WhatsApp API not set up yet — the customer was <strong>not</strong> messaged automatically. ' +
-      (waCust ? '<a href="https://wa.me/' + waCust + '?text=' + encodeURIComponent('Hi ' + m.name + ', thank you for contacting MJM Nursery. Your case ' + m.ref + ' has been assigned to ' + m.assigned_name + ', who will contact you on WhatsApp from +' + waNumber(m.assigned_phone) + ' shortly.') + '" target="_blank" rel="noopener">Send it by hand</a>.' : '') + '</div>';
+      (waCust && m.assigned_name ? '<a href="https://wa.me/' + waCust + '?text=' + encodeURIComponent('Hi ' + m.name + ', thank you for contacting MJM Nursery. Your case ' + m.ref + ' has been assigned to ' + m.assigned_name + ', who will contact you on WhatsApp from +' + waNumber(m.assigned_phone) + ' shortly.') + '" target="_blank" rel="noopener">Send it by hand</a>.' : '') + '</div>';
   else if (m.wa_status === 'failed') waLine = '<div class="msg-wa msg-wa-err">WhatsApp to customer failed: ' + esc(m.wa_detail || '') + ' <button class="btn btn-outline btn-sm" onclick="sendCaseWhatsapp()">Try again</button></div>';
 
   var row = function (k, v) { return '<div class="msg-kv"><span>' + k + '</span><div>' + v + '</div></div>'; };
-  // Saving anything on the case redraws this panel. A half-typed internal
-  // note is the one thing on it that is not saved yet, so it survives.
-  var oldNote = document.getElementById('mmsg-note');
-  var keepNote = oldNote ? oldNote.value : '';
+  var shownOrder = MSG_PENDING_ORDER === undefined ? m.order_number : MSG_PENDING_ORDER;
+  var orderPending = MSG_PENDING_ORDER !== undefined;
 
   document.getElementById('mmsg-body').innerHTML =
     '<div class="msg-grid">' +
-      '<div>' +
-        '<div class="msg-section-title">Message</div>' +
-        (m.kind === 'complaint' ? '<div style="margin-bottom:.5rem;"><span class="badge badge-red">' + esc(m.subject) + '</span></div>' : '') +
-        '<div class="msg-text">' + esc(m.message) + '</div>' +
-        '<div id="mmsg-photo"></div>' +
-        '<div class="msg-section-title" style="margin-top:1.2rem;">Internal Notes &amp; History <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--ink4);">— staff only, never shown to the customer</span></div>' +
-        '<div class="msg-history">' + (events.length ? events.map(function (e) {
-          return '<div class="msg-ev msg-ev-' + esc(e.kind) + '"><div class="msg-ev-head"><strong>' + esc(e.actor_name || 'System') + '</strong> · ' + msgWhen(e.created_at) + '</div><div class="msg-ev-body">' + esc(e.body) + '</div></div>';
-        }).join('') : '<div style="font-size:12px;color:var(--ink4);">Nothing yet.</div>') + '</div>' +
-        '<textarea class="form-input" id="mmsg-note" rows="2" placeholder="Add an internal note, e.g. Called customer, replacing 50 seedlings on Friday" style="margin-top:.6rem;"></textarea>' +
-        '<div style="text-align:right;margin-top:.4rem;"><button class="btn btn-outline btn-sm" onclick="addMessageNote()">Add Note</button></div>' +
+      '<div class="msg-col">' +
+        // ① Customer
+        '<div class="msg-card">' +
+          '<div class="msg-section-title"><span class="msg-num">1</span> Customer Details</div>' +
+          row('Name', esc(m.name) + (m.user_id ? ' <span class="badge badge-blue">member</span>' : '')) +
+          row('Contact', esc(m.phone || '—')) +
+          row('Email', m.email ? '<a href="mailto:' + esc(m.email) + '?subject=' + encodeURIComponent('Re: ' + m.ref + ' ' + m.subject) + '">' + esc(m.email) + '</a>' : '—') +
+          row('Order #', '<div class="msg-order">' +
+            (shownOrder ? '<strong>#' + esc(shownOrder) + '</strong> ' + (orderPending ? '' : '<a href="#" onclick="findMessageOrder();return false;" style="font-size:11px;">open</a> · ') : '<span style="color:var(--ink4);">—</span> ') +
+            (orderPending ? '<span class="msg-pending">not saved yet</span> · ' : '') +
+            '<a href="#" onclick="toggleOrderPicker();return false;" style="font-size:11px;">' + (shownOrder ? 'change' : 'link order') + '</a>' +
+            '<div class="msg-order-pick" id="mmsg-order-pick" style="display:none;">' +
+              '<input class="form-input" id="mmsg-order-q" placeholder="Type a name or order number" autocomplete="off" oninput="searchMessageOrders()">' +
+              '<div class="msg-order-list" id="mmsg-order-list"></div>' +
+              (shownOrder ? '<a href="#" onclick="setMessageOrder(null);return false;" style="font-size:11px;color:var(--red);">Remove order number</a>' : '') +
+            '</div></div>') +
+          '<div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem;">' +
+            (waCust ? '<a class="btn btn-primary btn-sm msg-wa-btn" href="https://wa.me/' + waCust + '?text=' + encodeURIComponent(greeting) + '" target="_blank" rel="noopener">WhatsApp Customer</a>' : '') +
+            (m.email ? '<a class="btn btn-outline btn-sm" href="mailto:' + esc(m.email) + '?subject=' + encodeURIComponent('Re: ' + m.ref + ' ' + m.subject) + '">Email</a>' : '') +
+          '</div>' +
+        '</div>' +
+        // ② Message
+        '<div class="msg-card">' +
+          '<div class="msg-section-title"><span class="msg-num">2</span> Message</div>' +
+          '<div style="margin-bottom:.5rem;"><span class="badge ' + (m.kind === 'complaint' ? 'badge-red' : 'badge-blue') + '">' + esc(m.subject) + '</span>' +
+            ' <span style="font-size:11px;color:var(--ink4);">' + msgWhen(m.created_at) + '</span></div>' +
+          '<div class="msg-text">' + esc(m.message) + '</div>' +
+          '<div id="mmsg-photo"></div>' +
+        '</div>' +
       '</div>' +
-      '<div>' +
-        '<div class="msg-section-title">Customer</div>' +
-        row('Name', esc(m.name) + (m.user_id ? ' <span class="badge badge-blue">member</span>' : '')) +
-        row('Phone', esc(m.phone || '—')) +
-        row('Email', m.email ? '<a href="mailto:' + esc(m.email) + '?subject=' + encodeURIComponent('Re: ' + m.ref + ' ' + m.subject) + '">' + esc(m.email) + '</a>' : '—') +
-        row('Order #', '<div class="msg-order">' +
-          (m.order_number ? '<strong>#' + esc(m.order_number) + '</strong> <a href="#" onclick="findMessageOrder();return false;" style="font-size:11px;">open</a> · ' : '<span style="color:var(--ink4);">—</span> ') +
-          '<a href="#" onclick="toggleOrderPicker();return false;" style="font-size:11px;">' + (m.order_number ? 'change' : 'link order') + '</a>' +
-          '<div class="msg-order-pick" id="mmsg-order-pick" style="display:none;">' +
-            '<input class="form-input" id="mmsg-order-q" placeholder="Type a name or order number" autocomplete="off" oninput="searchMessageOrders()">' +
-            '<div class="msg-order-list" id="mmsg-order-list"></div>' +
-            (m.order_number ? '<a href="#" onclick="setMessageOrder(null);return false;" style="font-size:11px;color:var(--red);">Remove order number</a>' : '') +
-          '</div></div>') +
-        row('Received', msgWhen(m.created_at)) +
-        '<div style="display:flex;gap:.4rem;flex-wrap:wrap;margin:.6rem 0 1rem;">' +
-          (waCust ? '<a class="btn btn-primary btn-sm msg-wa-btn" href="https://wa.me/' + waCust + '?text=' + encodeURIComponent(greeting) + '" target="_blank" rel="noopener">WhatsApp Customer</a>' : '') +
-          (m.email ? '<a class="btn btn-outline btn-sm" href="mailto:' + esc(m.email) + '?subject=' + encodeURIComponent('Re: ' + m.ref + ' ' + m.subject) + '">Email</a>' : '') +
+      '<div class="msg-col">' +
+        // Case handling
+        '<div class="msg-card">' +
+          '<div class="msg-section-title">Case Handling</div>' +
+          '<label class="msg-field-label" for="mmsg-handler">Assigned To</label>' +
+          '<select class="form-input" id="mmsg-handler" onchange="msgMarkDirty()">' + handlerOpts + '</select>' +
+          (MSG_HANDLERS_ERR ? '<div style="font-size:11px;color:var(--red);margin-top:.3rem;">Could not load the list of staff: ' + esc(MSG_HANDLERS_ERR) + '</div>'
+            : MSG_HANDLERS.length ? '' : '<div style="font-size:11px;color:var(--ink4);margin-top:.3rem;">Nobody has Messages access yet. Tick <strong>Messages</strong> for a user in User Access → Edit Pages.</div>') +
+          '<label style="display:flex;gap:.4rem;align-items:center;font-size:12px;margin-top:.4rem;"><input type="checkbox" id="mmsg-notify"' + (keepNotify ? ' checked' : '') + ' onchange="msgMarkDirty()"> Tell the customer on WhatsApp who will handle it</label>' +
+          waLine +
+          '<label class="msg-field-label" for="mmsg-status" style="margin-top:.7rem;">Status</label>' +
+          '<select class="form-input" id="mmsg-status" onchange="msgMarkDirty()">' + MSG_STATUSES.map(function (s) { return '<option' + (s === m.status ? ' selected' : '') + '>' + s + '</option>'; }).join('') + '</select>' +
         '</div>' +
-
-        '<div class="msg-section-title">Assigned To</div>' +
-        '<select class="form-input" id="mmsg-handler">' + handlerOpts + '</select>' +
-        (MSG_HANDLERS_ERR ? '<div style="font-size:11px;color:var(--red);margin-top:.3rem;">Could not load the list of staff: ' + esc(MSG_HANDLERS_ERR) + '</div>'
-          : MSG_HANDLERS.length ? '' : '<div style="font-size:11px;color:var(--ink4);margin-top:.3rem;">Nobody has Messages access yet. Tick <strong>Messages</strong> for a user in User Access → Edit Pages.</div>') +
-        '<label style="display:flex;gap:.4rem;align-items:center;font-size:12px;margin-top:.5rem;"><input type="checkbox" id="mmsg-notify" checked> Tell the customer on WhatsApp who will handle it</label>' +
-        '<button class="btn btn-primary btn-sm" style="margin-top:.5rem;width:100%;" onclick="assignMessage()">Save Assignment</button>' +
-        waLine +
-
-        '<div class="msg-section-title" style="margin-top:1.2rem;">Status</div>' +
-        '<div style="display:flex;gap:.4rem;">' +
-          '<select class="form-input" id="mmsg-status">' + MSG_STATUSES.map(function (s) { return '<option' + (s === m.status ? ' selected' : '') + '>' + s + '</option>'; }).join('') + '</select>' +
-          '<button class="btn btn-outline btn-sm" onclick="saveMessageStatus()">Save</button>' +
+        // ③ Timeline
+        '<div class="msg-card">' +
+          '<div class="msg-section-title"><span class="msg-num">3</span> Case Timeline</div>' +
+          msgTimelineHtml(m, events) +
         '</div>' +
-        (m.resolved_at ? '<div style="font-size:11px;color:var(--ink4);margin-top:.3rem;">' + esc(m.status) + ' ' + msgWhen(m.resolved_at) + '</div>' : '') +
-        (window.__SW_IS_ADMIN__ ? '<div style="margin-top:1.4rem;text-align:right;"><button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red);" onclick="deleteMessage()">Delete Message</button></div>' : '') +
+        // New internal note
+        '<div class="msg-card">' +
+          '<div class="msg-section-title">Internal Note <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--ink4);">— staff only, never shown to the customer</span></div>' +
+          '<textarea class="form-input" id="mmsg-note" rows="3" placeholder="What was done or agreed, e.g. Called customer, replacing 50 seedlings on Friday" oninput="msgMarkDirty()"></textarea>' +
+        '</div>' +
       '</div>' +
     '</div>';
 
-  if (keepNote) document.getElementById('mmsg-note').value = keepNote;
+  Object.keys(keep).forEach(function (id) { var el = document.getElementById(id); if (el) el.value = keep[id]; });
+
+  document.getElementById('mmsg-foot').innerHTML =
+    (window.__SW_IS_ADMIN__ ? '<button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red);margin-right:auto;" onclick="deleteMessage()">Delete Message</button>' : '<span style="margin-right:auto;"></span>') +
+    '<span id="mmsg-dirty" class="msg-pending" style="' + (MSG_DIRTY ? '' : 'display:none;') + 'align-self:center;">Unsaved changes</span>' +
+    '<button class="btn btn-outline" onclick="closeMessageModal()">Close</button>' +
+    '<button class="btn btn-primary" id="mmsg-save" onclick="saveMessageCase()"' + (MSG_DIRTY ? '' : ' disabled') + '>' + (MSG_DIRTY ? 'Save Changes' : 'Saved') + '</button>';
 
   if (m.photo_path) {
     var s = await sb.storage.from(MSG_PHOTO_BUCKET).createSignedUrl(m.photo_path, 3600);
@@ -336,31 +426,64 @@ async function reloadCurrentMessage() {
   await renderMessageDetail();
 }
 
-async function assignMessage() {
+// The one Save: assignee, status, linked order and the new note together.
+async function saveMessageCase() {
   var m = MSG_CURRENT; if (!m) return;
+  var btn = document.getElementById('mmsg-save');
   var hid = document.getElementById('mmsg-handler').value;
   var notify = document.getElementById('mmsg-notify').checked;
-  if (hid === '__keep') {
-    if (notify && m.wa_status !== 'sent') await sendCaseWhatsapp();
-    else toast('Nothing changed');
-    return;
-  }
-  var h = MSG_HANDLERS.find(function (x) { return x.user_id === hid; });
-  if (h && notify && !h.phone) { toast(h.name + ' has no WhatsApp number — add one in ⚙ Settings, or untick the WhatsApp box', 'error'); return; }
-  var upd = h
-    ? { assigned_user_id: h.user_id, handler_id: null, assigned_name: h.name, assigned_phone: h.phone || null }
-    : { assigned_user_id: null, handler_id: null, assigned_name: null, assigned_phone: null };
-  var changed = (upd.assigned_name || null) !== (m.assigned_name || null) || (upd.assigned_phone || null) !== (m.assigned_phone || null);
-  // Picking somebody on a New case means somebody is on it.
-  if (h && m.status === 'New') upd.status = 'In Progress';
-  if (!changed && !upd.status && !(h && notify)) { toast('Nothing changed'); return; }
+  var status = document.getElementById('mmsg-status').value;
+  var note = (document.getElementById('mmsg-note').value || '').trim();
 
-  if (changed || upd.status) {
-    var r = await sb.from('salesweb_messages').update(upd).eq('id', m.id);
-    if (r.error) { toast('Error: ' + r.error.message, 'error'); return; }
+  var upd = {}, done = [], sendWa = false;
+
+  if (hid !== '__keep') {
+    var h = MSG_HANDLERS.find(function (x) { return x.user_id === hid; });
+    var newName = h ? h.name : null, newPhone = h ? (h.phone || null) : null;
+    if ((newName || null) !== (m.assigned_name || null) || (newPhone || null) !== (m.assigned_phone || null) || (h ? h.user_id : null) !== (m.assigned_user_id || null)) {
+      if (h && notify && !h.phone) { toast(h.name + ' has no WhatsApp number — add one in ⚙ Settings, or untick the WhatsApp box', 'error'); return; }
+      upd.assigned_user_id = h ? h.user_id : null;
+      upd.handler_id = null;
+      upd.assigned_name = newName;
+      upd.assigned_phone = newPhone;
+      done.push(h ? 'assigned to ' + h.name : 'unassigned');
+      if (h && notify) sendWa = true;
+      // Picking somebody on a New case means somebody is on it.
+      if (h && m.status === 'New' && status === 'New') status = 'In Progress';
+    }
   }
-  toast(h ? 'Assigned to ' + h.name : 'Unassigned');
-  if (h && notify && (changed || m.wa_status !== 'sent')) await sendCaseWhatsapp(true);
+  if (status !== m.status) { upd.status = status; done.push('status ' + status); }
+  if (MSG_PENDING_ORDER !== undefined && (MSG_PENDING_ORDER || null) !== (m.order_number || null)) {
+    upd.order_number = MSG_PENDING_ORDER || null;
+    done.push(MSG_PENDING_ORDER ? 'order #' + MSG_PENDING_ORDER : 'order removed');
+  }
+  if (!Object.keys(upd).length && !note && !sendWa) { toast('Nothing to save'); MSG_DIRTY = false; await renderMessageDetail(); return; }
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  if (Object.keys(upd).length) {
+    var r = await sb.from('salesweb_messages').update(upd).eq('id', m.id);
+    if (r.error) { toast('Error: ' + r.error.message, 'error'); if (btn) { btn.disabled = false; btn.textContent = 'Save Changes'; } return; }
+  }
+  if (note) {
+    var nameEl = document.getElementById('admin-name');
+    var n = await sb.from('salesweb_message_events').insert({
+      message_id: m.id, kind: 'note', body: note,
+      actor_id: window.__SW_USER_ID__, actor_name: nameEl ? nameEl.textContent : null,
+    });
+    if (n.error) {
+      // The case itself is already saved; keep the note so it is not lost.
+      toast('Saved, but the note was not: ' + n.error.message, 'error');
+      MSG_PENDING_ORDER = undefined;
+      await reloadCurrentMessage();
+      return;
+    }
+    done.push('note added');
+  }
+  MSG_PENDING_ORDER = undefined;
+  MSG_DIRTY = false;
+  var noteEl = document.getElementById('mmsg-note'); if (noteEl) noteEl.value = '';
+  toast('Saved: ' + done.join(', '));
+  if (sendWa) await sendCaseWhatsapp(true);
   else await reloadCurrentMessage();
 }
 
@@ -379,39 +502,14 @@ async function sendCaseWhatsapp(quiet) {
   await reloadCurrentMessage();
 }
 
-async function saveMessageStatus() {
-  var m = MSG_CURRENT; if (!m) return;
-  var s = document.getElementById('mmsg-status').value;
-  if (s === m.status) { toast('Status unchanged'); return; }
-  var r = await sb.from('salesweb_messages').update({ status: s }).eq('id', m.id);
-  if (r.error) { toast('Error: ' + r.error.message, 'error'); return; }
-  toast('Status: ' + s);
-  await reloadCurrentMessage();
-}
-
-async function addMessageNote() {
-  var m = MSG_CURRENT; if (!m) return;
-  var el = document.getElementById('mmsg-note');
-  var body = (el.value || '').trim();
-  if (!body) { toast('Write a note first', 'error'); return; }
-  var nameEl = document.getElementById('admin-name');
-  var r = await sb.from('salesweb_message_events').insert({
-    message_id: m.id, kind: 'note', body: body,
-    actor_id: window.__SW_USER_ID__, actor_name: nameEl ? nameEl.textContent : null,
-  });
-  if (r.error) { toast('Error: ' + r.error.message, 'error'); return; }
-  el.value = '';
-  toast('Note added');
-  await renderMessageDetail();
-}
-
 async function deleteMessage() {
   var m = MSG_CURRENT; if (!m) return;
-  if (!confirm('Delete ' + m.ref + ' from ' + m.name + '?\n\nThe message and its notes are removed for good. To keep a record, set the status to Closed instead.')) return;
+  if (!confirm('Delete ' + m.ref + ' from ' + m.name + '?\n\nThe message and its timeline are removed for good. To keep a record, set the status to Closed instead.')) return;
   var r = await sb.from('salesweb_messages').delete().eq('id', m.id).select('id');
   if (r.error) { toast('Error: ' + r.error.message, 'error'); return; }
   if (!r.data || !r.data.length) { toast('Only a salesweb admin can delete messages', 'error'); return; }
   if (m.photo_path) sb.storage.from(MSG_PHOTO_BUCKET).remove([m.photo_path]);
+  MSG_DIRTY = false;
   closeModal('modal-message');
   MSG_CURRENT = null;
   MSG_ROWS = MSG_ROWS.filter(function (x) { return x.id !== m.id; });
@@ -421,6 +519,8 @@ async function deleteMessage() {
 
 function findMessageOrder() {
   var m = MSG_CURRENT; if (!m || !m.order_number) return;
+  if (MSG_DIRTY && !confirm('You have changes that are not saved. Leave this case without saving?')) return;
+  MSG_DIRTY = false;
   closeModal('modal-message');
   switchTab('orders', document.getElementById('sb-orders-item'));
   var s = document.getElementById('order-search');
@@ -428,16 +528,17 @@ function findMessageOrder() {
 }
 
 // ── Link an order: a small search under Order # ────────────────────
-// Type a customer name, billing name or order number; pick a row and
-// its order number is saved on the message. The database trigger
-// writes "Order linked: #K3M7B0" into the history.
+// Type a customer name, billing name or order number and pick a row.
+// The pick waits for Save like everything else on the case, and the
+// database trigger then writes "Order linked: #K3M7B0" into the timeline.
 function toggleOrderPicker() {
   var box = document.getElementById('mmsg-order-pick'); if (!box) return;
   var open = box.style.display === 'none';
   box.style.display = open ? 'block' : 'none';
   if (open) {
     var q = document.getElementById('mmsg-order-q');
-    if (q && !q.value && MSG_CURRENT) q.value = MSG_CURRENT.order_number || MSG_CURRENT.name || '';
+    var shown = MSG_PENDING_ORDER === undefined ? (MSG_CURRENT && MSG_CURRENT.order_number) : MSG_PENDING_ORDER;
+    if (q && !q.value && MSG_CURRENT) q.value = shown || MSG_CURRENT.name || '';
     if (q) { q.focus(); q.select(); }
     searchMessageOrders();
   }
@@ -477,13 +578,12 @@ async function runMessageOrderSearch() {
   }).join('');
 }
 
-async function setMessageOrder(orderNumber) {
+function setMessageOrder(orderNumber) {
   var m = MSG_CURRENT; if (!m) return;
-  if ((orderNumber || null) === (m.order_number || null)) { toggleOrderPicker(); return; }
-  var r = await sb.from('salesweb_messages').update({ order_number: orderNumber || null }).eq('id', m.id);
-  if (r.error) { toast('Error: ' + r.error.message, 'error'); return; }
-  toast(orderNumber ? 'Order #' + orderNumber + ' linked' : 'Order number removed');
-  await reloadCurrentMessage();
+  var v = orderNumber || null;
+  MSG_PENDING_ORDER = (v === (m.order_number || null)) ? undefined : v;
+  msgMarkDirty();
+  renderMessageDetail();
 }
 
 // ── Settings: notification emails + WhatsApp numbers ───────────────

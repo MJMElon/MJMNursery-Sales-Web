@@ -536,7 +536,7 @@ var MODULE_SRCS = [
   '/admin-promotions.js?v=2026-05-18-points-ledger',
   '/admin-coupons.js?v=2026-05-28-coupon-groups',
   '/admin-web-design.js?v=2026-05-20-port-from-umbrella',
-  '/admin-messages.js?v=2026-10-13-name-only',
+  '/admin-messages.js?v=2026-10-13-case-layout',
   '/admin-seal.js?v=1',
 ];
 

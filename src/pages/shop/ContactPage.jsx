@@ -74,34 +74,30 @@ export default function ContactPage() {
             <form id="contact-form" noValidate onSubmit={(e) => window.submitContactForm(e.nativeEvent)}>
               <div className="form-row">
                 <div className="form-group">
-                  <label htmlFor="cf-name">Full Name</label>
+                  <label htmlFor="cf-name">Full Name <span className="cf-req">*</span></label>
                   <input type="text" id="cf-name" name="name" placeholder="Your full name" maxLength={120} required />
                 </div>
                 <div className="form-group">
-                  <label htmlFor="cf-phone">WhatsApp / Phone Number</label>
+                  <label htmlFor="cf-phone">WhatsApp / Phone Number <span className="cf-req">*</span></label>
                   <input type="tel" id="cf-phone" name="phone" placeholder="e.g. 011-2345 6789" maxLength={20} required />
                 </div>
               </div>
               <div className="form-group">
-                <label htmlFor="cf-email">Email Address</label>
-                <input type="email" id="cf-email" name="email" placeholder="your@email.com" maxLength={200} required />
+                <label htmlFor="cf-email">Email Address <span className="cf-optional">(optional)</span></label>
+                <input type="email" id="cf-email" name="email" placeholder="your@email.com" maxLength={200} />
               </div>
               <div className="form-row">
                 <div className="form-group">
                   <label htmlFor="cf-subject">Subject</label>
                   <select id="cf-subject" name="subject" defaultValue="" onChange={() => window.contactSubjectChanged && window.contactSubjectChanged()}>
                     <option value="">Select a topic...</option>
-                    <option>Product Enquiry</option>
-                    <option>Bulk / Wholesale Order</option>
-                    <option>Collection Schedule</option>
-                    <option>Payment & Banking</option>
-                    <option>Complaint</option>
-                    <option>Other</option>
+                    <option>Order Matters</option>
+                    <option>Other Enquiries</option>
                   </select>
                 </div>
                 <div className="form-group">
                   <label htmlFor="cf-order">Order Number <span className="cf-optional">(optional)</span></label>
-                  <input type="text" id="cf-order" name="order_number" placeholder="e.g. MJM-2026-0012" maxLength={60} />
+                  <input type="text" id="cf-order" name="order_number" placeholder="e.g. #K3M7B0" maxLength={60} />
                 </div>
               </div>
               <div className="form-group">

@@ -258,15 +258,15 @@ export default function Admin() {
                   </aside>
                 {/* MESSAGES — Contact Us enquiries & complaints (public/admin-messages.js) */}
                 <div className="tab-content" id="tab-messages">
-                  <div className="main-header"><div className="main-title">Messages &amp; Complaints</div><button className="btn btn-outline" onClick={(e) => { window.openMessageSettings(); }}>⚙ Settings</button></div>
+                  <div className="main-header"><div className="main-title">Messages</div><button className="btn btn-outline" onClick={(e) => { window.openMessageSettings(); }}>⚙ Settings</button></div>
                   <div className="stats-grid" id="message-stats" />
                   <div className="card">
                     <div className="filter-bar">
                       <input className="filter-input" id="message-search" placeholder="Search ref, name, phone, order #, message..." onInput={(e) => { window.renderMessagesTable(); }} />
                       <select className="filter-select" id="message-kind" onChange={(e) => { window.renderMessagesTable(); }}>
                         <option value="">All Types</option>
-                        <option value="complaint">Complaints</option>
-                        <option value="enquiry">Enquiries</option>
+                        <option value="complaint">Order Matters</option>
+                        <option value="enquiry">Other Enquiries</option>
                         </select>
                       </div>
                     <div className="filter-bar" style={{ marginTop: '-.3rem' }}>

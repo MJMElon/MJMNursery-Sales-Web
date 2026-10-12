@@ -172,6 +172,7 @@ export function initShopMain() {
         } catch(e){}
       }, 0);
     }
+    if (page === 'contact') { setTimeout(prefillContactForm, 0); }
     if (page === 'quotation') {
       setTimeout(function(){
         try {
@@ -990,9 +991,127 @@ export function initShopMain() {
     if (cartDD) cartDD.addEventListener('click', function(e){ e.stopPropagation(); });
   })();
 
-  function submitContactForm(e) {
+  // ── CONTACT US ──
+  // The form used to say "Message Sent!" and save nothing. It now goes to
+  // salesweb_messages through salesweb_submit_message() (which validates,
+  // rate-limits and hands back an MSG-00042 reference), then pokes the
+  // notify-new-message edge function to email the office. "Sent" is only
+  // shown once the database has the row; a failure keeps everything the
+  // customer typed and says what went wrong.
+  var CONTACT_PHOTO_MAX = 5 * 1024 * 1024;
+
+  async function prefillContactForm(){
+    try{
+      var nameEl=document.getElementById('cf-name'), emailEl=document.getElementById('cf-email'), phoneEl=document.getElementById('cf-phone');
+      if(!nameEl) return;
+      var n=sessionStorage.getItem('mjm_user_name'), em=sessionStorage.getItem('mjm_user_email');
+      if(n && !nameEl.value) nameEl.value=n;
+      if(em && !emailEl.value) emailEl.value=em;
+      if(em && !phoneEl.value){
+        await loadSupabaseSdk();
+        var sess=await _sb.auth.getSession(); var uid=sess?.data?.session?.user?.id;
+        if(uid){ var r=await _sb.from('shared_profiles').select('phone').eq('id',uid).maybeSingle(); if(r.data&&r.data.phone&&!phoneEl.value) phoneEl.value=r.data.phone; }
+      }
+    }catch(e){ /* prefill is a convenience only */ }
+  }
+
+  function contactSubjectChanged(){
+    var s=document.getElementById('cf-subject'), h=document.getElementById('cf-photo-hint');
+    if(!s||!h) return;
+    h.textContent = s.value==='Complaint'
+      ? 'Please attach a photo if you can — it helps us resolve your complaint faster.'
+      : 'A photo helps us understand the problem, e.g. damaged seedlings.';
+  }
+
+  // Phone photos are often larger than the 5 MB limit. Shrink to 1600px
+  // JPEG in the browser; a format the browser cannot draw (e.g. HEIC on
+  // Chrome) is sent as it is if it already fits.
+  function shrinkContactPhoto(file){
+    return new Promise(function(resolve){
+      if(!file || !/^image\//.test(file.type) || file.type==='image/gif'){ resolve(file); return; }
+      var url=URL.createObjectURL(file), img=new Image();
+      img.onload=function(){
+        try{
+          var max=1600, w=img.naturalWidth, h=img.naturalHeight, k=Math.min(1, max/Math.max(w,h));
+          var c=document.createElement('canvas'); c.width=Math.round(w*k); c.height=Math.round(h*k);
+          c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+          c.toBlob(function(b){ URL.revokeObjectURL(url); resolve(b && b.size < file.size ? new File([b], 'photo.jpg', {type:'image/jpeg'}) : file); }, 'image/jpeg', 0.85);
+        }catch(e){ URL.revokeObjectURL(url); resolve(file); }
+      };
+      img.onerror=function(){ URL.revokeObjectURL(url); resolve(file); };
+      img.src=url;
+    });
+  }
+
+  function contactUuid(){
+    if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10);
+  }
+
+  function escContact(s){ var d=document.createElement('div'); d.textContent=s==null?'':String(s); return d.innerHTML; }
+
+  async function submitContactForm(e) {
     e.preventDefault();
-    e.target.innerHTML = '<div style="text-align:center;padding:3rem 1rem"><div style="font-size:3rem;margin-bottom:1rem">✅</div><h3 style="font-family:Cormorant Garamond,serif;font-size:1.8rem;color:var(--green-dark);margin-bottom:.5rem">Message Sent!</h3><p style="color:var(--text-mid)">Thank you for reaching out. We\'ll get back to you shortly.</p></div>';
+    var form=e.target;
+    var errEl=document.getElementById('cf-error'), btn=document.getElementById('cf-submit');
+    var showErr=function(m){ errEl.innerHTML=m; errEl.style.display='block'; btn.disabled=false; btn.textContent='Send Message'; };
+    errEl.style.display='none';
+
+    var v=function(id){ var el=document.getElementById(id); return el ? el.value.trim() : ''; };
+    var name=v('cf-name'), phone=v('cf-phone'), email=v('cf-email'), subject=v('cf-subject'), order=v('cf-order'), message=v('cf-message');
+    var photoEl=document.getElementById('cf-photo'), photo=photoEl && photoEl.files && photoEl.files[0];
+
+    var digits=phone.replace(/\D/g,'');
+    if(!name) return showErr('Please enter your name.');
+    if(digits.length<9 || digits.length>15) return showErr('Please enter a valid phone number — we will contact you on WhatsApp.');
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showErr('Please enter a valid email address.');
+    if(!subject) return showErr('Please select a topic.');
+    if(!message) return showErr('Please write your message.');
+
+    var done=function(ref, loggedIn){
+      form.innerHTML='<div style="text-align:center;padding:3rem 1rem"><div style="font-size:3rem;margin-bottom:1rem">✅</div>'+
+        '<h3 style="font-family:Cormorant Garamond,serif;font-size:1.8rem;color:var(--green-dark);margin-bottom:.5rem">Message Sent!</h3>'+
+        (ref?'<p style="color:var(--text-dark);font-size:15px;margin-bottom:.6rem">Your reference: <strong>'+escContact(ref)+'</strong></p>':'')+
+        '<p style="color:var(--text-mid)">Thank you for reaching out. A member of our team will contact you on WhatsApp shortly.</p>'+
+        (loggedIn?'<p style="color:var(--text-mid);margin-top:.6rem">You can follow this message under <a onclick="showPage(\'portal\');setTimeout(function(){var b=document.getElementById(\'ptab-messages\');if(b)pShowOrderView(\'messages\',b);},120);" style="color:var(--green-dark);font-weight:600;cursor:pointer;text-decoration:underline">My Account → Messages</a>.</p>':'')+
+        '</div>';
+    };
+
+    // Bots fill the hidden field; give them the same screen and save nothing.
+    if(v('cf-website')) { done('', false); return; }
+
+    btn.disabled=true; btn.textContent='Sending…';
+    try{
+      await loadSupabaseSdk();
+      var sess=await _sb.auth.getSession(); var loggedIn=!!(sess && sess.data && sess.data.session);
+
+      var photoPath=null;
+      if(photo){
+        btn.textContent='Uploading photo…';
+        var file=await shrinkContactPhoto(photo);
+        if(file.size>CONTACT_PHOTO_MAX) return showErr('That photo is larger than 5 MB. Please choose a smaller one, or send it to us on WhatsApp.');
+        var ext=(file.type==='image/jpeg')?'jpg':((file.name||'').split('.').pop()||'jpg').toLowerCase().slice(0,5);
+        var path='incoming/'+contactUuid()+'.'+ext;
+        var up=await _sb.storage.from('contact-message-photos').upload(path, file, {contentType:file.type||'image/jpeg', upsert:false});
+        if(up.error) return showErr('We could not upload your photo ('+escContact(up.error.message)+'). Remove it and try again, or send it to us on WhatsApp.');
+        photoPath=path;
+        btn.textContent='Sending…';
+      }
+
+      var res=await _sb.rpc('salesweb_submit_message',{
+        p_name:name, p_email:email, p_phone:phone, p_subject:subject, p_message:message,
+        p_order_number:order||null, p_photo_path:photoPath
+      });
+      if(res.error) return showErr(escContact(res.error.message)+'<br><span style="font-size:12px">You can also reach us on <a href="https://wa.me/601129337889" target="_blank" rel="noopener">WhatsApp</a> or call 085-419907.</span>');
+      var row=Array.isArray(res.data)?res.data[0]:res.data;
+
+      // Email to the office. Fire and forget — the message is already safe.
+      try{ _sb.functions.invoke('notify-new-message',{body:{id:row.id}}).catch(function(){}); }catch(_){}
+
+      done(row && row.ref, loggedIn);
+    }catch(err){
+      showErr('Sorry, your message could not be sent ('+escContact(err && err.message || err)+'). Please try again, or reach us on <a href="https://wa.me/601129337889" target="_blank" rel="noopener">WhatsApp</a>.');
+    }
   }
 
   // Nav scroll shadow
@@ -1431,7 +1550,57 @@ export function initShopMain() {
     document.getElementById('pp-orders').style.display=view==='active'?'block':'none';
     document.getElementById('pp-history').style.display=view==='history'?'block':'none';
     document.getElementById('pp-profile').style.display=view==='profile'?'block':'none';
+    var msgEl=document.getElementById('pp-messages'); if(msgEl) msgEl.style.display=view==='messages'?'block':'none';
+    var sw=document.getElementById('pp-search-wrap'); if(sw) sw.style.display=view==='messages'?'none':'';
+    if(view==='messages') pRenderMessages();
     sessionStorage.setItem('mjm_portal_tab',view);
+  }
+
+  // ── MY MESSAGES ──
+  // What this customer sent through Contact Us while logged in, read
+  // through salesweb_my_messages() so only their own rows and only the
+  // customer-facing columns come back (internal notes never do).
+  // waNumber() is the same rule as public/admin-messages.js.
+  function pWaNumber(raw){ var d=String(raw||'').replace(/\D/g,''); if(!d) return ''; if(d.indexOf('60')===0) return d; if(d.charAt(0)==='0') return '6'+d; if(d.charAt(0)==='1'&&d.length>=9&&d.length<=10) return '60'+d; return d; }
+  function pMsgEsc(s){ var d=document.createElement('div'); d.textContent=s==null?'':String(s); return d.innerHTML; }
+  async function pRenderMessages(){
+    var host=document.getElementById('pp-messages'); if(!host) return;
+    var newBtn='<button class="portal-tab" onclick="showPage(\'contact\')" style="width:100%;text-align:center;padding:.6rem;border-style:dashed;margin-bottom:1rem;">+ Send a New Message</button>';
+    host.innerHTML=newBtn+'<div class="p-card" style="text-align:center;padding:1.5rem;font-size:13px;color:var(--text-light);">Loading your messages…</div>';
+    try{
+      await loadSupabaseSdk();
+      var res=await _sb.rpc('salesweb_my_messages');
+      if(res.error) throw res.error;
+      var rows=res.data||[];
+      if(!rows.length){
+        host.innerHTML=newBtn+'<div class="p-card" style="text-align:center;padding:2.5rem 1.5rem;"><div style="font-size:2rem;margin-bottom:.6rem;">💬</div><div style="font-family:\'Cormorant Garamond\',serif;font-size:1.1rem;color:var(--text-dark);margin-bottom:.4rem;">No Messages Yet</div><div style="font-size:12px;color:var(--text-light);line-height:1.5;">Enquiries and complaints you send from the Contact Us page while logged in will appear here, with their progress.</div></div>';
+        return;
+      }
+      var badge={'New':'p-badge-amber','In Progress':'p-badge-teal','Resolved':'p-badge-green','Closed':'p-badge-grey'};
+      var label={'New':'Received','In Progress':'In Progress','Resolved':'Resolved','Closed':'Closed'};
+      var fd=function(d){ return d?new Date(d).toLocaleDateString('en-MY',{day:'2-digit',month:'short',year:'numeric'}):''; };
+      host.innerHTML=newBtn+rows.map(function(m){
+        var who='';
+        if(m.assigned_name){
+          var wa=pWaNumber(m.assigned_phone);
+          who='<div style="margin-top:.7rem;padding:.6rem .8rem;background:var(--cream);border-radius:8px;font-size:12px;color:var(--text-mid);">Handled by <strong style="color:var(--text-dark)">'+pMsgEsc(m.assigned_name)+'</strong>'+
+              (wa?' · <a href="https://wa.me/'+wa+'" target="_blank" rel="noopener" style="color:var(--green-dark);font-weight:600;">WhatsApp +'+wa+'</a>':'')+'</div>';
+        } else if(m.status==='New'){
+          who='<div style="margin-top:.7rem;font-size:12px;color:var(--text-light);">We have received your message. A member of our team will be assigned and will contact you on WhatsApp.</div>';
+        }
+        return '<div class="p-card" style="margin-bottom:.8rem;">'+
+          '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.6rem;flex-wrap:wrap;margin-bottom:.5rem;">'+
+            '<div><div style="font-weight:700;font-size:13px;color:var(--text-dark);">'+pMsgEsc(m.ref)+' · '+pMsgEsc(m.subject)+'</div>'+
+            '<div style="font-size:11px;color:var(--text-light);margin-top:2px;">Sent '+fd(m.created_at)+(m.order_number?' · Order '+pMsgEsc(m.order_number):'')+(m.has_photo?' · 📷 Photo attached':'')+(m.resolved_at?' · '+label[m.status]+' '+fd(m.resolved_at):'')+'</div></div>'+
+            '<span class="p-badge '+(badge[m.status]||'p-badge-grey')+'">'+pMsgEsc(label[m.status]||m.status)+'</span>'+
+          '</div>'+
+          '<div style="font-size:13px;line-height:1.55;color:var(--text-mid);white-space:pre-wrap;word-break:break-word;">'+pMsgEsc(m.message)+'</div>'+
+          who+
+        '</div>';
+      }).join('');
+    }catch(e){
+      host.innerHTML=newBtn+'<div class="p-card" style="text-align:center;padding:1.5rem;font-size:13px;color:#b91c1c;">Could not load your messages: '+pMsgEsc(e&&e.message||e)+'</div>';
+    }
   }
 
   function showPortalToast(msg){
@@ -3789,7 +3958,7 @@ export function initShopMain() {
     // information page
     switchPolicyTab,
     // contact page
-    submitContactForm,
+    submitContactForm, contactSubjectChanged,
     // calculator (form inputs + generated result card)
     calcSeedlings, shareCalcToWhatsApp, addCalcToCart, addCalcToCartAndQuote,
     // quotation (form inputs + generated empty-state)

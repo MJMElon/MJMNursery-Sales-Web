@@ -754,6 +754,13 @@
   .form-group textarea { height: 120px; resize: vertical; }
   .btn-submit { background: var(--green-dark); color: var(--white); border: none; border-radius: 8px; padding: .9rem 2rem; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; transition: background .2s; width: 100%; }
   .btn-submit:hover { background: var(--green-mid); }
+  .btn-submit:disabled { opacity: .7; cursor: wait; }
+  .form-group label .cf-optional { text-transform: none; letter-spacing: 0; color: var(--text-light, #8a9a8b); font-weight: 400; }
+  .form-group input.cf-photo { padding: .55rem .75rem; font-size: 13px; }
+  .cf-hint { font-size: 12px; color: var(--text-mid); }
+  .cf-hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+  .cf-error { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; border-radius: 8px; padding: .7rem .9rem; font-size: 13px; line-height: 1.5; margin-bottom: 1rem; }
+  .cf-error a { color: #b91c1c; font-weight: 600; }
 
   /* ── JOIN OUR TEAM PAGE ── */
   .join-page { background: var(--cream); }

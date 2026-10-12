@@ -66,39 +66,60 @@ export default function ContactPage() {
             </div>
           </div>
 
-          <div className="contact-form-block">
+          <div className="contact-form-block" id="contact-form-block">
             <h3>Send us a Message</h3>
-            <form onSubmit={(e) => window.submitContactForm(e.nativeEvent)}>
+            {/* Saved to salesweb_messages through salesweb_submit_message()
+                and handled on the admin portal Messages tab. The handler
+                lives in main.js (submitContactForm). */}
+            <form id="contact-form" noValidate onSubmit={(e) => window.submitContactForm(e.nativeEvent)}>
               <div className="form-row">
                 <div className="form-group">
-                  <label>Full Name</label>
-                  <input type="text" placeholder="Your full name" required />
+                  <label htmlFor="cf-name">Full Name</label>
+                  <input type="text" id="cf-name" name="name" placeholder="Your full name" maxLength={120} required />
                 </div>
                 <div className="form-group">
-                  <label>Phone Number</label>
-                  <input type="tel" placeholder="e.g. 011-2345 6789" />
+                  <label htmlFor="cf-phone">WhatsApp / Phone Number</label>
+                  <input type="tel" id="cf-phone" name="phone" placeholder="e.g. 011-2345 6789" maxLength={20} required />
                 </div>
               </div>
               <div className="form-group">
-                <label>Email Address</label>
-                <input type="email" placeholder="your@email.com" required />
+                <label htmlFor="cf-email">Email Address</label>
+                <input type="email" id="cf-email" name="email" placeholder="your@email.com" maxLength={200} required />
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="cf-subject">Subject</label>
+                  <select id="cf-subject" name="subject" defaultValue="" onChange={() => window.contactSubjectChanged && window.contactSubjectChanged()}>
+                    <option value="">Select a topic...</option>
+                    <option>Product Enquiry</option>
+                    <option>Bulk / Wholesale Order</option>
+                    <option>Collection Schedule</option>
+                    <option>Payment & Banking</option>
+                    <option>Complaint</option>
+                    <option>Other</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="cf-order">Order Number <span className="cf-optional">(optional)</span></label>
+                  <input type="text" id="cf-order" name="order_number" placeholder="e.g. MJM-2026-0012" maxLength={60} />
+                </div>
               </div>
               <div className="form-group">
-                <label>Subject</label>
-                <select defaultValue="">
-                  <option value="">Select a topic...</option>
-                  <option>Product Enquiry</option>
-                  <option>Bulk / Wholesale Order</option>
-                  <option>Collection Schedule</option>
-                  <option>Payment & Banking</option>
-                  <option>Other</option>
-                </select>
+                <label htmlFor="cf-message">Message</label>
+                <textarea id="cf-message" name="message" placeholder="Tell us more about your enquiry..." maxLength={5000} required></textarea>
               </div>
               <div className="form-group">
-                <label>Message</label>
-                <textarea placeholder="Tell us more about your enquiry..."></textarea>
+                <label htmlFor="cf-photo">Photo <span className="cf-optional">(optional)</span></label>
+                <input type="file" id="cf-photo" name="photo" accept="image/*" className="cf-photo" />
+                <div className="cf-hint" id="cf-photo-hint">A photo helps us understand the problem, e.g. damaged seedlings.</div>
               </div>
-              <button type="submit" className="btn-submit">Send Message</button>
+              {/* Honeypot: hidden from people, filled in by bots. */}
+              <div className="cf-hp" aria-hidden="true">
+                <label htmlFor="cf-website">Website</label>
+                <input type="text" id="cf-website" name="website" tabIndex={-1} autoComplete="off" />
+              </div>
+              <div className="cf-error" id="cf-error" role="alert" style={css('display:none;')}></div>
+              <button type="submit" className="btn-submit" id="cf-submit">Send Message</button>
             </form>
           </div>
 

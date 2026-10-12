@@ -240,9 +240,9 @@ async function renderMessageDetail() {
   var current = MSG_HANDLERS.find(function (h) { return h.user_id === m.assigned_user_id; });
   var orphan = m.assigned_name && !current;
   var handlerOpts = '<option value="">— Not assigned —</option>' +
-    (orphan ? '<option value="__keep" selected>' + esc(m.assigned_name) + (m.assigned_phone ? ' (' + esc(m.assigned_phone) + ')' : '') + ' — no longer has Messages access</option>' : '') +
+    (orphan ? '<option value="__keep" selected>' + esc(m.assigned_name) + ' — no longer has Messages access</option>' : '') +
     MSG_HANDLERS.map(function (h) {
-      return '<option value="' + h.user_id + '"' + (current && h.user_id === current.user_id ? ' selected' : '') + '>' + esc(h.name) + (h.phone ? ' (' + esc(h.phone) + ')' : ' — no WhatsApp number') + '</option>';
+      return '<option value="' + h.user_id + '"' + (current && h.user_id === current.user_id ? ' selected' : '') + '>' + esc(h.name) + '</option>';
     }).join('');
   var greeting = 'Hi ' + m.name + ', this is ' + (m.assigned_name || 'MJM Nursery') + ' from MJM Nursery regarding your message ' + m.ref + ' (' + m.subject + ').';
 

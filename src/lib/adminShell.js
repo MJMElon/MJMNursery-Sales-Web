@@ -74,12 +74,18 @@ export async function checkAdmin(){
     || null;
   applyTabVisibility();
 
-  window.loadOrders();
+  // The new-message email links to admin.html#messages — open that tab.
+  if(location.hash==='#messages'&&canSeeTab('messages')){
+    switchTab('messages',document.getElementById('sb-messages-item'));
+  } else {
+    window.loadOrders();
+  }
+  if(typeof window.startMessagesBadge==='function')window.startMessagesBadge();
 }
 
 // Set of tabs that exist in the salesweb admin. Update both sides if you
 // add a new tab — the sidebar id pattern is sb-<key>-item.
-var SALESWEB_TAB_KEYS = ['orders','reports','customers','products','payments','promos','coupons','webdesign','settings','users'];
+var SALESWEB_TAB_KEYS = ['orders','messages','reports','customers','products','payments','promos','coupons','webdesign','settings','users'];
 
 export function canSeeTab(key){
   if (key === 'users') return !!window.__SW_IS_ADMIN__;     // User Access is admin-locked
@@ -130,6 +136,7 @@ export function switchTab(tab,el){
   document.getElementById('tab-'+tab).classList.add('active');
   if(el)el.classList.add('active');
   if(tab==='orders')window.loadOrders();
+  if(tab==='messages')window.loadMessages();
   if(tab==='reports')window.loadReports();
   if(tab==='customers')window.loadCustomers();
   if(tab==='products')window.loadProducts();
@@ -524,10 +531,11 @@ var MODULE_SRCS = [
   '/admin-products.js?v=2026-09-29-invhist-collapse',
   '/admin-payments.js?v=2026-09-09-hide-deleted',
   '/admin-quotations.js?v=2026-09-25-handle-only-drag',
-  '/admin-users.js?v=2026-05-21-tab-access-table',
+  '/admin-users.js?v=2026-10-12-messages-tab',
   '/admin-promotions.js?v=2026-05-18-points-ledger',
   '/admin-coupons.js?v=2026-05-28-coupon-groups',
   '/admin-web-design.js?v=2026-05-20-port-from-umbrella',
+  '/admin-messages.js?v=2026-10-12-contact-messages',
 ];
 
 function loadClassicScript(src){

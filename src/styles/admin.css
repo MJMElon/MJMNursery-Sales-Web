@@ -269,7 +269,7 @@ input,select,textarea,button{font-family:inherit;}
   .card{padding:.9rem;}
   /* Wide tables: wrap into a scrollable container so columns aren't clipped. */
   .data-table{font-size:11.5px;min-width:560px;}
-  #orders-table,#customers-table,#products-table,#promos-table,#coupons-table,#payments-table,#users-table{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  #orders-table,#customers-table,#products-table,#promos-table,#coupons-table,#payments-table,#users-table,#messages-table{overflow-x:auto;-webkit-overflow-scrolling:touch;}
   /* Modals: full screen for usable form editing on phones. */
   .modal{max-width:96vw !important;width:96vw !important;max-height:88vh !important;border-radius:12px;}
   .modal-head h2{font-size:1rem;}
@@ -278,3 +278,31 @@ input,select,textarea,button{font-family:inherit;}
   .mo-att-info{flex-basis:calc(100% - 50px);min-width:0;}
   .mo-att-view,.mo-att-del{margin-top:.25rem;}
 }
+
+/* MESSAGES TAB (public/admin-messages.js) */
+.sb-count{margin-left:auto;background:var(--red);color:#fff;font-size:10px;font-weight:800;min-width:18px;height:18px;line-height:18px;padding:0 5px;border-radius:9px;text-align:center;}
+.msg-table tr.msg-unread td{font-weight:700;}
+.msg-table tr.msg-complaint td{background:#fff5f5;}
+.msg-table tr.msg-complaint td:first-child{box-shadow:inset 3px 0 0 var(--red);}
+.msg-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);}
+.msg-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:1.4rem;}
+@media(max-width:768px){.msg-grid{grid-template-columns:1fr;}}
+.msg-section-title{font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem;}
+.msg-text{white-space:pre-wrap;word-break:break-word;font-size:14px;line-height:1.6;background:var(--bg);border-radius:10px;padding:.9rem 1rem;}
+.msg-photo{display:block;max-width:100%;max-height:340px;margin-top:.7rem;border-radius:10px;border:1px solid var(--border);}
+.msg-kv{display:grid;grid-template-columns:70px 1fr;gap:.5rem;font-size:13px;padding:.25rem 0;}
+.msg-kv>span{font-size:11px;color:var(--ink4);padding-top:2px;}
+.msg-kv a{color:var(--green-dark);}
+.msg-wa-btn{background:#25d366 !important;border-color:#25d366 !important;color:#fff !important;text-decoration:none;}
+.msg-wa{font-size:12px;line-height:1.5;border-radius:8px;padding:.55rem .7rem;margin-top:.6rem;}
+.msg-wa a{font-weight:700;color:inherit;}
+.msg-wa-ok{background:#dcfce7;color:#15803d;}
+.msg-wa-warn{background:var(--amber-light);color:#92400e;}
+.msg-wa-err{background:var(--red-light);color:#b91c1c;}
+.msg-history{display:flex;flex-direction:column;gap:.45rem;max-height:300px;overflow-y:auto;}
+.msg-ev{font-size:12px;border-left:3px solid var(--border);padding:.3rem .6rem;background:var(--bg);border-radius:0 6px 6px 0;}
+.msg-ev-note{border-left-color:var(--green);background:var(--green-light);}
+.msg-ev-whatsapp{border-left-color:#25d366;}
+.msg-ev-head{font-size:11px;color:var(--ink4);}
+.msg-ev-body{white-space:pre-wrap;word-break:break-word;color:var(--ink2);margin-top:2px;}
+.msg-set-row{display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.45rem 0;border-bottom:1px solid var(--border);font-size:13px;}

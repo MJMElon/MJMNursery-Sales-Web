@@ -26,10 +26,11 @@ export default function PortalPage() {
                 </a>
                 <button className="portal-tab active" id="ptab-active" onClick={(e) => window.pShowOrderView('active', e.currentTarget)}>Active Orders</button>
                 <button className="portal-tab" id="ptab-history" onClick={(e) => window.pShowOrderView('history', e.currentTarget)}>History</button>
+                <button className="portal-tab" id="ptab-messages" onClick={(e) => window.pShowOrderView('messages', e.currentTarget)}>Messages</button>
                 <button className="portal-tab" id="ptab-profile" onClick={(e) => window.pShowOrderView('profile', e.currentTarget)}>Profile</button>
               </div>
             </div>
-            <div style={css('margin-bottom:.8rem;')}>
+            <div id="pp-search-wrap" style={css('margin-bottom:.8rem;')}>
               <input
                 type="text"
                 id="pp-order-search"
@@ -48,6 +49,9 @@ export default function PortalPage() {
             </div>
             <div id="pp-orders"></div>
             <div id="pp-history" style={css('display:none;')}></div>
+            {/* Messages the customer sent through Contact Us while logged in.
+                Rendered by pRenderMessages() in main.js. */}
+            <div id="pp-messages" style={css('display:none;')}></div>
             <div id="pp-profile" style={css('display:none;')}>
               {/* Account Details (collapsible) */}
               <div className="p-card p-collapse open">

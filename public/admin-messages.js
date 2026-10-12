@@ -253,6 +253,10 @@ async function renderMessageDetail() {
   else if (m.wa_status === 'failed') waLine = '<div class="msg-wa msg-wa-err">WhatsApp to customer failed: ' + esc(m.wa_detail || '') + ' <button class="btn btn-outline btn-sm" onclick="sendCaseWhatsapp()">Try again</button></div>';
 
   var row = function (k, v) { return '<div class="msg-kv"><span>' + k + '</span><div>' + v + '</div></div>'; };
+  // Saving anything on the case redraws this panel. A half-typed internal
+  // note is the one thing on it that is not saved yet, so it survives.
+  var oldNote = document.getElementById('mmsg-note');
+  var keepNote = oldNote ? oldNote.value : '';
 
   document.getElementById('mmsg-body').innerHTML =
     '<div class="msg-grid">' +
@@ -304,6 +308,8 @@ async function renderMessageDetail() {
         (window.__SW_IS_ADMIN__ ? '<div style="margin-top:1.4rem;text-align:right;"><button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red);" onclick="deleteMessage()">Delete Message</button></div>' : '') +
       '</div>' +
     '</div>';
+
+  if (keepNote) document.getElementById('mmsg-note').value = keepNote;
 
   if (m.photo_path) {
     var s = await sb.storage.from(MSG_PHOTO_BUCKET).createSignedUrl(m.photo_path, 3600);

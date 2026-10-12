@@ -1018,8 +1018,8 @@ export function initShopMain() {
   function contactSubjectChanged(){
     var s=document.getElementById('cf-subject'), h=document.getElementById('cf-photo-hint');
     if(!s||!h) return;
-    h.textContent = s.value==='Complaint'
-      ? 'Please attach a photo if you can — it helps us resolve your complaint faster.'
+    h.textContent = s.value==='Order Matters'
+      ? 'Please attach a photo if you can — it helps us sort out your order faster.'
       : 'A photo helps us understand the problem, e.g. damaged seedlings.';
   }
 
@@ -1062,9 +1062,13 @@ export function initShopMain() {
     var photoEl=document.getElementById('cf-photo'), photo=photoEl && photoEl.files && photoEl.files[0];
 
     var digits=phone.replace(/\D/g,'');
+    // Order numbers are 6 characters (e.g. K3M7B0). Customers copy them
+    // with the # and in any case; store the bare upper-case number so the
+    // admin "find order" search matches.
+    order=order.replace(/[#\s]/g,'').toUpperCase();
     if(!name) return showErr('Please enter your name.');
     if(digits.length<9 || digits.length>15) return showErr('Please enter a valid phone number — we will contact you on WhatsApp.');
-    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showErr('Please enter a valid email address.');
+    if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showErr('Please check your email address, or leave it empty.');
     if(!subject) return showErr('Please select a topic.');
     if(!message) return showErr('Please write your message.');
 

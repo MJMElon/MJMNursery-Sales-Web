@@ -24,11 +24,11 @@
 // non-admins regardless of the saved flag.
 var SW_TAB_DEFS = [
   { key: 'orders',     label: 'Orders' },
-  { key: 'messages',   label: 'Messages' },
   { key: 'reports',    label: 'Reports' },
   { key: 'customers',  label: 'Customers' },
   { key: 'products',   label: 'Products' },
   { key: 'payments',   label: 'Payments' },
+  { key: 'messages',   label: 'Messages' },
   { key: 'promos',     label: 'Promotions' },
   { key: 'coupons',    label: 'Coupons' },
   { key: 'webdesign',  label: 'Website Design' },

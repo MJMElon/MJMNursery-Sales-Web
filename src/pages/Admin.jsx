@@ -39,11 +39,6 @@ export default function Admin() {
                     <span className="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline points="3.27 6.96 12 12.01 20.73 6.96" /><line x1="12" y1="22.08" x2="12" y2="12" /></svg></span>
                     <span>Orders</span>
                     </div>
-                  <div className="sb-item" id="sb-messages-item" onClick={(e) => { switchTab('messages',e.currentTarget); }}>
-                    <span className="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg></span>
-                    <span>Messages</span>
-                    <span className="sb-count" id="sb-messages-count" style={{ display: 'none' }} title="New messages not yet handled">0</span>
-                    </div>
                   <div className="sb-item" id="sb-reports-item" onClick={(e) => { switchTab('reports',e.currentTarget); }}>
                     <span className="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18" /><rect x="7" y="13" width="3" height="5" /><rect x="12" y="9" width="3" height="9" /><rect x="17" y="5" width="3" height="13" /></svg></span>
                     <span>Reports</span>
@@ -68,6 +63,11 @@ export default function Admin() {
                   <div className="sb-item" id="sb-quotations-item" onClick={(e) => { switchTab('quotations',e.currentTarget); }}>
                     <span className="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="9" y1="13" x2="15" y2="13" /><line x1="9" y1="17" x2="15" y2="17" /></svg></span>
                     <span>Quotations</span>
+                    </div>
+                  <div className="sb-item" id="sb-messages-item" onClick={(e) => { switchTab('messages',e.currentTarget); }}>
+                    <span className="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg></span>
+                    <span>Messages</span>
+                    <span className="sb-count" id="sb-messages-count" style={{ display: 'none' }} title="New messages not yet handled">0</span>
                     </div>
                   <div className="sb-item" id="sb-promos-item" onClick={(e) => { switchTab('promos',e.currentTarget); }}>
                     <span className="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 12 20 22 4 22 4 12" /><rect x="2" y="7" width="20" height="5" /><line x1="12" y1="22" x2="12" y2="7" /><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z" /><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" /></svg></span>
@@ -258,15 +258,15 @@ export default function Admin() {
                   </aside>
                 {/* MESSAGES — Contact Us enquiries & complaints (public/admin-messages.js) */}
                 <div className="tab-content" id="tab-messages">
-                  <div className="main-header"><div className="main-title">Messages &amp; Complaints</div><button className="btn btn-outline" onClick={(e) => { window.openMessageSettings(); }}>⚙ Settings</button></div>
+                  <div className="main-header"><div className="main-title">Messages</div><button className="btn btn-outline" onClick={(e) => { window.openMessageSettings(); }}>⚙ Settings</button></div>
                   <div className="stats-grid" id="message-stats" />
                   <div className="card">
                     <div className="filter-bar">
                       <input className="filter-input" id="message-search" placeholder="Search ref, name, phone, order #, message..." onInput={(e) => { window.renderMessagesTable(); }} />
                       <select className="filter-select" id="message-kind" onChange={(e) => { window.renderMessagesTable(); }}>
                         <option value="">All Types</option>
-                        <option value="complaint">Complaints</option>
-                        <option value="enquiry">Enquiries</option>
+                        <option value="complaint">Order Matters</option>
+                        <option value="enquiry">Other Enquiries</option>
                         </select>
                       </div>
                     <div className="filter-bar" style={{ marginTop: '-.3rem' }}>

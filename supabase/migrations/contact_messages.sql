@@ -177,8 +177,14 @@ CREATE TRIGGER salesweb_messages_track_trg
   FOR EACH ROW EXECUTE FUNCTION public.salesweb_messages_track();
 
 -- ── Storefront submit ──────────────────────────────────────────
--- Callable by anybody, logged in or not. Phone digits are counted with
--- translate() rather than a pattern, so this file has no regex in it.
+-- Callable by anybody, logged in or not. Name and phone are required,
+-- email is optional. Phone digits are counted with translate() rather
+-- than a pattern, so this file has no regex in it.
+-- The form offers two topics, Order Matters and Other Enquiries. An Order
+-- Matters message is the priority kind (stored as complaint) and stays
+-- pinned on the Messages tab until somebody resolves it. Complaint and the
+-- older topic names are still accepted so nothing already saved changes.
+-- The hourly limit counts by email, or by phone digits when no email.
 CREATE OR REPLACE FUNCTION public.salesweb_submit_message(
     p_name         TEXT,
     p_email        TEXT,
@@ -209,20 +215,21 @@ BEGIN
   v_digits := translate(v_phone, translate(v_phone, '0123456789', ''), '');
 
   IF length(v_name) < 1 OR length(v_name) > 120 THEN
-    RAISE EXCEPTION 'Please enter your name.';
-  END IF;
-  IF position('@' IN v_email) < 2 OR position('.' IN split_part(v_email, '@', 2)) < 2 OR length(v_email) > 200 THEN
-    RAISE EXCEPTION 'Please enter a valid email address.';
+    RAISE EXCEPTION 'Please enter your full name.';
   END IF;
   IF length(v_digits) < 9 OR length(v_digits) > 15 THEN
     RAISE EXCEPTION 'Please enter a valid phone number.';
   END IF;
+  IF v_email <> '' AND (position('@' IN v_email) < 2 OR position('.' IN split_part(v_email, '@', 2)) < 2 OR length(v_email) > 200) THEN
+    RAISE EXCEPTION 'Please check your email address, or leave it empty.';
+  END IF;
   IF length(v_msg) < 1 OR length(v_msg) > 5000 THEN
     RAISE EXCEPTION 'Please write your message (up to 5000 characters).';
   END IF;
-  IF v_subject NOT IN ('Product Enquiry','Bulk / Wholesale Order','Collection Schedule',
-                       'Payment & Banking','Complaint','Other') THEN
-    v_subject := 'Other';
+  IF v_subject NOT IN ('Order Matters','Other Enquiries','Complaint',
+                       'Product Enquiry','Bulk / Wholesale Order','Collection Schedule',
+                       'Payment & Banking','Other') THEN
+    v_subject := 'Other Enquiries';
   END IF;
   IF v_order IS NOT NULL AND length(v_order) > 60 THEN
     v_order := left(v_order, 60);
@@ -233,10 +240,11 @@ BEGIN
 
   SELECT count(*) INTO v_recent
     FROM public.salesweb_messages m
-   WHERE lower(m.email) = v_email
-     AND m.created_at > NOW() - INTERVAL '1 hour';
+   WHERE m.created_at > NOW() - INTERVAL '1 hour'
+     AND CASE WHEN v_email <> '' THEN lower(m.email) = v_email
+              ELSE translate(m.phone, translate(m.phone, '0123456789', ''), '') = v_digits END;
   IF v_recent >= 5 THEN
-    RAISE EXCEPTION 'Too many messages from this email in the last hour. Please try again later or WhatsApp us.';
+    RAISE EXCEPTION 'Too many messages in the last hour. Please try again later or WhatsApp us.';
   END IF;
 
   v_ref := 'MSG-' || lpad(nextval('public.salesweb_message_ref_seq')::TEXT, 5, '0');
@@ -245,7 +253,7 @@ BEGIN
     (ref, user_id, name, email, phone, subject, kind, message, order_number, photo_path)
   VALUES
     (v_ref, auth.uid(), v_name, v_email, v_phone, v_subject,
-     CASE WHEN v_subject = 'Complaint' THEN 'complaint' ELSE 'enquiry' END,
+     CASE WHEN v_subject IN ('Order Matters','Complaint') THEN 'complaint' ELSE 'enquiry' END,
      v_msg, v_order, v_photo)
   RETURNING salesweb_messages.id INTO v_id;
 

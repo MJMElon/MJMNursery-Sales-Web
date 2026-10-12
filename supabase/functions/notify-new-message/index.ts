@@ -82,7 +82,7 @@ serve(async (req) => {
 
     const isComplaint = msg.kind === 'complaint'
     const adminUrl = 'https://www.mjmnursery.com/admin.html#messages'
-    const subject = `${isComplaint ? '⚠ Complaint' : 'New message'} ${msg.ref} — ${msg.subject} — ${msg.name}`
+    const subject = `${isComplaint ? '⚠ ' : ''}New message ${msg.ref} — ${msg.subject} — ${msg.name}`
     const row = (k: string, v: unknown) => v ? `<tr><td style="padding:4px 10px 4px 0;color:#4A6B4C;font-size:12px;white-space:nowrap;vertical-align:top;">${k}</td><td style="padding:4px 0;font-size:13px;">${esc(v)}</td></tr>` : ''
 
     const html = `<!DOCTYPE html>
@@ -90,7 +90,7 @@ serve(async (req) => {
   <div style="max-width:560px;margin:24px auto;background:#FFF;border:1px solid #C8DFC9;border-radius:14px;overflow:hidden;">
     <div style="background:${isComplaint ? '#9B2C2C' : '#2D4A30'};padding:18px 24px;color:#FFF;">
       <div style="font-size:11px;letter-spacing:.18em;text-transform:uppercase;opacity:.75;">${esc(fromName)} · Contact Us</div>
-      <div style="font-size:20px;font-weight:700;margin-top:4px;">${isComplaint ? 'New complaint' : 'New message'} ${esc(msg.ref)}</div>
+      <div style="font-size:20px;font-weight:700;margin-top:4px;">New message ${esc(msg.ref)} · ${esc(msg.subject)}</div>
     </div>
     <div style="padding:20px 24px;">
       <table style="border-collapse:collapse;margin-bottom:14px;">
@@ -106,7 +106,7 @@ serve(async (req) => {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: `${fromName} <${fromEmail}>`, to, reply_to: msg.email, subject, html }),
+      body: JSON.stringify({ from: `${fromName} <${fromEmail}>`, to, ...(msg.email ? { reply_to: msg.email } : {}), subject, html }),
     })
     const body = await res.json().catch(() => ({}))
     if (!res.ok) {

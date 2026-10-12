@@ -106,7 +106,7 @@ function renderMessageStats() {
   el.innerHTML =
     '<div class="stat-box"><div class="stat-body"><div class="stat-label">New</div><div class="stat-val" style="color:var(--amber);">' + cNew + '</div></div></div>' +
     '<div class="stat-box"><div class="stat-body"><div class="stat-label">In Progress</div><div class="stat-val" style="color:#1d4ed8;">' + cProg + '</div></div></div>' +
-    '<div class="stat-box"><div class="stat-body"><div class="stat-label">Open Complaints</div><div class="stat-val" style="color:var(--red);">' + cComp + '</div></div></div>' +
+    '<div class="stat-box"><div class="stat-body"><div class="stat-label">Open Order Matters</div><div class="stat-val" style="color:var(--red);">' + cComp + '</div></div></div>' +
     '<div class="stat-box"><div class="stat-body"><div class="stat-label">Resolved This Month</div><div class="stat-val green">' + cDone + '</div></div></div>';
 
   var setCount = function (id, n) { var c = document.getElementById(id); if (!c) return; if (n) { c.textContent = n; c.setAttribute('data-count', n); } else { c.textContent = ''; c.removeAttribute('data-count'); } };
@@ -171,7 +171,7 @@ function renderMessagesTable() {
         '<td style="white-space:nowrap;font-size:12px;">' + fmtDate(m.created_at) + '<div style="font-size:11px;color:var(--ink4);">' + msgAgo(m.created_at) + '</div></td>' +
         '<td><div style="font-weight:600;">' + esc(m.name) + (m.user_id ? ' <span class="badge badge-blue" title="Sent while logged in to a customer account">member</span>' : '') + '</div>' +
           '<div style="font-size:11px;color:var(--ink4);">' + esc(m.phone || m.email) + '</div></td>' +
-        '<td>' + (isComp ? '<span class="badge badge-red">Complaint</span> ' : '<span style="font-weight:600;">' + esc(m.subject) + '</span>') +
+        '<td>' + (isComp ? '<span class="badge badge-red">' + esc(m.subject) + '</span> ' : '<span style="font-weight:600;">' + esc(m.subject) + '</span>') +
           (m.photo_path ? ' <span title="Photo attached">📷</span>' : '') +
           '<div style="font-size:11px;color:var(--ink4);max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(preview) + '</div></td>' +
         '<td style="font-size:12px;">' + (m.assigned_name ? esc(m.assigned_name) : '<span style="color:var(--ink4);">—</span>') + '</td>' +
@@ -213,7 +213,7 @@ async function openMessage(id) {
   var m = MSG_ROWS.find(function (r) { return r.id === id; });
   if (!m) return;
   MSG_CURRENT = m;
-  document.getElementById('mmsg-title').textContent = m.ref + ' — ' + (m.kind === 'complaint' ? 'Complaint' : m.subject);
+  document.getElementById('mmsg-title').textContent = m.ref + ' — ' + m.subject;
   document.getElementById('mmsg-body').innerHTML = '<div class="loading">Loading…</div>';
   openModal('modal-message');
 
@@ -256,7 +256,7 @@ async function renderMessageDetail() {
     '<div class="msg-grid">' +
       '<div>' +
         '<div class="msg-section-title">Message</div>' +
-        (m.kind === 'complaint' ? '<div style="margin-bottom:.5rem;"><span class="badge badge-red">Complaint</span></div>' : '') +
+        (m.kind === 'complaint' ? '<div style="margin-bottom:.5rem;"><span class="badge badge-red">' + esc(m.subject) + '</span></div>' : '') +
         '<div class="msg-text">' + esc(m.message) + '</div>' +
         '<div id="mmsg-photo"></div>' +
         '<div class="msg-section-title" style="margin-top:1.2rem;">Internal Notes &amp; History <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--ink4);">— staff only, never shown to the customer</span></div>' +
@@ -270,12 +270,12 @@ async function renderMessageDetail() {
         '<div class="msg-section-title">Customer</div>' +
         row('Name', esc(m.name) + (m.user_id ? ' <span class="badge badge-blue">member</span>' : '')) +
         row('Phone', esc(m.phone || '—')) +
-        row('Email', '<a href="mailto:' + esc(m.email) + '?subject=' + encodeURIComponent('Re: ' + m.ref + ' ' + m.subject) + '">' + esc(m.email) + '</a>') +
+        row('Email', m.email ? '<a href="mailto:' + esc(m.email) + '?subject=' + encodeURIComponent('Re: ' + m.ref + ' ' + m.subject) + '">' + esc(m.email) + '</a>' : '—') +
         (m.order_number ? row('Order #', esc(m.order_number) + ' <a href="#" onclick="findMessageOrder();return false;" style="font-size:11px;">find order</a>') : '') +
         row('Received', msgWhen(m.created_at)) +
         '<div style="display:flex;gap:.4rem;flex-wrap:wrap;margin:.6rem 0 1rem;">' +
           (waCust ? '<a class="btn btn-primary btn-sm msg-wa-btn" href="https://wa.me/' + waCust + '?text=' + encodeURIComponent(greeting) + '" target="_blank" rel="noopener">WhatsApp Customer</a>' : '') +
-          '<a class="btn btn-outline btn-sm" href="mailto:' + esc(m.email) + '?subject=' + encodeURIComponent('Re: ' + m.ref + ' ' + m.subject) + '">Email</a>' +
+          (m.email ? '<a class="btn btn-outline btn-sm" href="mailto:' + esc(m.email) + '?subject=' + encodeURIComponent('Re: ' + m.ref + ' ' + m.subject) + '">Email</a>' : '') +
         '</div>' +
 
         '<div class="msg-section-title">Assigned To</div>' +
@@ -430,7 +430,7 @@ async function renderMessageSettings() {
 
   document.getElementById('mms-body').innerHTML =
     '<div class="msg-section-title">Email Notifications</div>' +
-    '<div style="font-size:12px;color:var(--ink3);margin-bottom:.6rem;">Each address below gets an email when a new message or complaint arrives from the Contact Us page.</div>' + err +
+    '<div style="font-size:12px;color:var(--ink3);margin-bottom:.6rem;">Each address below gets an email when a new message arrives from the Contact Us page.</div>' + err +
     (emails.length ? emails.map(function (e) {
       return '<div class="msg-set-row"><span>' + esc(e.email) + '</span><button class="btn btn-outline btn-sm" onclick="removeNotifyEmail(\'' + encodeURIComponent(e.email) + '\')">Remove</button></div>';
     }).join('') : '<div style="font-size:12px;color:var(--ink4);padding:.4rem 0;">Nobody yet — no email is sent until you add someone.</div>') +

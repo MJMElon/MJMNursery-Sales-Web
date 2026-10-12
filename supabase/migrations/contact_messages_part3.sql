@@ -4,13 +4,25 @@
 -- contact_messages_simplify.sql. Safe to run more than once.
 -- ================================================================
 --
+-- The SQL Editor runs a paste as ONE transaction, so an error anywhere
+-- undoes everything above it. The first two versions of this file both
+-- ended in an error on databases without salesweb_user_tab_access, and
+-- so changed nothing at all. Everything here is now written for that.
+--
+-- 0. salesweb_user_tab_access, the table User Access, Edit Pages saves
+--    page ticks into. Its own file (salesweb_user_tab_access.sql) was
+--    never run on production, so ticking Messages for a normal user
+--    failed with "table is missing". This creates it exactly as that
+--    file does. Until somebody saves Edit Pages for a user, that user
+--    has no row and the portal keeps reading the ticks stored on their
+--    profile, the same as today. Nothing changes on the day it is run.
+--
 -- 1. salesweb_claim_message() lets a signed-in customer add a message
 --    they sent as a guest to their account, from My Account, Messages,
---    Add a Case. It needs the reference and the phone number used.
+--    Add a Case, by its reference number.
 --
 -- Permissions are read with ::jsonb so the list works whether the profile
--- column is json or jsonb. Without it a json column made the list fail,
--- and the admin page showed an empty dropdown with no reason given.
+-- column is json or jsonb.
 --
 -- 2. Assigned To lists the portal users who may handle messages. That
 --    is every salesweb admin, and every normal user with Messages ticked
@@ -19,8 +31,7 @@
 --    normal user is not allowed to read other profiles directly. Each
 --    person is offered with the WhatsApp number from their profile,
 --    unless one was typed for them on the Messages tab Settings, kept in
---    salesweb_message_staff_phone. The old hand-typed handler list is no
---    longer used and is left in place, untouched.
+--    salesweb_message_staff_phone.
 --
 -- 3. A one-off repair. Until now the Contact Us form attached a message
 --    to whatever login the browser was holding, and the admin portal
@@ -32,14 +43,47 @@
 --    second run finds nothing.
 -- ================================================================
 
--- ── Customer adds a case sent before signing in ─────────────────
--- A message sent as a guest belongs to nobody. A signed-in customer can
--- link it to their account with its reference AND the phone number on
--- it. References count up and could be guessed, the phone number is
--- what makes it theirs. A wrong reference and a wrong phone give the
--- same answer, so neither can be found out on its own. The reference
--- can be typed loosely (MSG-00001, msg 1, 00001).
-CREATE OR REPLACE FUNCTION public.salesweb_claim_message(p_ref TEXT, p_phone TEXT)
+-- ── 0. Page access table, as in salesweb_user_tab_access.sql ──────
+CREATE TABLE IF NOT EXISTS public.salesweb_user_tab_access (
+    user_id     UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    tabs        JSONB       NOT NULL DEFAULT '{}'::jsonb,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_by  UUID        REFERENCES auth.users(id)
+);
+ALTER TABLE public.salesweb_user_tab_access ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "salesweb_users_read_tab_access" ON public.salesweb_user_tab_access;
+CREATE POLICY "salesweb_users_read_tab_access" ON public.salesweb_user_tab_access
+    FOR SELECT TO authenticated
+    USING (public._mjm_has_module('salesweb', ARRAY['admin','normal']));
+DROP POLICY IF EXISTS "salesweb_admins_write_tab_access" ON public.salesweb_user_tab_access;
+CREATE POLICY "salesweb_admins_write_tab_access" ON public.salesweb_user_tab_access
+    FOR ALL TO authenticated
+    USING      (public._mjm_has_module('salesweb', ARRAY['admin']))
+    WITH CHECK (public._mjm_has_module('salesweb', ARRAY['admin']));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.salesweb_user_tab_access TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.salesweb_user_tab_access_touch()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    NEW.updated_at := NOW();
+    RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS salesweb_user_tab_access_touch_trg ON public.salesweb_user_tab_access;
+CREATE TRIGGER salesweb_user_tab_access_touch_trg
+    BEFORE UPDATE ON public.salesweb_user_tab_access
+    FOR EACH ROW EXECUTE FUNCTION public.salesweb_user_tab_access_touch();
+
+-- ── 1. Customer adds a case sent before signing in ─────────────────
+-- By reference number alone, as the office asked. Note that references
+-- count up, so a signed-in customer who types somebody else number can
+-- add that message to their own account. A message already linked to an
+-- account cannot be taken by another. The reference can be typed
+-- loosely (MSG-00001, msg 1, 00001).
+DROP FUNCTION IF EXISTS public.salesweb_claim_message(TEXT, TEXT);
+CREATE FUNCTION public.salesweb_claim_message(p_ref TEXT, p_phone TEXT DEFAULT NULL)
 RETURNS TABLE (result TEXT, message_ref TEXT)
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -50,10 +94,7 @@ DECLARE
   v_refin   TEXT := btrim(COALESCE(p_ref, ''));
   v_refnum  TEXT;
   v_ref     TEXT;
-  v_phone   TEXT := COALESCE(p_phone, '');
-  v_digits  TEXT;
   v_row     public.salesweb_messages%ROWTYPE;
-  v_rowdig  TEXT;
 BEGIN
   IF v_uid IS NULL THEN
     RAISE EXCEPTION 'Please sign in first.';
@@ -63,15 +104,10 @@ BEGIN
     RAISE EXCEPTION 'Please enter the reference number, e.g. MSG-00001.';
   END IF;
   v_ref := 'MSG-' || lpad((v_refnum::BIGINT)::TEXT, 5, '0');
-  v_digits := translate(v_phone, translate(v_phone, '0123456789', ''), '');
-  IF length(v_digits) < 9 THEN
-    RAISE EXCEPTION 'Please enter the phone number you used on that message.';
-  END IF;
 
   SELECT * INTO v_row FROM public.salesweb_messages m WHERE m.ref = v_ref;
-  v_rowdig := translate(COALESCE(v_row.phone, ''), translate(COALESCE(v_row.phone, ''), '0123456789', ''), '');
-  IF NOT FOUND OR length(v_rowdig) < 9 OR right(v_rowdig, 9) <> right(v_digits, 9) THEN
-    RAISE EXCEPTION 'We could not find a message with that reference and phone number. Please check both and try again.';
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'We could not find a message with reference %. Please check the number and try again.', v_ref;
   END IF;
 
   IF v_row.user_id = v_uid THEN

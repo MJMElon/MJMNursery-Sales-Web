@@ -307,13 +307,13 @@ $$;
 GRANT EXECUTE ON FUNCTION public.salesweb_my_messages() TO authenticated;
 
 -- ── Customer adds a case sent before signing in ─────────────────
--- A message sent as a guest belongs to nobody. A signed-in customer can
--- link it to their account with its reference AND the phone number on
--- it. References count up and could be guessed, the phone number is
--- what makes it theirs. A wrong reference and a wrong phone give the
--- same answer, so neither can be found out on its own. The reference
--- can be typed loosely (MSG-00001, msg 1, 00001).
-CREATE OR REPLACE FUNCTION public.salesweb_claim_message(p_ref TEXT, p_phone TEXT)
+-- By reference number alone, as the office asked. Note that references
+-- count up, so a signed-in customer who types somebody else number can
+-- add that message to their own account. A message already linked to an
+-- account cannot be taken by another. The reference can be typed
+-- loosely (MSG-00001, msg 1, 00001).
+DROP FUNCTION IF EXISTS public.salesweb_claim_message(TEXT, TEXT);
+CREATE FUNCTION public.salesweb_claim_message(p_ref TEXT, p_phone TEXT DEFAULT NULL)
 RETURNS TABLE (result TEXT, message_ref TEXT)
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -324,10 +324,7 @@ DECLARE
   v_refin   TEXT := btrim(COALESCE(p_ref, ''));
   v_refnum  TEXT;
   v_ref     TEXT;
-  v_phone   TEXT := COALESCE(p_phone, '');
-  v_digits  TEXT;
   v_row     public.salesweb_messages%ROWTYPE;
-  v_rowdig  TEXT;
 BEGIN
   IF v_uid IS NULL THEN
     RAISE EXCEPTION 'Please sign in first.';
@@ -337,15 +334,10 @@ BEGIN
     RAISE EXCEPTION 'Please enter the reference number, e.g. MSG-00001.';
   END IF;
   v_ref := 'MSG-' || lpad((v_refnum::BIGINT)::TEXT, 5, '0');
-  v_digits := translate(v_phone, translate(v_phone, '0123456789', ''), '');
-  IF length(v_digits) < 9 THEN
-    RAISE EXCEPTION 'Please enter the phone number you used on that message.';
-  END IF;
 
   SELECT * INTO v_row FROM public.salesweb_messages m WHERE m.ref = v_ref;
-  v_rowdig := translate(COALESCE(v_row.phone, ''), translate(COALESCE(v_row.phone, ''), '0123456789', ''), '');
-  IF NOT FOUND OR length(v_rowdig) < 9 OR right(v_rowdig, 9) <> right(v_digits, 9) THEN
-    RAISE EXCEPTION 'We could not find a message with that reference and phone number. Please check both and try again.';
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'We could not find a message with reference %. Please check the number and try again.', v_ref;
   END IF;
 
   IF v_row.user_id = v_uid THEN

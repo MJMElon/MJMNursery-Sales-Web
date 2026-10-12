@@ -1104,7 +1104,7 @@ export function initShopMain() {
       var box=document.getElementById('cf-done');
       var follow = signedIn
         ? '<p style="color:var(--text-mid);margin-top:.6rem">You can follow this message under <a onclick="showPage(\'portal\');setTimeout(function(){var b=document.getElementById(\'ptab-messages\');if(b)pShowOrderView(\'messages\',b);},120);" style="color:var(--green-dark);font-weight:600;cursor:pointer;text-decoration:underline">My Account → Messages</a>.</p>'
-        : (ref ? '<p style="color:var(--text-mid);margin-top:.6rem;font-size:13px;line-height:1.6">Please keep this reference number. To follow your message online, <a onclick="openLoginModal()" style="color:var(--green-dark);font-weight:600;cursor:pointer;text-decoration:underline">sign in or create an account</a>, then go to <strong>My Account → Messages → Add a Case</strong> and enter this reference with the phone number you used.</p>' : '');
+        : (ref ? '<p style="color:var(--text-mid);margin-top:.6rem;font-size:13px;line-height:1.6">Please keep this reference number. To follow your message online, <a onclick="openLoginModal()" style="color:var(--green-dark);font-weight:600;cursor:pointer;text-decoration:underline">sign in or create an account</a>, then go to <strong>My Account → Messages → Add a Case</strong> and enter this reference number.</p>' : '');
       box.innerHTML='<div style="text-align:center;padding:3rem 1rem"><div style="font-size:3rem;margin-bottom:1rem">✅</div>'+
         '<h3 style="font-family:Cormorant Garamond,serif;font-size:1.8rem;color:var(--green-dark);margin-bottom:.5rem">Message Sent!</h3>'+
         (ref?'<p style="color:var(--text-dark);font-size:15px;margin-bottom:.6rem">Your reference: <strong>'+escContact(ref)+'</strong></p>':'')+
@@ -1604,15 +1604,14 @@ export function initShopMain() {
   function pWaNumber(raw){ var d=String(raw||'').replace(/\D/g,''); if(!d) return ''; if(d.indexOf('60')===0) return d; if(d.charAt(0)==='0') return '6'+d; if(d.charAt(0)==='1'&&d.length>=9&&d.length<=10) return '60'+d; return d; }
   function pMsgEsc(s){ var d=document.createElement('div'); d.textContent=s==null?'':String(s); return d.innerHTML; }
   async function pClaimMessage(){
-    var ref=(document.getElementById('pc-ref').value||'').trim(), phone=(document.getElementById('pc-phone').value||'').trim();
+    var ref=(document.getElementById('pc-ref').value||'').trim();
     var msg=document.getElementById('pc-msg'), btn=document.getElementById('pc-btn');
     var say=function(text, ok){ msg.textContent=text; msg.style.color=ok?'#15803d':'#b91c1c'; msg.style.display='block'; };
     if(!ref) return say('Please enter the reference number, e.g. MSG-00001.');
-    if(phone.replace(/\D/g,'').length<9) return say('Please enter the phone number you used on that message.');
     btn.disabled=true; btn.textContent='Adding…';
     try{
       await loadSupabaseSdk();
-      var r=await _sb.rpc('salesweb_claim_message',{p_ref:ref, p_phone:phone});
+      var r=await _sb.rpc('salesweb_claim_message',{p_ref:ref});
       if(r.error) throw r.error;
       var row=Array.isArray(r.data)?r.data[0]:r.data;
       await pRenderMessages();
@@ -1627,11 +1626,11 @@ export function initShopMain() {
     var host=document.getElementById('pp-messages'); if(!host) return;
     var newBtn='<button class="portal-tab" onclick="showPage(\'contact\')" style="width:100%;text-align:center;padding:.6rem;border-style:dashed;margin-bottom:1rem;">+ Send a New Message</button>'+
       // A message sent before signing in belongs to nobody. The customer
-      // links it here with its reference AND the phone number on it: the
-      // reference alone counts up and could be guessed.
+      // links it here by its reference number (salesweb_claim_message).
+      // One already linked to an account cannot be taken by another.
       '<div class="p-card p-claim" style="margin-bottom:1rem;"><div style="font-weight:700;font-size:13px;color:var(--text-dark);margin-bottom:.25rem;">Add a Case</div>'+
-      '<div style="font-size:12px;color:var(--text-light);line-height:1.5;margin-bottom:.7rem;">Sent us a message before signing in? Enter its reference number and the phone number you used, and it will appear here.</div>'+
-      '<div class="p-claim-row"><input id="pc-ref" placeholder="Reference, e.g. MSG-00001" autocomplete="off"><input id="pc-phone" type="tel" placeholder="Phone number used"><button class="p-save-btn" id="pc-btn" onclick="pClaimMessage()">Add</button></div>'+
+      '<div style="font-size:12px;color:var(--text-light);line-height:1.5;margin-bottom:.7rem;">Sent us a message before signing in? Enter its reference number and it will appear here.</div>'+
+      '<div class="p-claim-row"><input id="pc-ref" placeholder="Reference, e.g. MSG-00001" autocomplete="off" onkeydown="if(event.key===\'Enter\')pClaimMessage()"><button class="p-save-btn" id="pc-btn" onclick="pClaimMessage()">Add</button></div>'+
       '<div id="pc-msg" style="font-size:12px;margin-top:.5rem;display:none;"></div></div>';
     host.innerHTML=newBtn+'<div class="p-card" style="text-align:center;padding:1.5rem;font-size:13px;color:var(--text-light);">Loading your messages…</div>';
     try{

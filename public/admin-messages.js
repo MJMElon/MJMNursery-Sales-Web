@@ -29,7 +29,7 @@
 
 var MSG_ROWS = [];
 var MSG_VIEW = 'open';          // open | New | In Progress | Resolved | Closed | all
-var MSG_HANDLERS = [];
+var MSG_HANDLERS = [];        // portal users who may be assigned (salesweb_message_assignees)
 var MSG_CURRENT = null;         // the message open in the modal
 var MSG_PHOTO_BUCKET = 'contact-message-photos';
 var MSG_STATUSES = ['New', 'In Progress', 'Resolved', 'Closed'];
@@ -222,7 +222,7 @@ async function openMessage(id) {
     m.read_at = now;
     sb.from('salesweb_messages').update({ read_at: now }).eq('id', id).then(function () { renderMessagesTable(); updateMessagesBadge(); });
   }
-  if (!MSG_HANDLERS.length) await loadMessageHandlers();
+  await loadMessageHandlers();
   await renderMessageDetail();
 }
 
@@ -233,15 +233,17 @@ async function renderMessageDetail() {
   var events = ev.data || [];
 
   var waCust = waNumber(m.phone);
-  // A handler removed from Settings leaves the case with the name it was
-  // assigned under and no handler_id. Show that as the current choice so
-  // pressing Save does not quietly unassign it.
-  var orphan = m.assigned_name && !MSG_HANDLERS.some(function (h) { return h.id === m.handler_id; });
+  // Assigned To lists the portal users with Messages access (User Access
+  // → Edit Pages → Messages, and every admin). Somebody who has since
+  // lost that access stays shown on the cases already assigned to them,
+  // so pressing Save does not quietly unassign it.
+  var current = MSG_HANDLERS.find(function (h) { return h.user_id === m.assigned_user_id; });
+  var orphan = m.assigned_name && !current;
   var handlerOpts = '<option value="">— Not assigned —</option>' +
-    (orphan ? '<option value="__keep" selected>' + esc(m.assigned_name) + ' (' + esc(m.assigned_phone || '') + ') — no longer in the list</option>' : '') +
-    MSG_HANDLERS.filter(function (h) { return h.active || h.id === m.handler_id; }).map(function (h) {
-    return '<option value="' + h.id + '"' + (h.id === m.handler_id ? ' selected' : '') + '>' + esc(h.name) + ' (' + esc(h.phone) + ')</option>';
-  }).join('');
+    (orphan ? '<option value="__keep" selected>' + esc(m.assigned_name) + (m.assigned_phone ? ' (' + esc(m.assigned_phone) + ')' : '') + ' — no longer has Messages access</option>' : '') +
+    MSG_HANDLERS.map(function (h) {
+      return '<option value="' + h.user_id + '"' + (current && h.user_id === current.user_id ? ' selected' : '') + '>' + esc(h.name) + (h.phone ? ' (' + esc(h.phone) + ')' : ' — no WhatsApp number') + '</option>';
+    }).join('');
   var greeting = 'Hi ' + m.name + ', this is ' + (m.assigned_name || 'MJM Nursery') + ' from MJM Nursery regarding your message ' + m.ref + ' (' + m.subject + ').';
 
   var waLine = '';
@@ -271,7 +273,14 @@ async function renderMessageDetail() {
         row('Name', esc(m.name) + (m.user_id ? ' <span class="badge badge-blue">member</span>' : '')) +
         row('Phone', esc(m.phone || '—')) +
         row('Email', m.email ? '<a href="mailto:' + esc(m.email) + '?subject=' + encodeURIComponent('Re: ' + m.ref + ' ' + m.subject) + '">' + esc(m.email) + '</a>' : '—') +
-        (m.order_number ? row('Order #', esc(m.order_number) + ' <a href="#" onclick="findMessageOrder();return false;" style="font-size:11px;">find order</a>') : '') +
+        row('Order #', '<div class="msg-order">' +
+          (m.order_number ? '<strong>#' + esc(m.order_number) + '</strong> <a href="#" onclick="findMessageOrder();return false;" style="font-size:11px;">open</a> · ' : '<span style="color:var(--ink4);">—</span> ') +
+          '<a href="#" onclick="toggleOrderPicker();return false;" style="font-size:11px;">' + (m.order_number ? 'change' : 'link order') + '</a>' +
+          '<div class="msg-order-pick" id="mmsg-order-pick" style="display:none;">' +
+            '<input class="form-input" id="mmsg-order-q" placeholder="Type a name or order number" autocomplete="off" oninput="searchMessageOrders()">' +
+            '<div class="msg-order-list" id="mmsg-order-list"></div>' +
+            (m.order_number ? '<a href="#" onclick="setMessageOrder(null);return false;" style="font-size:11px;color:var(--red);">Remove order number</a>' : '') +
+          '</div></div>') +
         row('Received', msgWhen(m.created_at)) +
         '<div style="display:flex;gap:.4rem;flex-wrap:wrap;margin:.6rem 0 1rem;">' +
           (waCust ? '<a class="btn btn-primary btn-sm msg-wa-btn" href="https://wa.me/' + waCust + '?text=' + encodeURIComponent(greeting) + '" target="_blank" rel="noopener">WhatsApp Customer</a>' : '') +
@@ -280,7 +289,7 @@ async function renderMessageDetail() {
 
         '<div class="msg-section-title">Assigned To</div>' +
         '<select class="form-input" id="mmsg-handler">' + handlerOpts + '</select>' +
-        (MSG_HANDLERS.length ? '' : '<div style="font-size:11px;color:var(--ink4);margin-top:.3rem;">No handlers yet — add them in ⚙ Settings.</div>') +
+        (MSG_HANDLERS.length ? '' : '<div style="font-size:11px;color:var(--ink4);margin-top:.3rem;">Nobody has Messages access yet. Tick <strong>Messages</strong> for a user in User Access → Edit Pages.</div>') +
         '<label style="display:flex;gap:.4rem;align-items:center;font-size:12px;margin-top:.5rem;"><input type="checkbox" id="mmsg-notify" checked> Tell the customer on WhatsApp who will handle it</label>' +
         '<button class="btn btn-primary btn-sm" style="margin-top:.5rem;width:100%;" onclick="assignMessage()">Save Assignment</button>' +
         waLine +
@@ -329,10 +338,11 @@ async function assignMessage() {
     else toast('Nothing changed');
     return;
   }
-  var h = MSG_HANDLERS.find(function (x) { return x.id === hid; });
+  var h = MSG_HANDLERS.find(function (x) { return x.user_id === hid; });
+  if (h && notify && !h.phone) { toast(h.name + ' has no WhatsApp number — add one in ⚙ Settings, or untick the WhatsApp box', 'error'); return; }
   var upd = h
-    ? { handler_id: h.id, assigned_name: h.name, assigned_phone: h.phone }
-    : { handler_id: null, assigned_name: null, assigned_phone: null };
+    ? { assigned_user_id: h.user_id, handler_id: null, assigned_name: h.name, assigned_phone: h.phone || null }
+    : { assigned_user_id: null, handler_id: null, assigned_name: null, assigned_phone: null };
   var changed = (upd.assigned_name || null) !== (m.assigned_name || null) || (upd.assigned_phone || null) !== (m.assigned_phone || null);
   // Picking somebody on a New case means somebody is on it.
   if (h && m.status === 'New') upd.status = 'In Progress';
@@ -410,9 +420,68 @@ function findMessageOrder() {
   if (s) { s.value = m.order_number; if (typeof loadOrders === 'function') loadOrders(); }
 }
 
-// ── Settings: handlers + notification emails ────────────────────────
+// ── Link an order: a small search under Order # ────────────────────
+// Type a customer name, billing name or order number; pick a row and
+// its order number is saved on the message. The database trigger
+// writes "Order linked: #K3M7B0" into the history.
+function toggleOrderPicker() {
+  var box = document.getElementById('mmsg-order-pick'); if (!box) return;
+  var open = box.style.display === 'none';
+  box.style.display = open ? 'block' : 'none';
+  if (open) {
+    var q = document.getElementById('mmsg-order-q');
+    if (q && !q.value && MSG_CURRENT) q.value = MSG_CURRENT.order_number || MSG_CURRENT.name || '';
+    if (q) { q.focus(); q.select(); }
+    searchMessageOrders();
+  }
+}
+
+var _msgOrderTimer = null, _msgOrderSeq = 0;
+function searchMessageOrders() {
+  clearTimeout(_msgOrderTimer);
+  _msgOrderTimer = setTimeout(runMessageOrderSearch, 250);
+}
+
+async function runMessageOrderSearch() {
+  var list = document.getElementById('mmsg-order-list'); if (!list) return;
+  // PostgREST or() filters are comma separated, so commas, brackets and
+  // wildcards are taken out of what was typed before it goes in one.
+  var raw = (document.getElementById('mmsg-order-q').value || '').trim();
+  var q = raw.replace(/^#/, '').replace(/[,()%*:"\\]/g, ' ').trim();
+  var seq = ++_msgOrderSeq;
+  list.innerHTML = '<div class="msg-order-empty">Searching…</div>';
+  var query = sb.from('salesweb_customer_orders')
+    .select('id,order_number,customer_name,billing_name,total,status,created_at')
+    .order('created_at', { ascending: false }).limit(15);
+  if (q) query = query.or('order_number.ilike.*' + q + '*,customer_name.ilike.*' + q + '*,billing_name.ilike.*' + q + '*,customer_email.ilike.*' + q + '*');
+  var r = await query;
+  if (seq !== _msgOrderSeq) return;   // a later keystroke already answered
+  if (r.error) { list.innerHTML = '<div class="msg-order-empty" style="color:var(--red);">' + esc(r.error.message) + '</div>'; return; }
+  var rows = (r.data || []).filter(function (o) { return o.order_number; });
+  if (!rows.length) { list.innerHTML = '<div class="msg-order-empty">No orders match.</div>'; return; }
+  list.innerHTML = rows.map(function (o) {
+    var who = o.customer_name || o.billing_name || '—';
+    return '<div class="msg-order-row" onclick="setMessageOrder(\'' + esc(o.order_number) + '\')">' +
+      '<div><strong>#' + esc(o.order_number) + '</strong> · ' + esc(who) +
+        (o.billing_name && o.billing_name !== o.customer_name ? ' <span style="color:var(--ink4);">(' + esc(o.billing_name) + ')</span>' : '') + '</div>' +
+      '<div class="msg-order-sub">' + fmtDate(o.created_at) + ' · ' + esc(o.status || '') +
+        (o.total != null ? ' · RM ' + Number(o.total).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '') + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+async function setMessageOrder(orderNumber) {
+  var m = MSG_CURRENT; if (!m) return;
+  if ((orderNumber || null) === (m.order_number || null)) { toggleOrderPicker(); return; }
+  var r = await sb.from('salesweb_messages').update({ order_number: orderNumber || null }).eq('id', m.id);
+  if (r.error) { toast('Error: ' + r.error.message, 'error'); return; }
+  toast(orderNumber ? 'Order #' + orderNumber + ' linked' : 'Order number removed');
+  await reloadCurrentMessage();
+}
+
+// ── Settings: notification emails + WhatsApp numbers ───────────────
 async function loadMessageHandlers() {
-  var r = await sb.from('salesweb_message_handlers').select('*').order('name');
+  var r = await sb.rpc('salesweb_message_assignees');
   MSG_HANDLERS = r.data || [];
 }
 
@@ -427,6 +496,7 @@ async function renderMessageSettings() {
   var em = await sb.from('salesweb_message_notify_emails').select('email,created_at').order('created_at');
   var emails = em.data || [];
   var err = em.error ? '<div style="color:var(--red);font-size:12px;">' + esc(em.error.message) + '</div>' : '';
+  var src = { messages: 'set here', profile: 'from profile', none: '' };
 
   document.getElementById('mms-body').innerHTML =
     '<div class="msg-section-title">Email Notifications</div>' +
@@ -436,14 +506,13 @@ async function renderMessageSettings() {
     }).join('') : '<div style="font-size:12px;color:var(--ink4);padding:.4rem 0;">Nobody yet — no email is sent until you add someone.</div>') +
     '<div style="display:flex;gap:.4rem;margin-top:.5rem;"><input class="form-input" id="mms-new-email" type="email" placeholder="name@example.com" onkeydown="if(event.key===\'Enter\')addNotifyEmail()"><button class="btn btn-primary btn-sm" onclick="addNotifyEmail()">Add</button></div>' +
 
-    '<div class="msg-section-title" style="margin-top:1.6rem;">Case Handlers</div>' +
-    '<div style="font-size:12px;color:var(--ink3);margin-bottom:.6rem;">The people a message can be assigned to. The WhatsApp number is the one they will use to contact the customer — it is what the customer is told.</div>' +
+    '<div class="msg-section-title" style="margin-top:1.6rem;">Who Can Be Assigned</div>' +
+    '<div style="font-size:12px;color:var(--ink3);margin-bottom:.6rem;">Everyone with <strong>Messages</strong> access in User Access (all admins, and normal users with Messages ticked under Edit Pages). The WhatsApp number is the one they will use to contact the customer — it is what the customer is told.</div>' +
     (MSG_HANDLERS.length ? MSG_HANDLERS.map(function (h) {
-      return '<div class="msg-set-row"' + (h.active ? '' : ' style="opacity:.55;"') + '><span><strong>' + esc(h.name) + '</strong> · ' + esc(h.phone) + (h.active ? '' : ' (inactive)') + '</span>' +
-        '<span style="display:flex;gap:.3rem;"><button class="btn btn-outline btn-sm" onclick="toggleHandler(\'' + h.id + '\',' + (!h.active) + ')">' + (h.active ? 'Deactivate' : 'Activate') + '</button>' +
-        '<button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red);" onclick="removeHandler(\'' + h.id + '\')">Remove</button></span></div>';
-    }).join('') : '<div style="font-size:12px;color:var(--ink4);padding:.4rem 0;">No handlers yet.</div>') +
-    '<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:.4rem;margin-top:.5rem;"><input class="form-input" id="mms-h-name" placeholder="Name"><input class="form-input" id="mms-h-phone" type="tel" placeholder="WhatsApp e.g. 012-345 6789"><button class="btn btn-primary btn-sm" onclick="addHandler()">Add</button></div>';
+      return '<div class="msg-set-row msg-staff-row"><span><strong>' + esc(h.name) + '</strong><span style="font-size:11px;color:var(--ink4);"> · ' + esc(h.level) + (h.phone_source && src[h.phone_source] ? ' · ' + src[h.phone_source] : '') + '</span></span>' +
+        '<span style="display:flex;gap:.3rem;"><input class="form-input" id="mms-ph-' + h.user_id + '" type="tel" value="' + esc(h.phone || '') + '" placeholder="WhatsApp number" style="width:150px;padding:5px 8px;font-size:12px;' + (h.phone ? '' : 'border-color:var(--amber);') + '">' +
+        '<button class="btn btn-outline btn-sm" onclick="saveStaffPhone(\'' + h.user_id + '\')">Save</button></span></div>';
+    }).join('') : '<div style="font-size:12px;color:var(--ink4);padding:.4rem 0;">Nobody has Messages access yet.</div>');
 }
 
 async function addNotifyEmail() {
@@ -465,28 +534,18 @@ async function removeNotifyEmail(enc) {
   await renderMessageSettings();
 }
 
-async function addHandler() {
-  var name = (document.getElementById('mms-h-name').value || '').trim();
-  var phone = (document.getElementById('mms-h-phone').value || '').trim();
-  if (!name) { toast('Enter a name', 'error'); return; }
-  var d = waNumber(phone);
-  if (d.length < 10 || d.length > 15) { toast('Enter a valid WhatsApp number', 'error'); return; }
-  var r = await sb.from('salesweb_message_handlers').insert({ name: name, phone: phone });
+// The number typed here is kept for the Messages tab only and wins over
+// the profile phone. Clearing it goes back to the profile phone.
+async function saveStaffPhone(userId) {
+  var phone = (document.getElementById('mms-ph-' + userId).value || '').trim();
+  var r;
+  if (!phone) r = await sb.from('salesweb_message_staff_phone').delete().eq('user_id', userId);
+  else {
+    var d = waNumber(phone);
+    if (d.length < 10 || d.length > 15) { toast('Enter a valid WhatsApp number', 'error'); return; }
+    r = await sb.from('salesweb_message_staff_phone').upsert({ user_id: userId, phone: phone, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+  }
   if (r.error) { toast('Error: ' + r.error.message, 'error'); return; }
-  toast('Added ' + name);
-  await renderMessageSettings();
-}
-
-async function toggleHandler(id, active) {
-  var r = await sb.from('salesweb_message_handlers').update({ active: active }).eq('id', id);
-  if (r.error) { toast('Error: ' + r.error.message, 'error'); return; }
-  await renderMessageSettings();
-}
-
-async function removeHandler(id) {
-  var h = MSG_HANDLERS.find(function (x) { return x.id === id; });
-  if (!confirm('Remove ' + (h ? h.name : 'this handler') + '?\n\nCases already assigned keep the name and number they were assigned with. Use Deactivate instead to keep them in the list.')) return;
-  var r = await sb.from('salesweb_message_handlers').delete().eq('id', id);
-  if (r.error) { toast('Error: ' + r.error.message, 'error'); return; }
+  toast('Saved');
   await renderMessageSettings();
 }

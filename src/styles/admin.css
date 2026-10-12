@@ -306,3 +306,11 @@ input,select,textarea,button{font-family:inherit;}
 .msg-ev-head{font-size:11px;color:var(--ink4);}
 .msg-ev-body{white-space:pre-wrap;word-break:break-word;color:var(--ink2);margin-top:2px;}
 .msg-set-row{display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:.45rem 0;border-bottom:1px solid var(--border);font-size:13px;}
+.msg-order{position:relative;}
+.msg-order-pick{margin-top:.4rem;border:1px solid var(--border);border-radius:10px;padding:.5rem;background:var(--surface);box-shadow:var(--shadow);}
+.msg-order-pick .form-input{font-size:12px;padding:6px 9px;margin-bottom:.4rem;}
+.msg-order-list{max-height:220px;overflow-y:auto;margin-bottom:.3rem;}
+.msg-order-row{padding:.45rem .5rem;border-radius:6px;cursor:pointer;font-size:12px;}
+.msg-order-row:hover{background:var(--green-light);}
+.msg-order-sub{font-size:11px;color:var(--ink4);margin-top:1px;}
+.msg-order-empty{font-size:12px;color:var(--ink4);padding:.4rem .5rem;}

@@ -117,6 +117,10 @@ export default function ContactPage() {
               <div className="cf-error" id="cf-error" role="alert" style={css('display:none;')}></div>
               <button type="submit" className="btn-submit" id="cf-submit">Send Message</button>
             </form>
+            {/* Shown in place of the form after a send. The form itself is
+                kept (only hidden), so coming back to Contact Us gives a
+                clean form again instead of this screen. */}
+            <div id="cf-done" style={css('display:none;')}></div>
           </div>
 
         </div>

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { loadOrdersFromDB } from '../lib/portalOrders.js';
+import { loadOrdersFromDB, loadOrderSeals } from '../lib/portalOrders.js';
+import { formatSealRanges } from '../lib/sealRanges.js';
 import '../styles/customer-portal.css';
 
 // Customer Portal — React port of customer-portal.html +
@@ -409,7 +410,52 @@ function OrderDetail({ o, onBack, consentSigned, isOverdueReminder, overdueRemin
         )}
         {o.status === 'Pending Payment' && <PaymentUploadSection o={o} showToast={showToast} />}
       </div>
+      <SealCard orderNo={o._orderNo} />
     </>
+  );
+}
+
+// Seal stickers allocated to this order, and the DOs that carried them.
+// Fetched when the detail opens; draws nothing until there is something to
+// show, and nothing at all on an error.
+function SealCard({ orderNo }) {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    let live = true;
+    setData(null);
+    if (orderNo) loadOrderSeals(orderNo).then(r => { if (live) setData(r); });
+    return () => { live = false; };
+  }, [orderNo]);
+  if (!data) return null;
+  const seals = data.seals.filter(s => ['pending', 'scanned', 'collected'].includes(s.seg_status));
+  const range = s => (s.start_code === s.end_code ? s.start_code : s.start_code + ' - ' + s.end_code);
+  const dosWithSeals = data.dos.filter(d => Array.isArray(d.seal_ranges) && d.seal_ranges.length);
+  if (!seals.length && !dosWithSeals.length) return null;
+  return (
+    <div className="card">
+      <h3>🏷️ Seal Numbers</h3>
+      {seals.map((s, i) => {
+        const collected = s.seg_status === 'collected';
+        return (
+          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: '.75rem', flexWrap: 'wrap', padding: '.45rem 0', borderBottom: '1px solid var(--border)', fontSize: '.85rem' }}>
+            <div><strong style={{ fontVariantNumeric: 'tabular-nums' }}>{range(s)}</strong> <span style={{ color: 'var(--ink4)' }}>({Number(s.qty || 0).toLocaleString()})</span></div>
+            <span className={'badge ' + (collected ? 'badge-green' : 'badge-amber')}>
+              {collected ? 'Collected' + (s.do_number ? ' — DO ' + s.do_number : '') : 'Ready for collection'}
+            </span>
+          </div>
+        );
+      })}
+      {dosWithSeals.length > 0 && (
+        <div style={{ marginTop: seals.length ? '.9rem' : 0 }}>
+          {dosWithSeals.map((d, i) => (
+            <div key={i} style={{ fontSize: '.82rem', padding: '.3rem 0', color: 'var(--ink2)' }}>
+              <strong>DO {d.do_number}</strong>{d.delivery_date ? ' · ' + d.delivery_date : ''}: <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatSealRanges(d.seal_ranges)}</span>
+              {d.seal_qty ? <span style={{ color: 'var(--ink4)' }}> ({Number(d.seal_qty).toLocaleString()})</span> : null}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

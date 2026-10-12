@@ -158,3 +158,20 @@ export async function loadOrdersFromDB() {
 
   return orders;
 }
+
+// Seal stickers on one order: the ranges allocated to it and the DOs that
+// carried them. Both functions check inside the database that the order
+// belongs to the signed-in customer. Any failure — the functions not yet
+// installed, no signal — comes back empty, so the card simply is not drawn.
+export async function loadOrderSeals(orderNo) {
+  if (!orderNo) return { seals: [], dos: [] };
+  try {
+    const [s, d] = await Promise.all([
+      supabase.rpc('seal_order_seals', { p_order: orderNo }),
+      supabase.rpc('seal_order_dos', { p_order: orderNo }),
+    ]);
+    return { seals: (!s.error && s.data) || [], dos: (!d.error && d.data) || [] };
+  } catch {
+    return { seals: [], dos: [] };
+  }
+}

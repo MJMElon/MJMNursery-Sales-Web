@@ -1168,6 +1168,10 @@ async function viewOrder(id){
   html+='<button class="btn btn-outline btn-sm" onclick="uploadOrderAttachment(\''+id+'\')">Upload</button></div>';
   html+='<div style="font-size:10.5px;color:var(--ink4);margin-top:.3rem;">Hold Ctrl/⌘ or Shift to pick multiple files.</div></div>';
 
+  // ── Seals & DOs ── (filled by loadOrderSeals in admin-seal.js; stays
+  // hidden on an order with no seals)
+  html+='<div id="mo-seals" style="margin-bottom:1rem;display:none;"></div>';
+
   // ── Timeline ──
   html+='<div><div style="font-size:13px;font-weight:600;margin-bottom:.5rem;">Order Timeline</div>';
   html+='<div id="mo-timeline"><div style="font-size:12px;color:var(--ink4);">Loading...</div></div></div>';
@@ -1188,6 +1192,7 @@ async function viewOrder(id){
   // Load async data
   loadAttachments(id);
   loadTimeline(id);
+  if(typeof loadOrderSeals==='function')loadOrderSeals(order.order_number);
 }
 
 // ═══════════════════════════════════════

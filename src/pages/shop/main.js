@@ -20,6 +20,7 @@
 // payment-proof.html and every sessionStorage key — is verbatim.
 import { supabase as sharedSupabaseClient, SUPABASE_URL as SHOP_SB_URL, SUPABASE_ANON_KEY as SHOP_SB_KEY } from '../../lib/supabase.js';
 import { createClient as shopCreateClient } from '@supabase/supabase-js';
+import { formatSealRanges } from '../../lib/sealRanges.js';
 
 // Global mobile-menu close helper — inline onclicks in the mobile nav drawer
 // (Log In, My Account, Sign Out) call this. Defining it here, BEFORE the
@@ -1769,7 +1770,7 @@ export function initShopMain() {
             return '<div style="display:flex;justify-content:space-between;align-items:center;padding:.25rem 0;font-size:12px;border-bottom:1px solid #f0f5ec;">'+
               '<div><span style="font-weight:600;">DO #'+esc(d.do_number||'—')+'</span><span style="color:var(--text-light);margin-left:.5rem;">'+doDate+'</span></div>'+
               '<div><span style="margin-right:.5rem;">Qty: '+(parseInt(d.total_qty)||0)+'</span><span style="font-weight:600;'+doStatusCls+'">'+esc(d.status)+'</span></div>'+
-            '</div>';
+            '</div>'+_doSealsLine(d,'padding:.1rem 0 .25rem;');
           }).join('')+
         '</div>':'')+
       // Documents listed only inside the per-order modal (under
@@ -1928,6 +1929,14 @@ export function initShopMain() {
   }
 
   function _odLabel(label,val){return'<div style="color:var(--text-light);font-size:11px;">'+label+'</div><div style="font-weight:600;font-size:12px;">'+esc(val||'—')+'</div>';}
+  // Seal numbers the FC Portal printed on a DO (shared_do_records.seal_ranges,
+  // [{start,end,qty}]). Older DOs and DOs with no seals carry none, and
+  // then nothing is drawn.
+  function _doSealsLine(d,style){
+    var rs=Array.isArray(d&&d.seal_ranges)?d.seal_ranges:[];
+    if(!rs.length)return'';
+    return '<div style="font-size:11px;color:var(--text-mid);'+(style||'')+'">Seals: <strong style="font-variant-numeric:tabular-nums;">'+esc(formatSealRanges(rs))+'</strong>'+(d.seal_qty?' ('+(parseInt(d.seal_qty)||0).toLocaleString()+')':'')+'</div>';
+  }
   function _odSection(title){return'<div style="font-size:10px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin:1rem 0 .5rem;padding-bottom:.3rem;border-bottom:1px solid var(--green-pale);">'+title+'</div>';}
 
   // Cached portal-wide settings — booking URL for the collection CTA in the
@@ -2770,6 +2779,7 @@ export function initShopMain() {
             }
             h+='</div>';
           }
+          h+=_doSealsLine(d,'margin-top:.2rem;');
           if(d.image_url&&!String(d.image_url).startsWith('data:')){
             var doUrl  = String(d.image_url).replace(/'/g,'%27');
             var doName = String('DO-'+(d.do_number||'')+'.pdf').replace(/'/g,'\\\'');

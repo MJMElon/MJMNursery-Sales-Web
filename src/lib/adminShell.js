@@ -85,7 +85,7 @@ export async function checkAdmin(){
 
 // Set of tabs that exist in the salesweb admin. Update both sides if you
 // add a new tab — the sidebar id pattern is sb-<key>-item.
-var SALESWEB_TAB_KEYS = ['orders','reports','customers','products','payments','messages','promos','coupons','webdesign','settings','users'];
+var SALESWEB_TAB_KEYS = ['orders','reports','customers','products','payments','messages','seal','promos','coupons','webdesign','settings','users'];
 
 export function canSeeTab(key){
   if (key === 'users') return !!window.__SW_IS_ADMIN__;     // User Access is admin-locked
@@ -137,6 +137,7 @@ export function switchTab(tab,el){
   if(el)el.classList.add('active');
   if(tab==='orders')window.loadOrders();
   if(tab==='messages')window.loadMessages();
+  if(tab==='seal')window.loadSeals();
   if(tab==='reports')window.loadReports();
   if(tab==='customers')window.loadCustomers();
   if(tab==='products')window.loadProducts();
@@ -525,17 +526,18 @@ Object.assign(window, {
 // public/ (still frozen in legacy_urls.txt, still minified by
 // scripts/clean_static.mjs) until each is migrated in its own PR.
 var MODULE_SRCS = [
-  '/admin-orders.js?v=2026-09-25-autorel-log',
+  '/admin-orders.js?v=2026-10-12-seals',
   '/admin-reports.js?v=2026-06-15-charts',
   '/admin-customers.js?v=2026-08-13-points-ledger',
   '/admin-products.js?v=2026-09-29-invhist-collapse',
   '/admin-payments.js?v=2026-09-09-hide-deleted',
   '/admin-quotations.js?v=2026-09-25-handle-only-drag',
-  '/admin-users.js?v=2026-10-12-messages-order',
+  '/admin-users.js?v=2026-10-12-seal-tab',
   '/admin-promotions.js?v=2026-05-18-points-ledger',
   '/admin-coupons.js?v=2026-05-28-coupon-groups',
   '/admin-web-design.js?v=2026-05-20-port-from-umbrella',
   '/admin-messages.js?v=2026-10-13-name-only',
+  '/admin-seal.js?v=1',
 ];
 
 function loadClassicScript(src){

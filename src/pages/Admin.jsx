@@ -69,6 +69,10 @@ export default function Admin() {
                     <span>Messages</span>
                     <span className="sb-count" id="sb-messages-count" style={{ display: 'none' }} title="New messages not yet handled">0</span>
                     </div>
+                  <div className="sb-item" id="sb-seal-item" onClick={(e) => { switchTab('seal',e.currentTarget); }}>
+                    <span className="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" /><line x1="7" y1="7" x2="7.01" y2="7" /></svg></span>
+                    <span>Seal Management</span>
+                    </div>
                   <div className="sb-item" id="sb-promos-item" onClick={(e) => { switchTab('promos',e.currentTarget); }}>
                     <span className="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 12 20 22 4 22 4 12" /><rect x="2" y="7" width="20" height="5" /><line x1="12" y1="22" x2="12" y2="7" /><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z" /><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" /></svg></span>
                     <span>Promotions</span>
@@ -279,6 +283,25 @@ export default function Admin() {
                       </div>
                     <div id="messages-count" style={{ display: 'flex', justifyContent: 'flex-end', fontSize: '12px', color: 'var(--ink3)', marginBottom: '.4rem' }} />
                     <div id="messages-table"><div className="loading">Loading messages...</div></div>
+                    </div>
+                  </div>
+                {/* SEAL — seal stickers by range and state (public/admin-seal.js) */}
+                <div className="tab-content" id="tab-seal">
+                  <div className="main-header"><div className="main-title">Seal Management</div><button className="btn btn-outline" onClick={(e) => { window.loadSeals(); }}>↻ Refresh</button></div>
+                  <div className="stats-grid" id="seal-stats" />
+                  <div className="card">
+                    <div className="filter-bar">
+                      <input className="filter-input" id="seal-search" placeholder="Search seal number, customer, AL, DO..." onInput={(e) => { window.sealSearchChanged(); }} />
+                      </div>
+                    <div className="filter-bar" style={{ marginTop: '-.3rem' }}>
+                      <button className="filter-chip active" data-seal-status="" onClick={(e) => { window.setSealStatus(''); }}>All</button>
+                      <button className="filter-chip" data-seal-status="in_stock" onClick={(e) => { window.setSealStatus('in_stock'); }}>In stock <span className="chip-count" id="seal-count-in_stock"></span></button>
+                      <button className="filter-chip" data-seal-status="pending" onClick={(e) => { window.setSealStatus('pending'); }}>Pending collection <span className="chip-count" id="seal-count-pending" data-color="amber"></span></button>
+                      <button className="filter-chip" data-seal-status="scanned" onClick={(e) => { window.setSealStatus('scanned'); }}>Scanned <span className="chip-count" id="seal-count-scanned" data-color="blue"></span></button>
+                      <button className="filter-chip" data-seal-status="collected" onClick={(e) => { window.setSealStatus('collected'); }}>Collected <span className="chip-count" id="seal-count-collected"></span></button>
+                      </div>
+                    <div id="seal-count" style={{ display: 'flex', justifyContent: 'flex-end', fontSize: '12px', color: 'var(--ink3)', marginBottom: '.4rem' }} />
+                    <div id="seal-table"><div className="loading">Loading seals...</div></div>
                     </div>
                   </div>
                 {/* REPORTS */}

@@ -8,6 +8,10 @@
 --    they sent as a guest to their account, from My Account, Messages,
 --    Add a Case. It needs the reference and the phone number used.
 --
+-- Permissions are read with ::jsonb so the list works whether the profile
+-- column is json or jsonb. Without it a json column made the list fail,
+-- and the admin page showed an empty dropdown with no reason given.
+--
 -- 2. Assigned To lists the portal users who may handle messages. That
 --    is every salesweb admin, and every normal user with Messages ticked
 --    in User Access (or with no pages set at all, which has always meant
@@ -123,12 +127,12 @@ BEGIN
   RETURN QUERY
   WITH staff AS (
     SELECT p.id,
-           COALESCE(NULLIF(p.full_name, ''), p.email, 'Staff') AS nm,
-           p.email AS em,
-           p.phone AS profile_phone,
-           COALESCE(p.permissions -> 'modules' ->> 'salesweb',
-                    CASE WHEN p.role = 'admin' THEN 'admin' ELSE 'none' END) AS lvl,
-           COALESCE(a.tabs, p.permissions -> 'salesweb_tabs') AS saved
+           COALESCE(NULLIF(p.full_name::TEXT, ''), p.email::TEXT, 'Staff') AS nm,
+           p.email::TEXT AS em,
+           p.phone::TEXT AS profile_phone,
+           COALESCE(p.permissions::jsonb -> 'modules' ->> 'salesweb',
+                    CASE WHEN p.role::TEXT = 'admin' THEN 'admin' ELSE 'none' END) AS lvl,
+           COALESCE(a.tabs::jsonb, p.permissions::jsonb -> 'salesweb_tabs') AS saved
       FROM public.shared_profiles p
       LEFT JOIN public.salesweb_user_tab_access a ON a.user_id = p.id
   )
@@ -202,9 +206,10 @@ CREATE TRIGGER salesweb_messages_track_trg
 NOTIFY pgrst, 'reload schema';
 
 -- ── Repair and check ───────────────────────────────────────────
--- Five rows. The first three should read ok. The fourth says how many
--- portal users can be picked in Assigned To and how many of them have
--- no profile phone (type one on the Messages tab Settings). The fifth
+-- Five rows. The first three should read ok. The fourth lists, by name,
+-- the portal users Assigned To will offer, with the WhatsApp number each
+-- will be offered with, or no phone (type one on the Messages tab
+-- Settings). NOBODY there means no user has Messages access. The fifth
 -- lists the references unlinked from a staff account (your own test
 -- messages), or none. Run it again and the fifth row reads none.
 WITH unlinked AS (
@@ -212,8 +217,8 @@ WITH unlinked AS (
      SET user_id = NULL
     FROM public.shared_profiles p
    WHERE p.id = m.user_id
-     AND (p.role = 'admin'
-          OR COALESCE(p.permissions -> 'modules' ->> 'salesweb', 'none') IN ('admin', 'normal'))
+     AND (p.role::TEXT = 'admin'
+          OR COALESCE(p.permissions::jsonb -> 'modules' ->> 'salesweb', 'none') IN ('admin', 'normal'))
   RETURNING m.ref
 )
 SELECT 'add a case function' AS item,
@@ -229,15 +234,20 @@ SELECT 'assigned to column',
   FROM information_schema.columns
  WHERE table_schema = 'public' AND table_name = 'salesweb_messages' AND column_name = 'assigned_user_id'
 UNION ALL
-SELECT 'portal users in Assigned To',
-       count(*) || ' users, ' || count(*) FILTER (WHERE NULLIF(p.phone, '') IS NULL) || ' with no profile phone'
-  FROM public.shared_profiles p
-  LEFT JOIN public.salesweb_user_tab_access a ON a.user_id = p.id
- WHERE COALESCE(p.permissions -> 'modules' ->> 'salesweb', CASE WHEN p.role = 'admin' THEN 'admin' ELSE 'none' END) = 'admin'
-    OR (COALESCE(p.permissions -> 'modules' ->> 'salesweb', 'none') = 'normal'
-        AND (COALESCE(a.tabs, p.permissions -> 'salesweb_tabs') IS NULL
-             OR jsonb_typeof(COALESCE(a.tabs, p.permissions -> 'salesweb_tabs')) <> 'object'
-             OR COALESCE(a.tabs, p.permissions -> 'salesweb_tabs') ->> 'messages' = 'true'))
+SELECT 'Assigned To will list',
+       COALESCE(string_agg(nm || CASE WHEN ph IS NULL THEN ' (no phone)' ELSE ' (' || ph || ')' END, ', ' ORDER BY nm), 'NOBODY')
+  FROM (
+    SELECT COALESCE(NULLIF(p.full_name::TEXT, ''), p.email::TEXT, 'Staff') AS nm,
+           COALESCE(NULLIF(sp.phone, ''), NULLIF(p.phone::TEXT, '')) AS ph,
+           COALESCE(p.permissions::jsonb -> 'modules' ->> 'salesweb',
+                    CASE WHEN p.role::TEXT = 'admin' THEN 'admin' ELSE 'none' END) AS lvl,
+           COALESCE(a.tabs::jsonb, p.permissions::jsonb -> 'salesweb_tabs') AS saved
+      FROM public.shared_profiles p
+      LEFT JOIN public.salesweb_user_tab_access a ON a.user_id = p.id
+      LEFT JOIN public.salesweb_message_staff_phone sp ON sp.user_id = p.id
+  ) x
+ WHERE lvl = 'admin'
+    OR (lvl = 'normal' AND (saved IS NULL OR jsonb_typeof(saved) <> 'object' OR saved ->> 'messages' = 'true'))
 UNION ALL
 SELECT 'unlinked from a staff account',
        COALESCE((SELECT string_agg(ref, ', ' ORDER BY ref) FROM unlinked), 'none');

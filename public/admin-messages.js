@@ -289,7 +289,8 @@ async function renderMessageDetail() {
 
         '<div class="msg-section-title">Assigned To</div>' +
         '<select class="form-input" id="mmsg-handler">' + handlerOpts + '</select>' +
-        (MSG_HANDLERS.length ? '' : '<div style="font-size:11px;color:var(--ink4);margin-top:.3rem;">Nobody has Messages access yet. Tick <strong>Messages</strong> for a user in User Access → Edit Pages.</div>') +
+        (MSG_HANDLERS_ERR ? '<div style="font-size:11px;color:var(--red);margin-top:.3rem;">Could not load the list of staff: ' + esc(MSG_HANDLERS_ERR) + '</div>'
+          : MSG_HANDLERS.length ? '' : '<div style="font-size:11px;color:var(--ink4);margin-top:.3rem;">Nobody has Messages access yet. Tick <strong>Messages</strong> for a user in User Access → Edit Pages.</div>') +
         '<label style="display:flex;gap:.4rem;align-items:center;font-size:12px;margin-top:.5rem;"><input type="checkbox" id="mmsg-notify" checked> Tell the customer on WhatsApp who will handle it</label>' +
         '<button class="btn btn-primary btn-sm" style="margin-top:.5rem;width:100%;" onclick="assignMessage()">Save Assignment</button>' +
         waLine +
@@ -480,9 +481,14 @@ async function setMessageOrder(orderNumber) {
 }
 
 // ── Settings: notification emails + WhatsApp numbers ───────────────
+// A failure here must SAY so: an empty Assigned To list looks exactly
+// like "nobody has Messages access", which sends people to the wrong fix.
+var MSG_HANDLERS_ERR = '';
 async function loadMessageHandlers() {
   var r = await sb.rpc('salesweb_message_assignees');
   MSG_HANDLERS = r.data || [];
+  MSG_HANDLERS_ERR = r.error ? (r.error.message || String(r.error)) : '';
+  if (r.error) console.error('salesweb_message_assignees:', r.error);
 }
 
 async function openMessageSettings() {
@@ -512,7 +518,7 @@ async function renderMessageSettings() {
       return '<div class="msg-set-row msg-staff-row"><span><strong>' + esc(h.name) + '</strong><span style="font-size:11px;color:var(--ink4);"> · ' + esc(h.level) + (h.phone_source && src[h.phone_source] ? ' · ' + src[h.phone_source] : '') + '</span></span>' +
         '<span style="display:flex;gap:.3rem;"><input class="form-input" id="mms-ph-' + h.user_id + '" type="tel" value="' + esc(h.phone || '') + '" placeholder="WhatsApp number" style="width:150px;padding:5px 8px;font-size:12px;' + (h.phone ? '' : 'border-color:var(--amber);') + '">' +
         '<button class="btn btn-outline btn-sm" onclick="saveStaffPhone(\'' + h.user_id + '\')">Save</button></span></div>';
-    }).join('') : '<div style="font-size:12px;color:var(--ink4);padding:.4rem 0;">Nobody has Messages access yet.</div>');
+    }).join('') : (MSG_HANDLERS_ERR ? '<div style="font-size:12px;color:var(--red);padding:.4rem 0;">Could not load the list of staff: ' + esc(MSG_HANDLERS_ERR) + '</div>' : '<div style="font-size:12px;color:var(--ink4);padding:.4rem 0;">Nobody has Messages access yet.</div>'));
 }
 
 async function addNotifyEmail() {

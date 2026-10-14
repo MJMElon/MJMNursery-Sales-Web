@@ -515,14 +515,38 @@ async function openPaymentDetail(orderId){
   body.innerHTML = '<div class="loading">Loading…</div>';
   body.setAttribute('data-order-id', orderId);
 
-  var [{data: order}, {data: items}, {data: attachments}, {data: timeline}, {data: bills}, {data: payments}] = await Promise.all([
+  // Credit bills + the per-order payment ledger are gated by RLS that
+  // admin profiles don't always satisfy directly, so direct SELECTs can
+  // come back empty even though the rows exist. admin-orders.js already
+  // routes through the SECURITY DEFINER RPCs list_credit_bills /
+  // list_order_payments for that reason — do the same here so Payment
+  // Review and Order View always see the same bill-paid state and the
+  // same per-bill payment entries. Fall back to direct SELECT for
+  // Supabase instances that haven't run order_read_rpcs.sql yet.
+  var [{data: order}, {data: items}, {data: attachments}, {data: timeline}] = await Promise.all([
     sb.from('salesweb_customer_orders').select('*').eq('id', orderId).single(),
     sb.from('salesweb_order_items').select('*').eq('order_id', orderId),
     sb.from('salesweb_order_attachments').select('*').eq('order_id', orderId).order('created_at', {ascending: false}),
-    sb.from('salesweb_order_timeline').select('*').eq('order_id', orderId).order('created_at', {ascending: false}),
-    sb.from('salesweb_credit_bills').select('*').eq('order_id', orderId).order('bill_date', {ascending: true}),
-    sb.from('salesweb_order_payments').select('*').eq('order_id', orderId)
+    sb.from('salesweb_order_timeline').select('*').eq('order_id', orderId).order('created_at', {ascending: false})
   ]);
+
+  var bills = [];
+  var rpcBills = await sb.rpc('list_credit_bills', { p_order_id: orderId });
+  if (!rpcBills.error) {
+    bills = rpcBills.data || [];
+  } else {
+    var r = await sb.from('salesweb_credit_bills').select('*').eq('order_id', orderId).order('bill_date', {ascending: true});
+    bills = r.data || [];
+  }
+
+  var payments = [];
+  var rpcPays = await sb.rpc('list_order_payments', { p_order_id: orderId });
+  if (!rpcPays.error) {
+    payments = rpcPays.data || [];
+  } else {
+    var r2 = await sb.from('salesweb_order_payments').select('*').eq('order_id', orderId);
+    payments = r2.data || [];
+  }
 
   if (!order){ body.innerHTML = '<div class="loading">Order not found.</div>'; return; }
 

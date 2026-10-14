@@ -7,13 +7,16 @@
 -- with an EMAIL CODE from the Sign In tab, rather than Sign Up, created a
 -- brand new login with no customer tag on it. The office trigger
 -- handle_new_user() files an untagged login as user_type = system, which is
--- staff, with no name and no role. So the customer could order, opened fine
+-- staff, with no name. The role column then reads customer (the first
+-- run of this file missed exactly that shape), but the list drops any
+-- user_type = system row whatever its role says. So the customer could order, opened fine
 -- from Manage Orders (where Role falls back to the word customer), and was
 -- nowhere on the Customer List. The shop now tags every code login.
 --
 -- THE RULE
 -- An account is moved onto the list when ALL of these hold
---   - it is not on the list now (user_type is not customer, role is empty)
+--   - it is not on the list now (user_type is not customer, role is empty
+--     or customer)
 --   - it has no office access (no manage_users, no can_verify_operation, no
 --     module set to a staff level)
 --   - it has at least one Sales Web order that was not deleted
@@ -48,7 +51,7 @@ WITH snap AS (
            WHERE o.customer_id = p.id AND o.deleted_at IS NULL) AS orders
   FROM public.shared_profiles p
   WHERE COALESCE(p.user_type, 'system') <> 'customer'
-    AND COALESCE(p.role, '') = ''
+    AND COALESCE(p.role, '') IN ('', 'customer')
 ),
 moved AS (
   UPDATE public.shared_profiles p

@@ -20,7 +20,7 @@
 // payment-proof.html and every sessionStorage key — is verbatim.
 import { supabase as sharedSupabaseClient, SUPABASE_URL as SHOP_SB_URL, SUPABASE_ANON_KEY as SHOP_SB_KEY } from '../../lib/supabase.js';
 import { createClient as shopCreateClient } from '@supabase/supabase-js';
-import { formatSealRanges } from '../../lib/sealRanges.js';
+import { formatSealRanges, SHOW_SEALS_ON_DO } from '../../lib/sealRanges.js';
 
 // Global mobile-menu close helper — inline onclicks in the mobile nav drawer
 // (Log In, My Account, Sign Out) call this. Defining it here, BEFORE the
@@ -1933,7 +1933,7 @@ export function initShopMain() {
   // [{start,end,qty}]). Older DOs and DOs with no seals carry none, and
   // then nothing is drawn.
   function _doSealsLine(d,style){
-    var rs=Array.isArray(d&&d.seal_ranges)?d.seal_ranges:[];
+    var rs=SHOW_SEALS_ON_DO&&Array.isArray(d&&d.seal_ranges)?d.seal_ranges:[];
     if(!rs.length)return'';
     return '<div style="font-size:11px;color:var(--text-mid);'+(style||'')+'">Seals: <strong style="font-variant-numeric:tabular-nums;">'+esc(formatSealRanges(rs))+'</strong>'+(d.seal_qty?' ('+(parseInt(d.seal_qty)||0).toLocaleString()+')':'')+'</div>';
   }

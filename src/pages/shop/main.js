@@ -3673,13 +3673,20 @@ export function initShopMain() {
     var origLabel = clickedBtn ? clickedBtn.textContent : '';
     if (clickedBtn) clickedBtn.textContent = 'Sending...';
 
+    // user_type:'customer' goes on EVERY code request, not only Sign Up.
+    // A code sent from the Sign In tab to an address with no login creates
+    // one, and without the tag the office trigger (handle_new_user) files
+    // it as user_type='system' -- staff -- so the customer could order but
+    // never appeared in the admin Customer List. Supabase only applies this
+    // metadata when it CREATES a login, so an existing account, staff or
+    // customer, is never changed by it.
+    var meta = { user_type: 'customer' };
+    if (clIsSignUp && signupName) meta.full_name = signupName;
     var opts;
     if (isPhone) {
-      opts = { phone: identity, options: { channel: channel } };
-      if (clIsSignUp && signupName) opts.options.data = { full_name: signupName, user_type: 'customer' };
+      opts = { phone: identity, options: { channel: channel, data: meta } };
     } else {
-      opts = { email: identity };
-      if (clIsSignUp && signupName) opts.options = { data: { full_name: signupName, user_type: 'customer' } };
+      opts = { email: identity, options: { data: meta } };
     }
 
     var { error } = await _sb.auth.signInWithOtp(opts);

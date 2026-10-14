@@ -140,7 +140,12 @@ export default function Auth() {
 
     setOtpBtn({ disabled: true, label: 'Sending...' });
 
-    const opts = inputTypeRef.current === 'phone' ? { phone: id } : { email: id };
+    // Tag the login as a customer: if this address has no login yet, the
+    // code creates one, and untagged the office trigger files it as staff
+    // (user_type='system'), off the admin Customer List. Supabase only
+    // applies this metadata on CREATE, so existing accounts are untouched.
+    const options = { data: { user_type: 'customer' } };
+    const opts = inputTypeRef.current === 'phone' ? { phone: id, options } : { email: id, options };
     const { error } = await supabase.auth.signInWithOtp(opts);
 
     if (error) {

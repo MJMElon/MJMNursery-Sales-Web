@@ -1752,7 +1752,7 @@ export function initShopMain() {
 
     return '<div class="p-order" style="cursor:pointer;" onclick="openOrderDetail(\''+idJs+'\')">'+
       '<div class="p-order-head">'+
-        '<div><div class="p-order-id">#'+esc(o.id)+'</div><div class="p-order-date">Ordered '+esc(o.orderDate)+'</div></div>'+
+        '<div><div class="p-order-id" onmousedown="event.stopPropagation();" onclick="event.stopPropagation();" title="Click to copy or highlight the order number">#'+esc(o.id)+'</div><div class="p-order-date">Ordered '+esc(o.orderDate)+'</div></div>'+
         '<span class="p-badge '+pBadge(o.status)+'">'+esc(o.status)+'</span>'+
       '</div>'+
       '<div class="p-order-body">'+
@@ -2995,11 +2995,11 @@ export function initShopMain() {
 
     var docTitle, docNo, docDate, partyHeading, totalLabel, winTitle;
     if(kind==='proforma'){
-      docTitle='PROFORMA INVOICE';  docNo='PI No: MJMPI/#'+esc(o.id);
+      docTitle='PROFORMA INVOICE';  docNo='Proforma Invoice Number: MJMPI/'+esc(o.id);
       docDate=fmtDate(o.createdAt); partyHeading='BILLING DETAILS';
       totalLabel='Total';           winTitle='Proforma Invoice MJMPI-'+o.id;
     } else if(kind==='receipt'){
-      docTitle='RECEIPT';           docNo='Receipt No: MJMRC/#'+esc(o.id);
+      docTitle='RECEIPT';           docNo='Receipt No: MJMRC/'+esc(o.id);
       docDate=fmtDate(o.amountPaidAt||o.createdAt); partyHeading='RECEIVED FROM';
       totalLabel='Amount Paid';     winTitle='Receipt MJMRC-'+o.id;
     } else {
@@ -3094,11 +3094,11 @@ export function initShopMain() {
 
     var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+esc(winTitle)+'</title>'+
       '<style>'+
-        'body{font-family:Georgia,"Times New Roman",serif;color:#1A2E1B;max-width:700px;margin:26px auto;padding:0 24px;line-height:1.45;}'+
+        'body{font-family:Arial,Helvetica,sans-serif;color:#1A2E1B;max-width:700px;margin:26px auto;padding:0 24px;line-height:1.45;}'+
         '.co-name{font-size:20px;font-weight:700;}'+
         '.co-reg{font-size:12px;font-weight:700;margin:1px 0 4px;}'+
         '.co-line{font-size:10.5px;color:#444;}'+
-        '.doc-title{font-family:Georgia,serif;font-size:23px;font-weight:700;color:#38684A;letter-spacing:.5px;}'+
+        '.doc-title{font-family:Arial,Helvetica,sans-serif;font-size:23px;font-weight:700;color:#38684A;letter-spacing:.5px;}'+
         '.doc-meta{font-size:12px;font-weight:600;margin-top:3px;}'+
         '.sect{font-size:11.5px;font-weight:700;color:#38684A;letter-spacing:.05em;margin:28px 0 4px;}'+
         '.prow{display:flex;justify-content:space-between;gap:16px;padding:7px 2px;border-bottom:1px solid #DDD;font-size:13px;}'+
@@ -3151,12 +3151,12 @@ export function initShopMain() {
       payBox +
 
       '<div class="foot">This document is computer generated and does not require a signature.</div>'+
-      '<div class="no-print" style="text-align:center;margin-top:24px;"><button onclick="window.print()" style="padding:10px 22px;background:#2D4A30;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">Print / Save as PDF</button></div>'+
+      '<div class="no-print" style="text-align:center;margin-top:24px;"><button onclick="window.print()" style="padding:10px 22px;background:#2D4A30;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">Save &amp; Print</button></div>'+
       '</body></html>';
 
     // Opens in a new tab (no window-features string) and does NOT auto-print
     // — the customer reads the document first and uses the on-page
-    // "Print / Save as PDF" button when they actually want a copy.
+    // "Save & Print" button when they actually want a copy.
     var w = window.open('','_blank');
     if(!w){ showPortalToast('Please allow pop-ups to download the document'); return; }
     w.document.open();

@@ -2885,15 +2885,18 @@ export function initShopMain() {
 
     var steps=[];
     if(stampCancelled){
-      steps.push({label:'Order Placed',note:'Order placed by customer',date:stampPlaced,done:true});
+      steps.push({label:'Order Placed',note:'',date:stampPlaced,done:true});
       steps.push({label:'Order Cancelled',note:'This order was cancelled',date:stampCancelled,done:true,isCancelled:true});
     } else {
-      steps.push({label:'Order Placed',note:'Order placed by customer',date:stampPlaced,done:true});
+      steps.push({label:'Order Placed',note:'',date:stampPlaced,done:true});
       if(!isPaidOrBeyond){
         // Not yet paid — the only next action is to complete payment.
         steps.push({label:'Awaiting Payment',note:'Complete your payment to confirm this order.',done:false});
       } else {
-        steps.push({label:'Payment Confirmed',note:o.paymentMethod||'Payment received',date:stampPaid,done:true});
+        // Dropped the "Offline / Online Payment Method" subtitle — the
+        // step label is self-explanatory and the method is already
+        // visible in the Payment row of Billing Details.
+        steps.push({label:'Payment Confirmed',note:'',date:stampPaid,done:true});
         if(stampPoints || pointsCount>0){
           var pNote = pointsCount>0 ? (pointsCount+' loyalty points credited') : 'Loyalty points credited';
           steps.push({label:'Points Issued',note:pNote,date:stampPoints,done:true});

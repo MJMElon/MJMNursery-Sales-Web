@@ -1169,8 +1169,18 @@
   .p-claim-row input{padding:.55rem .75rem;border:1.5px solid var(--green-pale);border-radius:8px;font-size:12.5px;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-dark);outline:none;min-width:0;}
   .p-claim-row input:focus{border-color:var(--green-mid);}
   
-  .p-badge{font-size:10px;font-weight:700;padding:.2rem .6rem;border-radius:20px;letter-spacing:.04em;text-transform:uppercase;}
-  .p-badge-green{background:#e8f7ee;color:#15803d;}.p-badge-amber{background:#fef3c7;color:#92400e;}.p-badge-teal{background:#f0fdfa;color:#0d9488;}.p-badge-orange{background:#fff7ed;color:#c2410c;}.p-badge-grey{background:#f3f4f6;color:#4b5563;}
+  /* Status badge — bumped up so the current state of an order is the
+     first thing the eye lands on in the card. Larger type, tighter
+     letter-spacing-less tracking, a subtle border matching the fill
+     tone, and a soft shadow give it the weight of a chip, not a
+     throwaway label. The per-colour variants carry a matching border
+     derived from the fill palette. */
+  .p-badge{font-size:12px;font-weight:800;padding:.4rem 1rem;border-radius:999px;letter-spacing:.06em;text-transform:uppercase;border:1.5px solid transparent;box-shadow:0 1px 2px rgba(0,0,0,.05);display:inline-block;line-height:1.1;}
+  .p-badge-green{background:#dcfce7;color:#15803d;border-color:#86efac;}
+  .p-badge-amber{background:#fef3c7;color:#92400e;border-color:#fcd34d;}
+  .p-badge-teal{background:#ccfbf1;color:#0d9488;border-color:#5eead4;}
+  .p-badge-orange{background:#ffedd5;color:#c2410c;border-color:#fdba74;}
+  .p-badge-grey{background:#e5e7eb;color:#374151;border-color:#9ca3af;}
   .p-order-body{padding:.8rem 1.2rem;}
   /* Small-cap label used for every section header inside the card
      (Billing Name, Items) — one shared style instead of inlining two

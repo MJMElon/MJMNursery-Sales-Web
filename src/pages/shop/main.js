@@ -2585,7 +2585,7 @@ export function initShopMain() {
                 : dlKind==='receipt'  ? '🧾 Receipt'
                 : '📄 Download Order';
     h+='<div style="background:var(--cream);border-radius:12px;padding:1rem;margin-bottom:.8rem;">';
-    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;"><span style="font-family:\'Cormorant Garamond\',serif;font-size:1.1rem;font-weight:600;">Order #'+o.id+'</span><span class="p-badge '+pBadge(o.status)+'" style="font-size:11px;">'+o.status+'</span></div>';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;"><span style="font-family:\'DM Sans\',sans-serif;font-size:1.1rem;font-weight:700;letter-spacing:.02em;color:var(--text-dark);">Order #'+o.id+'</span><span class="p-badge '+pBadge(o.status)+'" style="font-size:11px;">'+o.status+'</span></div>';
     h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;">';
     h+='<div style="font-size:12px;color:var(--text-mid);">'+o.orderDate+'</div>';
     h+='<button onclick="downloadOrder(\''+idJsDl+'\')" style="background:#fff;border:1.5px solid var(--green-pale);color:var(--green-dark);padding:.35rem .75rem;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:.3rem;transition:all .15s;" onmouseover="this.style.background=\'var(--green-dark)\';this.style.color=\'#fff\';this.style.borderColor=\'var(--green-dark)\';" onmouseout="this.style.background=\'#fff\';this.style.color=\'var(--green-dark)\';this.style.borderColor=\'var(--green-pale)\';">'+dlLabel+'</button>';

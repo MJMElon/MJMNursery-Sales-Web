@@ -2104,6 +2104,34 @@ async function deleteAttachment(attId,orderId){
   var{error:dbErr} = await sb.from('salesweb_order_attachments').delete().eq('id',attId);
   if(dbErr){ toast('DB delete failed: '+dbErr.message,'error'); return; }
 
+  // 4. If this attachment WAS the order's E-Invoice (mirrored into
+  //    salesweb_order_attachments by uploadEInvoiceFromPayments or
+  //    uploaded directly as a document), the einvoice_url column on
+  //    the order still points at the now-deleted file — and the
+  //    customer portal reads from THAT column, so they'd keep seeing
+  //    "✓ E-Invoice issued" indefinitely. Clear the three einvoice
+  //    columns when the deleted file matches the recorded E-Invoice
+  //    URL (compare normalised to ignore query-string / fragment).
+  try{
+    var{data:ord} = await sb.from('salesweb_customer_orders')
+      .select('einvoice_url').eq('id',orderId).maybeSingle();
+    var deletedUrl = String(row.file_url||'').split('?')[0];
+    var einvUrl    = String((ord && ord.einvoice_url) || '').split('?')[0];
+    if(deletedUrl && einvUrl && deletedUrl === einvUrl){
+      await sb.from('salesweb_customer_orders').update({
+        einvoice_url:         null,
+        einvoice_name:        null,
+        einvoice_uploaded_at: null,
+        updated_at:           new Date().toISOString(),
+      }).eq('id',orderId);
+      toast('Attachment + E-Invoice reference deleted');
+      loadAttachments(orderId);
+      // Rerender so the E-Invoice strip flips back to the pre-upload state.
+      viewOrder(orderId);
+      return;
+    }
+  }catch(e){ /* non-fatal — primary delete already succeeded */ }
+
   toast('Attachment deleted');
   loadAttachments(orderId);
 }

@@ -1366,13 +1366,39 @@ export function initShopMain() {
   // full string for back-office cross-reference.
   function stripMonth(name){ return String(name||'').replace(/\s+—\s+.*$/, '').trim(); }
 
+  // Customer-facing status label — the admin side carries a longer
+  // vocabulary ("Pending Payment", "Ready for Collection", …) that
+  // reflects the full order lifecycle; the storefront collapses that
+  // down to one of six short words so the customer sees a chip they
+  // can scan in a second. Keep in sync with pBadge() below.
+  function pStatusLabel(s){
+    return {
+      'Pending Payment':'UNPAID',
+      'Partially Paid':'UNPAID',
+      'Paid':'PAID',
+      'Ready for Collection':'READY',
+      'Ready-to-Collect':'READY',
+      'Completed':'COMPLETED',
+      'Order Completed':'COMPLETED',
+      'Cancelled':'CANCELLED',
+      'Refunded':'REFUNDED'
+    }[s] || String(s||'').toUpperCase();
+  }
   function pBadge(s){return{
-    'Paid':'p-badge-green','Order Confirmed':'p-badge-green',
+    // UNPAID → yellow (Pending Payment, Partially Paid)
     'Pending Payment':'p-badge-amber',
-    'Ready for Collection':'p-badge-teal','Ready-to-Collect':'p-badge-teal',
+    'Partially Paid':'p-badge-amber',
+    // PAID → blue, REFUNDED → blue (both "money settled" states)
+    'Paid':'p-badge-blue','Order Confirmed':'p-badge-blue',
+    'Refunded':'p-badge-blue',
+    // READY → orange
+    'Ready for Collection':'p-badge-orange','Ready-to-Collect':'p-badge-orange',
+    // Legacy admin label kept so a mid-pack order doesn't fall through
     'Collecting':'p-badge-orange',
-    'Completed':'p-badge-grey','Order Completed':'p-badge-grey',
-    'Cancelled':'p-badge-red','Refunded':'p-badge-red'
+    // COMPLETED → green
+    'Completed':'p-badge-green','Order Completed':'p-badge-green',
+    // CANCELLED → red
+    'Cancelled':'p-badge-red'
   }[s]||'p-badge-grey';}
 
   // Terminal statuses live in Order History: Completed, Cancelled, Refunded.
@@ -1763,7 +1789,7 @@ export function initShopMain() {
     // detail modal, not on the summary card.
     return '<div class="p-order">'+
       '<div class="p-order-status-strip">'+
-        '<span class="p-badge '+pBadge(o.status)+'">'+esc(o.status)+'</span>'+
+        '<span class="p-badge '+pBadge(o.status)+'">'+esc(pStatusLabel(o.status))+'</span>'+
         '<button type="button" class="p-see-details" onclick="openOrderDetail(\''+idJs+'\')">See Details ›</button>'+
       '</div>'+
       '<div class="p-order-head">'+
@@ -2586,7 +2612,7 @@ export function initShopMain() {
                 : dlKind==='receipt'  ? '🧾 Receipt'
                 : '📄 Download Order';
     h+='<div style="background:var(--cream);border-radius:12px;padding:1rem;margin-bottom:.8rem;">';
-    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;"><span style="font-family:\'DM Sans\',sans-serif;font-size:1.1rem;font-weight:700;letter-spacing:.02em;color:var(--text-dark);">Order #'+o.id+'</span><span class="p-badge '+pBadge(o.status)+'" style="font-size:11px;">'+o.status+'</span></div>';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;"><span style="font-family:\'DM Sans\',sans-serif;font-size:1.1rem;font-weight:700;letter-spacing:.02em;color:var(--text-dark);">Order #'+o.id+'</span><span class="p-badge '+pBadge(o.status)+'" style="font-size:11px;">'+pStatusLabel(o.status)+'</span></div>';
     h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;">';
     h+='<div style="font-size:12px;color:var(--text-mid);">'+o.orderDate+'</div>';
     h+='<button onclick="downloadOrder(\''+idJsDl+'\')" style="background:#fff;border:1.5px solid var(--green-pale);color:var(--green-dark);padding:.35rem .75rem;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:.3rem;transition:all .15s;" onmouseover="this.style.background=\'var(--green-dark)\';this.style.color=\'#fff\';this.style.borderColor=\'var(--green-dark)\';" onmouseout="this.style.background=\'#fff\';this.style.color=\'var(--green-dark)\';this.style.borderColor=\'var(--green-pale)\';">'+dlLabel+'</button>';

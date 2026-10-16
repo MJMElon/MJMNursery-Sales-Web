@@ -1178,8 +1178,10 @@
   .p-badge{font-size:12px;font-weight:800;padding:.4rem 1rem;border-radius:999px;letter-spacing:.06em;text-transform:uppercase;border:1.5px solid transparent;box-shadow:0 1px 2px rgba(0,0,0,.05);display:inline-block;line-height:1.1;}
   .p-badge-green{background:#dcfce7;color:#15803d;border-color:#86efac;}
   .p-badge-amber{background:#fef3c7;color:#92400e;border-color:#fcd34d;}
+  .p-badge-blue {background:#dbeafe;color:#1d4ed8;border-color:#93c5fd;}
   .p-badge-teal{background:#ccfbf1;color:#0d9488;border-color:#5eead4;}
   .p-badge-orange{background:#ffedd5;color:#c2410c;border-color:#fdba74;}
+  .p-badge-red  {background:#fee2e2;color:#b91c1c;border-color:#fca5a5;}
   .p-badge-grey{background:#e5e7eb;color:#374151;border-color:#9ca3af;}
   .p-order-body{padding:.8rem 1.2rem;}
   /* Small-cap label used for every section header inside the card

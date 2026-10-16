@@ -1726,17 +1726,18 @@ export function initShopMain() {
     var isComp=o.status==='Completed' || o.status==='Order Completed';
     var isPending=o.status==='Pending Payment';
 
-    // Items list — handle multiple items
+    // Items list — handle multiple items. Each row is now a single
+    // right-aligned line "Item name × qty", per spec. Long product
+    // names clip with ellipsis so the row stays on one line.
     var itemsHtml='';
     if(o.items&&o.items.length){
       o.items.forEach(function(it){
-        itemsHtml+='<div style="display:flex;justify-content:space-between;align-items:center;padding:.25rem 0;font-size:12px;border-bottom:1px solid #f5f5f0;">'+
-          '<span style="color:var(--text-dark);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(stripMonth(it.product_name))+'</span>'+
-          '<span style="color:var(--text-mid);white-space:nowrap;margin-left:.5rem;">x '+it.quantity.toLocaleString()+'</span>'+
+        itemsHtml+='<div style="padding:.25rem 0;font-size:12px;border-bottom:1px solid #f5f5f0;text-align:right;color:var(--text-dark);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+
+          esc(stripMonth(it.product_name))+'<span style="color:var(--text-mid);margin-left:.4rem;">× '+it.quantity.toLocaleString()+'</span>'+
         '</div>';
       });
     } else {
-      itemsHtml='<div style="font-size:12px;color:var(--text-mid);">'+esc(o.variety)+'</div>';
+      itemsHtml='<div style="font-size:12px;color:var(--text-mid);text-align:right;">'+esc(o.variety)+'</div>';
     }
 
     // Action button — fullId / id are UUIDs but escape defensively for the JS
@@ -1770,8 +1771,8 @@ export function initShopMain() {
         '<div class="p-order-date">Ordered '+esc(o.orderDate)+'</div>'+
       '</div>'+
       '<div class="p-order-body">'+
-        '<div class="p-order-row"><span class="p-order-row-l">Bill To</span><span class="p-order-row-v">'+esc(o.billingName)+'</span></div>'+
-        '<div style="padding:.4rem 0;"><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.3rem;">Items</div>'+itemsHtml+'</div>'+
+        '<div style="padding:.4rem 0;"><div class="p-field-label">Billing Name</div><div style="font-size:12px;color:var(--text-dark);text-align:right;font-weight:600;">'+esc(o.billingName)+'</div></div>'+
+        '<div style="padding:.4rem 0;"><div class="p-field-label">Items</div>'+itemsHtml+'</div>'+
       '</div>'+
       // DOs section
       (o.dos&&o.dos.length?

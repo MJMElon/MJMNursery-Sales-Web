@@ -1172,15 +1172,24 @@
   .p-badge{font-size:10px;font-weight:700;padding:.2rem .6rem;border-radius:20px;letter-spacing:.04em;text-transform:uppercase;}
   .p-badge-green{background:#e8f7ee;color:#15803d;}.p-badge-amber{background:#fef3c7;color:#92400e;}.p-badge-teal{background:#f0fdfa;color:#0d9488;}.p-badge-orange{background:#fff7ed;color:#c2410c;}.p-badge-grey{background:#f3f4f6;color:#4b5563;}
   .p-order-body{padding:.8rem 1.2rem;}
+  /* Small-cap label used for every section header inside the card
+     (Billing Name, Items) — one shared style instead of inlining two
+     slightly different copies. */
+  .p-field-label{font-size:10px;font-weight:600;color:var(--green-mid);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.3rem;}
   .p-order-row{display:flex;justify-content:space-between;padding:.25rem 0;font-size:13px;border-bottom:1px solid #f5f5f5;}
   .p-order-row:last-child{border-bottom:none;}
   .p-order-row-l{color:var(--text-light);font-weight:400;}
   .p-order-row-v{color:var(--text-mid);font-weight:600;}
-  .p-order-foot{padding:.7rem 1.2rem;background:var(--cream);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.4rem;}
+  /* Footer uses the website's deep green so it reads as a distinct
+     "action" shelf, and the total flips to the gold-cream palette for
+     legibility (black on cream was faint). */
+  .p-order-foot{padding:.7rem 1.2rem;background:var(--green-dark);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.4rem;}
   /* Match the order-number font so the summary card reads as one
      typographic unit (sans-serif DM Sans) instead of mixing a serif
      price with a sans-serif id. */
-  .p-order-total{font-family:'DM Sans',sans-serif;font-size:1.15rem;font-weight:700;letter-spacing:.01em;color:var(--text-dark);}
+  /* Total flips to the cream/gold foreground now that the footer is
+     dark green — black on green failed the readability bar. */
+  .p-order-total{font-family:'DM Sans',sans-serif;font-size:1.15rem;font-weight:700;letter-spacing:.01em;color:var(--gold-light);}
   .p-btn{background:none;border:1px solid var(--green-pale);color:var(--text-mid);border-radius:6px;padding:.3rem .7rem;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:inherit;}
   .p-btn:hover{border-color:var(--green-mid);color:var(--green-dark);}
 

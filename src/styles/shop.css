@@ -1150,15 +1150,20 @@
      clickable, but it caused accidental taps whenever a customer
      dragged to copy the order number or scrolled on a touch device,
      so the modal is now opened only via the explicit "See Details"
-     button in the header. The resting shadow stays — it still reads
-     as a distinct info panel on the pale portal background. */
+     link in the status strip above the order number. The resting
+     shadow stays — it still reads as a distinct info panel on the
+     pale portal background. */
   .p-order{background:#fff;border:1px solid #d8ddd8;border-radius:14px;overflow:hidden;margin-bottom:.8rem;box-shadow:0 1px 3px rgba(0,0,0,.04),0 1px 2px rgba(0,0,0,.03);}
-  .p-order-head{display:flex;justify-content:space-between;align-items:center;padding:.9rem 1.2rem;border-bottom:1px solid #f0f2f0;flex-wrap:wrap;gap:.4rem;}
+  /* Status strip sits above the order number: badge on the left, a
+     borderless right-aligned "See Details ›" link on the right. */
+  .p-order-status-strip{display:flex;justify-content:space-between;align-items:center;padding:.75rem 1.2rem .25rem;flex-wrap:wrap;gap:.4rem;}
+  .p-order-head{display:flex;justify-content:space-between;align-items:baseline;padding:0 1.2rem .9rem;border-bottom:1px solid #f0f2f0;flex-wrap:wrap;gap:.4rem;}
   .p-order-id{font-family:'DM Sans',sans-serif;font-size:1rem;font-weight:700;letter-spacing:.02em;color:var(--text-dark);user-select:text;cursor:text;}
-  /* "See Details" chip — the one explicit path into the order modal. */
-  .p-see-details{background:transparent;border:1px solid var(--green-dark);color:var(--green-dark);border-radius:999px;padding:.3rem .8rem;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:background .15s,color .15s;white-space:nowrap;}
-  .p-see-details:hover{background:var(--green-dark);color:#fff;}
-  .p-see-details:active{transform:scale(.97);}
+  /* Borderless "See Details ›" link — right-aligned, understated so
+     the status badge still owns the eye at the top-left. */
+  .p-see-details{background:transparent;border:none;color:var(--green-dark);padding:.1rem .2rem;font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;transition:color .15s,opacity .15s;white-space:nowrap;margin-left:auto;}
+  .p-see-details:hover{color:var(--green-mid);text-decoration:underline;}
+  .p-see-details:active{opacity:.75;}
   .p-order-date{font-size:11px;color:var(--text-light);}
   .p-claim-row{display:grid;grid-template-columns:1fr auto;gap:.5rem;}
   .p-claim-row input{padding:.55rem .75rem;border:1.5px solid var(--green-pale);border-radius:8px;font-size:12.5px;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-dark);outline:none;min-width:0;}

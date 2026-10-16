@@ -1751,21 +1751,27 @@ export function initShopMain() {
     }
 
     // The card itself is no longer clickable — only the explicit
-    // "See Details" button opens the order modal. Removes the
+    // "See Details" link opens the order modal. Removes the
     // accidental-tap problem where any drag or text-select on the card
     // dropped the customer into the modal.
+    //
+    // Layout: a top strip with the STATUS badge (left) and "See Details"
+    // link (right, borderless, right-aligned per spec); below it the
+    // order number + ordered date on their own row. The Collection
+    // line is intentionally dropped — collection state belongs in the
+    // detail modal, not on the summary card.
     return '<div class="p-order">'+
+      '<div class="p-order-status-strip">'+
+        '<span class="p-badge '+pBadge(o.status)+'">'+esc(o.status)+'</span>'+
+        '<button type="button" class="p-see-details" onclick="openOrderDetail(\''+idJs+'\')">See Details ›</button>'+
+      '</div>'+
       '<div class="p-order-head">'+
-        '<div><div class="p-order-id" title="Click to copy or highlight the order number">#'+esc(o.id)+'</div><div class="p-order-date">Ordered '+esc(o.orderDate)+'</div></div>'+
-        '<div style="display:flex;align-items:center;gap:.5rem;">'+
-          '<span class="p-badge '+pBadge(o.status)+'">'+esc(o.status)+'</span>'+
-          '<button type="button" class="p-see-details" onclick="openOrderDetail(\''+idJs+'\')">See Details ›</button>'+
-        '</div>'+
+        '<div class="p-order-id" title="Click to copy or highlight the order number">#'+esc(o.id)+'</div>'+
+        '<div class="p-order-date">Ordered '+esc(o.orderDate)+'</div>'+
       '</div>'+
       '<div class="p-order-body">'+
         '<div class="p-order-row"><span class="p-order-row-l">Bill To</span><span class="p-order-row-v">'+esc(o.billingName)+'</span></div>'+
         '<div style="padding:.4rem 0;"><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.3rem;">Items</div>'+itemsHtml+'</div>'+
-        '<div class="p-order-row"><span class="p-order-row-l">Collection</span><span class="p-order-row-v">'+esc(o.collectionStatus)+'</span></div>'+
       '</div>'+
       // DOs section
       (o.dos&&o.dos.length?

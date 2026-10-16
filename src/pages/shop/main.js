@@ -3467,7 +3467,19 @@ export function initShopMain() {
       var sign = r.change>=0 ? '+' : '−';
       var amt  = Math.abs(r.change).toLocaleString();
       var color = r.change>=0 ? 'var(--green-mid)' : '#b45309';
-      var typeLabel = r.type==='Earned' ? '⭐ Earned' : (r.type==='Redeemed' ? '🎁 Redeemed' : '✏️ Adjusted');
+      // Inline SVG sprout for Earned rows (replaces the ⭐ emoji) —
+      // same conceptual language as the rest of the brand. Strokes
+      // use currentColor so a span wrapper lets us set it to the
+      // brand green and keep the row's amount colour independent.
+      var seedlingSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;flex:none;">'+
+        '<path d="M7 20h10"/>'+
+        '<path d="M10 20c5.5-2.5.8-6.4 3-10"/>'+
+        '<path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"/>'+
+        '<path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"/>'+
+      '</svg>';
+      var typeLabel = r.type==='Earned'
+        ? '<span style="color:var(--green-mid);display:inline-flex;align-items:center;gap:.35rem;">'+seedlingSvg+'Earned</span>'
+        : (r.type==='Redeemed' ? '🎁 Redeemed' : '✏️ Adjusted');
       var orderRef = r.order_id && orderMap[r.order_id] ? '<div style="font-size:10px;color:var(--text-light);">Order '+orderMap[r.order_id]+'</div>' : '';
       return '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:.5rem 0;border-bottom:1px solid #e8ede8;font-size:12px;">'+
           '<div><div style="font-weight:600;color:var(--text-dark);">'+typeLabel+'</div>'+orderRef+

@@ -3511,7 +3511,12 @@ export function initShopMain() {
     });
     // Default to phone tab
     clSwitchMode('email');
-    // Update subtitle
+    // Update hero copy. Title resets to "Welcome" since openLoginModal
+    // always lands on the sign-in view; sign-up has its own copy
+    // ("Hello" / "Don't have an account? Sign up now!") applied by
+    // clToggleSignup when the customer flips modes.
+    var titleEl = document.getElementById('lm-title');
+    if (titleEl) titleEl.textContent = 'Welcome';
     var subEl = document.getElementById('lm-sub');
     if (subEl) subEl.textContent = context === 'checkout'
       ? 'Sign in to complete your order'
@@ -3589,6 +3594,18 @@ export function initShopMain() {
       document.getElementById('cl-signup-fields').style.display = clIsSignUp ? 'block' : 'none';
       document.getElementById('cl-btn-login').textContent = clIsSignUp ? 'Create Account' : 'Sign In';
       document.getElementById('cl-btn-toggle').textContent = clIsSignUp ? 'Back to Sign In' : 'Create Account';
+    }
+    // Flip the hero copy so the two modes read differently at a glance:
+    //   Sign In     → "Welcome" / "Sign in to your account" (or the
+    //                  checkout-flavoured subtitle if we're mid-checkout)
+    //   Create Acc. → "Hello"   / "Don't have an account? Sign up now!"
+    var titleEl = document.getElementById('lm-title');
+    var subEl   = document.getElementById('lm-sub');
+    if (titleEl) titleEl.textContent = clIsSignUp ? 'Hello' : 'Welcome';
+    if (subEl) {
+      subEl.textContent = clIsSignUp
+        ? "Don't have an account? Sign up now!"
+        : (clLoginContext === 'checkout' ? 'Sign in to complete your order' : 'Sign in to your account');
     }
   }
 

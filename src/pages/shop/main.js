@@ -3892,10 +3892,15 @@ export function initShopMain() {
   }
   function setLoggedOutUi(){
     var set = function(id, disp){ var el = document.getElementById(id); if (!el) return; el.style.display = disp; };
-    set('nav-login-link', 'inline');
+    // Login links are rendered as inline-flex so the icon + label stay
+    // on one row with the right gap — bringing them back as plain
+    // 'inline' here collapsed the layout and the SVG icon rendered
+    // double-wide, so re-show them with the same flex display they had
+    // at mount time.
+    set('nav-login-link', 'inline-flex');
     set('nav-myaccount',  'none');
     set('nav-signout',    'none');
-    set('mob-login-link', 'inline');
+    set('mob-login-link', 'inline-flex');
     set('mob-myaccount',  'none');
     set('mob-signout',    'none');
   }

@@ -2115,17 +2115,24 @@ async function deleteAttachment(attId,orderId){
   //    URL (compare normalised to ignore query-string / fragment).
   try{
     var{data:ord} = await sb.from('salesweb_customer_orders')
-      .select('einvoice_url').eq('id',orderId).maybeSingle();
+      .select('einvoice_url, einvoice_requested_at').eq('id',orderId).maybeSingle();
     var deletedUrl = String(row.file_url||'').split('?')[0];
     var einvUrl    = String((ord && ord.einvoice_url) || '').split('?')[0];
     if(deletedUrl && einvUrl && deletedUrl === einvUrl){
+      // Clear the E-Invoice reference AND restamp einvoice_requested_at
+      // (keep an existing stamp, or set now() if none) so the order
+      // re-queues in Payments > E-Invoice Requests ready for a fresh
+      // upload. Customer sees "⏳ E-Invoice requested" again, admin
+      // sees it in the Requests list.
+      var _reqAt = (ord && ord.einvoice_requested_at) || new Date().toISOString();
       await sb.from('salesweb_customer_orders').update({
-        einvoice_url:         null,
-        einvoice_name:        null,
-        einvoice_uploaded_at: null,
-        updated_at:           new Date().toISOString(),
+        einvoice_url:          null,
+        einvoice_name:         null,
+        einvoice_uploaded_at:  null,
+        einvoice_requested_at: _reqAt,
+        updated_at:            new Date().toISOString(),
       }).eq('id',orderId);
-      toast('Attachment + E-Invoice reference deleted');
+      toast('Attachment + E-Invoice removed — order re-queued in Payments > E-Invoice Requests');
       loadAttachments(orderId);
       // Rerender so the E-Invoice strip flips back to the pre-upload state.
       viewOrder(orderId);
@@ -2725,7 +2732,7 @@ async function removeEInvoice(orderId){
 
   // 1. Read the current URL so we can clean up storage + any mirrored row.
   var{data:ord, error:readErr} = await sb.from('salesweb_customer_orders')
-    .select('einvoice_url, einvoice_name').eq('id',orderId).maybeSingle();
+    .select('einvoice_url, einvoice_name, einvoice_requested_at').eq('id',orderId).maybeSingle();
   if(readErr){ toast('Lookup failed: '+readErr.message,'error'); return; }
   var url = String((ord && ord.einvoice_url) || '').split('?')[0];
 
@@ -2752,16 +2759,24 @@ async function removeEInvoice(orderId){
     }catch(e){ /* non-fatal */ }
   }
 
-  // 4. Null the three einvoice_* columns — the step the customer actually sees.
+  // 4. Null the three einvoice_* columns — the step the customer actually sees —
+  //    AND make sure einvoice_requested_at carries a value so the order
+  //    re-queues in Payments > E-Invoice Requests for a fresh upload. If
+  //    the row already had a requested-at stamp (customer explicitly
+  //    requested earlier) we keep it; if the admin uploaded without a
+  //    customer request, we stamp with now() so the request queue
+  //    doesn't lose track of this order.
+  var _reqAt = (ord && ord.einvoice_requested_at) || new Date().toISOString();
   var{error:updErr} = await sb.from('salesweb_customer_orders').update({
-    einvoice_url:         null,
-    einvoice_name:        null,
-    einvoice_uploaded_at: null,
-    updated_at:           new Date().toISOString(),
+    einvoice_url:          null,
+    einvoice_name:         null,
+    einvoice_uploaded_at:  null,
+    einvoice_requested_at: _reqAt,
+    updated_at:            new Date().toISOString(),
   }).eq('id',orderId);
   if(updErr){ toast('Reset failed: '+updErr.message,'error'); return; }
 
-  toast('E-Invoice removed');
+  toast('E-Invoice removed — order re-queued in Payments > E-Invoice Requests');
   viewOrder(orderId);
 }
 window.removeEInvoice = removeEInvoice;

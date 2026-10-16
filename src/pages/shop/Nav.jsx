@@ -42,10 +42,9 @@ export default function Nav() {
         </li>
         <li className="mobile-only-login">
           <a href="#" id="mob-login-link" onClick={(e) => { e.preventDefault(); window.closeMobileMenu(); window.openLoginModal('nav'); }} style={css('font-weight:700;color:var(--gold-light);display:inline-flex;align-items:center;gap:.4rem;')}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={css('flex:none;')}>
-              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
-              <polyline points="10 17 15 12 10 7" />
-              <line x1="15" y1="12" x2="3" y2="12" />
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={css('flex:none;')}>
+              <circle cx="12" cy="8" r="4.2" />
+              <path d="M4 20.4c0-4 3.6-6.4 8-6.4s8 2.4 8 6.4V22H4v-1.6z" />
             </svg>
             Log In
           </a>
@@ -55,14 +54,13 @@ export default function Nav() {
       </ul>
       <div className="nav-actions">
         <a onClick={() => window.openLoginModal('nav')} id="nav-login-link" style={css('cursor:pointer;display:inline-flex;align-items:center;gap:.4rem;color:#fff;')}>
-          {/* Classic log-in glyph: door frame on the right with an
-              arrow entering from the left. Universally recognized and
-              stays legible at 18px next to the LOG IN label. currentColor
-              keeps it in step with the link's white→gold hover state. */}
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={css('flex:none;')}>
-            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
-            <polyline points="10 17 15 12 10 7" />
-            <line x1="15" y1="12" x2="3" y2="12" />
+          {/* Simple filled user-silhouette: a round head above a
+              shoulder-arc. Reads clean at 18px because it's a solid
+              shape, not a thin stroke; currentColor keeps it in step
+              with the link's white→gold hover palette. */}
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={css('flex:none;')}>
+            <circle cx="12" cy="8" r="4.2" />
+            <path d="M4 20.4c0-4 3.6-6.4 8-6.4s8 2.4 8 6.4V22H4v-1.6z" />
           </svg>
           Log In
         </a>

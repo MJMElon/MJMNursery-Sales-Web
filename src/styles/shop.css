@@ -1146,20 +1146,19 @@
   .p-stat-val.gold{color:var(--gold);}
   .p-stat-val.green{color:var(--green-mid);}
 
-  /* Order cards read as tappable at rest, not just on hover — a touch
-     of shadow + a slightly deeper border give them lift on the pale
-     portal background, and the hover state exaggerates it so the
-     click affordance is unmistakable. */
-  .p-order{background:#fff;border:1px solid #d8ddd8;border-radius:14px;overflow:hidden;margin-bottom:.8rem;box-shadow:0 1px 3px rgba(0,0,0,.04),0 1px 2px rgba(0,0,0,.03);transition:transform .2s, box-shadow .2s, border-color .2s;}
-  .p-order:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(0,0,0,.09),0 2px 6px rgba(0,0,0,.05);border-color:#c0cbbf;}
-  .p-order:active{transform:translateY(0);box-shadow:0 2px 6px rgba(0,0,0,.06);}
+  /* Order cards sit as read-only summaries. The whole card used to be
+     clickable, but it caused accidental taps whenever a customer
+     dragged to copy the order number or scrolled on a touch device,
+     so the modal is now opened only via the explicit "See Details"
+     button in the header. The resting shadow stays — it still reads
+     as a distinct info panel on the pale portal background. */
+  .p-order{background:#fff;border:1px solid #d8ddd8;border-radius:14px;overflow:hidden;margin-bottom:.8rem;box-shadow:0 1px 3px rgba(0,0,0,.04),0 1px 2px rgba(0,0,0,.03);}
   .p-order-head{display:flex;justify-content:space-between;align-items:center;padding:.9rem 1.2rem;border-bottom:1px solid #f0f2f0;flex-wrap:wrap;gap:.4rem;}
-  /* The order number stays selectable (admins paste it into chats, emails,
-     etc.). user-select:text makes drag-to-highlight the DEFAULT gesture
-     here instead of inheriting the card's click/drag behaviour; the inline
-     stopPropagation on the element itself kills the card click when the
-     user is actually interacting with this text. */
   .p-order-id{font-family:'DM Sans',sans-serif;font-size:1rem;font-weight:700;letter-spacing:.02em;color:var(--text-dark);user-select:text;cursor:text;}
+  /* "See Details" chip — the one explicit path into the order modal. */
+  .p-see-details{background:transparent;border:1px solid var(--green-dark);color:var(--green-dark);border-radius:999px;padding:.3rem .8rem;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:background .15s,color .15s;white-space:nowrap;}
+  .p-see-details:hover{background:var(--green-dark);color:#fff;}
+  .p-see-details:active{transform:scale(.97);}
   .p-order-date{font-size:11px;color:var(--text-light);}
   .p-claim-row{display:grid;grid-template-columns:1fr auto;gap:.5rem;}
   .p-claim-row input{padding:.55rem .75rem;border:1.5px solid var(--green-pale);border-radius:8px;font-size:12.5px;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text-dark);outline:none;min-width:0;}

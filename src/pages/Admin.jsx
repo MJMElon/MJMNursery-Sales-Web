@@ -627,7 +627,7 @@ export default function Admin() {
                 </div>
               </div>
             {/* ORDER DETAIL MODAL */}
-            <div className="modal-overlay" id="modal-order" style={{ zIndex: '250' }}><div className="modal" style={{ maxWidth: '750px' }}><div className="modal-head"><h2 id="mo-title">Order Details</h2><button className="modal-close" onClick={(e) => { closeModal('modal-order'); }}>✕</button></div><div className="modal-body" id="mo-body" style={{ maxHeight: '75vh', overflowY: 'auto' }} /><div className="modal-foot" id="mo-foot" /></div></div>
+            <div className="modal-overlay" id="modal-order" style={{ zIndex: '250' }}><div className="modal" style={{ maxWidth: '750px' }}><div className="modal-head"><h2 id="mo-title">Order Details</h2><button className="modal-close" onClick={(e) => { closeModal('modal-order'); if (typeof window.loadOrders === 'function') window.loadOrders(); }}>✕</button></div><div className="modal-body" id="mo-body" style={{ maxHeight: '75vh', overflowY: 'auto' }} /><div className="modal-foot" id="mo-foot" /></div></div>
             {/* ATTACHMENT PREVIEW (floating viewer for order documents — avoids tab-jumping) */}
             <div className="modal-overlay" id="modal-att-preview" style={{ zIndex: '260' }}><div className="modal" style={{ maxWidth: '900px' }}>
                 <div className="modal-head">

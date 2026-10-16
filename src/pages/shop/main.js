@@ -1750,10 +1750,17 @@ export function initShopMain() {
       actionHtml=pRatings[o.id]?'<span style="font-size:11px;color:var(--gold);">'+('⭐'.repeat(pRatings[o.id]))+' Reviewed</span>':'<button class="p-btn" onclick="event.stopPropagation();pOpenRating(\''+idJs+'\')">⭐ Review</button>';
     }
 
-    return '<div class="p-order" style="cursor:pointer;" onclick="openOrderDetail(\''+idJs+'\')">'+
+    // The card itself is no longer clickable — only the explicit
+    // "See Details" button opens the order modal. Removes the
+    // accidental-tap problem where any drag or text-select on the card
+    // dropped the customer into the modal.
+    return '<div class="p-order">'+
       '<div class="p-order-head">'+
-        '<div><div class="p-order-id" onmousedown="event.stopPropagation();" onclick="event.stopPropagation();" title="Click to copy or highlight the order number">#'+esc(o.id)+'</div><div class="p-order-date">Ordered '+esc(o.orderDate)+'</div></div>'+
-        '<span class="p-badge '+pBadge(o.status)+'">'+esc(o.status)+'</span>'+
+        '<div><div class="p-order-id" title="Click to copy or highlight the order number">#'+esc(o.id)+'</div><div class="p-order-date">Ordered '+esc(o.orderDate)+'</div></div>'+
+        '<div style="display:flex;align-items:center;gap:.5rem;">'+
+          '<span class="p-badge '+pBadge(o.status)+'">'+esc(o.status)+'</span>'+
+          '<button type="button" class="p-see-details" onclick="openOrderDetail(\''+idJs+'\')">See Details ›</button>'+
+        '</div>'+
       '</div>'+
       '<div class="p-order-body">'+
         '<div class="p-order-row"><span class="p-order-row-l">Bill To</span><span class="p-order-row-v">'+esc(o.billingName)+'</span></div>'+
@@ -3094,13 +3101,23 @@ export function initShopMain() {
 
     var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+esc(winTitle)+'</title>'+
       '<style>'+
-        'body{font-family:Arial,Helvetica,sans-serif;color:#1A2E1B;max-width:700px;margin:26px auto;padding:0 24px;line-height:1.45;}'+
+        'html,body{height:100%;}'+
+        /* Flex column with min-height = viewport so the disclaimer can
+           anchor to the very bottom of the page via margin-top:auto on
+           its parent. Keeps the layout centred and tidy for short
+           documents without pushing content down for long ones. */
+        'body{font-family:Arial,Helvetica,sans-serif;color:#1A2E1B;max-width:700px;margin:26px auto;padding:0 24px;line-height:1.45;min-height:calc(100vh - 52px);display:flex;flex-direction:column;box-sizing:border-box;}'+
         '.co-name{font-size:20px;font-weight:700;}'+
         '.co-reg{font-size:12px;font-weight:700;margin:1px 0 4px;}'+
         '.co-line{font-size:10.5px;color:#444;}'+
         '.doc-title{font-family:Arial,Helvetica,sans-serif;font-size:23px;font-weight:700;color:#38684A;letter-spacing:.5px;}'+
         '.doc-meta{font-size:12px;font-weight:600;margin-top:3px;}'+
         '.sect{font-size:11.5px;font-weight:700;color:#38684A;letter-spacing:.05em;margin:28px 0 4px;}'+
+        /* Extra air between the party block (BILLING DETAILS /
+           RECEIVED FROM) and the ITEMS table, per spec. First .sect
+           keeps its default top margin; the "items-sect" variant adds
+           the breathing room only where it's actually wanted. */
+        '.items-sect{margin-top:56px;}'+
         '.prow{display:flex;justify-content:space-between;gap:16px;padding:7px 2px;border-bottom:1px solid #DDD;font-size:13px;}'+
         '.plbl{color:#555;white-space:nowrap;}'+
         '.pval{font-weight:700;text-align:right;}'+
@@ -3119,8 +3136,11 @@ export function initShopMain() {
         '.paybox-b{font-size:12.5px;color:#38684A;line-height:1.7;}'+
         '.paybox-b strong{color:#1A2E1B;}'+
         '.paybox-ref{margin-top:10px;padding-top:10px;border-top:1px dashed #38684A;color:#1A2E1B;font-size:12px;}'+
-        '.foot{margin-top:44px;text-align:center;font-size:11px;font-style:italic;color:#666;}'+
-        '@media print{body{margin:0;padding:0 18px;}.no-print{display:none !important;}}'+
+        /* margin-top:auto pushes the disclaimer to the bottom of the
+           flex body; padding keeps a visible gap from the content
+           above when the page is actually full. */
+        '.foot{margin-top:auto;padding-top:44px;text-align:center;font-size:11px;font-style:italic;color:#666;}'+
+        '@media print{body{margin:0;padding:0 18px;min-height:calc(100vh - 0px);}.no-print{display:none !important;}}'+
       '</style></head><body>'+
 
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;">'+
@@ -3142,7 +3162,7 @@ export function initShopMain() {
       '<div class="sect">'+partyHeading+'</div>'+
       party +
 
-      '<div class="sect">ITEMS</div>'+
+      '<div class="sect items-sect">ITEMS</div>'+
       '<table><thead><tr><th>Product</th><th class="r">Price</th><th class="r">Qty</th><th class="r">Subtotal</th></tr></thead>'+
       '<tbody>'+itemsHtml+'</tbody></table>'+
       (totRows ? '<table class="totals"><tbody>'+totRows+'</tbody></table>' : '')+

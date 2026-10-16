@@ -1180,10 +1180,10 @@
   .p-order-row:last-child{border-bottom:none;}
   .p-order-row-l{color:var(--text-light);font-weight:400;}
   .p-order-row-v{color:var(--text-mid);font-weight:600;}
-  /* Footer uses the website's deep green so it reads as a distinct
-     "action" shelf, and the total flips to the gold-cream palette for
-     legibility (black on cream was faint). */
-  .p-order-foot{padding:.7rem 1.2rem;background:var(--green-dark);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.4rem;}
+  /* Footer uses the mid-weight brand green so it reads as a distinct
+     "action" shelf without the heavy darkness of --green-dark; keeps
+     plenty of contrast against the gold total + button. */
+  .p-order-foot{padding:.7rem 1.2rem;background:var(--green-mid);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.4rem;}
   /* Match the order-number font so the summary card reads as one
      typographic unit (sans-serif DM Sans) instead of mixing a serif
      price with a sans-serif id. */

@@ -760,6 +760,7 @@ async function viewOrder(id){
   if(_upAt && _upUrl){
     html+='<span style="color:#15803d;font-weight:600;">✓ Issued</span> · <a href="'+esc(_upUrl)+'" target="_blank" rel="noopener" style="color:#15803d;text-decoration:underline;">View</a>';
     html+=' &nbsp;<button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;" onclick="openEInvoiceUpload(\''+id+'\')">Replace</button>';
+    html+=' &nbsp;<button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;color:var(--red);border-color:var(--red);" onclick="removeEInvoice(\''+id+'\')">Remove</button>';
   } else if(_reqAt){
     html+='<span style="color:#b45309;font-weight:600;">⏳ Requested</span> · '+esc(fmtDate(_reqAt));
     html+=' &nbsp;<button class="btn btn-primary btn-sm" style="font-size:10px;padding:2px 8px;" onclick="openEInvoiceUpload(\''+id+'\')">Upload E-Invoice</button>';
@@ -2711,6 +2712,59 @@ async function openEInvoiceUpload(orderId){
   input.click();
 }
 window.openEInvoiceUpload = openEInvoiceUpload;
+
+// Remove the current E-Invoice: nulls einvoice_url / einvoice_name /
+// einvoice_uploaded_at on the order row, deletes any mirrored
+// salesweb_order_attachments entry pointing at the same URL, and
+// best-effort removes the storage object. Customer portal reads the
+// strip state from the einvoice_* columns on the order, so clearing
+// them is what actually flips the customer side back to "Requested" /
+// "Not requested" / "Auto-issued".
+async function removeEInvoice(orderId){
+  if(!confirm('Remove this E-Invoice?\n\nThe file is deleted from storage, the order is reset to the pre-upload state, and the customer stops seeing the "✓ E-Invoice issued" chip. This cannot be undone.')) return;
+
+  // 1. Read the current URL so we can clean up storage + any mirrored row.
+  var{data:ord, error:readErr} = await sb.from('salesweb_customer_orders')
+    .select('einvoice_url, einvoice_name').eq('id',orderId).maybeSingle();
+  if(readErr){ toast('Lookup failed: '+readErr.message,'error'); return; }
+  var url = String((ord && ord.einvoice_url) || '').split('?')[0];
+
+  // 2. Delete the storage object. Best-effort — a missing key is fine.
+  if(url){
+    var m = url.split('/order-attachments/');
+    if(m.length >= 2){
+      var key = decodeURIComponent(m[m.length-1]);
+      try{
+        var{error:storErr} = await sb.storage.from('order-attachments').remove([key]);
+        if(storErr && !/not.*found/i.test(storErr.message||'')){
+          console.warn('[removeEInvoice] storage delete:', storErr.message);
+        }
+      }catch(e){ /* non-fatal */ }
+    }
+  }
+
+  // 3. Delete any salesweb_order_attachments row mirrored by the
+  //    Payments-tab upload path so Documents stays in sync.
+  if(url){
+    try{
+      await sb.from('salesweb_order_attachments')
+        .delete().eq('order_id',orderId).eq('file_url',url);
+    }catch(e){ /* non-fatal */ }
+  }
+
+  // 4. Null the three einvoice_* columns — the step the customer actually sees.
+  var{error:updErr} = await sb.from('salesweb_customer_orders').update({
+    einvoice_url:         null,
+    einvoice_name:        null,
+    einvoice_uploaded_at: null,
+    updated_at:           new Date().toISOString(),
+  }).eq('id',orderId);
+  if(updErr){ toast('Reset failed: '+updErr.message,'error'); return; }
+
+  toast('E-Invoice removed');
+  viewOrder(orderId);
+}
+window.removeEInvoice = removeEInvoice;
 
 async function openInvoiceUploadModalForMonth(orderId,period){
   // Pull the trigger order's customer_id + customer_name, then aggregate all

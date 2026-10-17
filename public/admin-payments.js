@@ -749,13 +749,53 @@ function renderPaymentReview(order, items, attachments, timeline, bills, payment
       }).join('')
     : '<div style="color:var(--ink4);font-size:12px;">No documents uploaded yet.</div>';
 
-  // ── E-Invoice status inside the modal ──
-  var einvHtml = '';
-  if (order.einvoice_uploaded_at && order.einvoice_url){
-    einvHtml = '<div style="margin-top:.3rem;color:#15803d;font-size:12px;">✓ E-Invoice issued — <a href="'+esc(order.einvoice_url)+'" target="_blank" rel="noopener" style="color:#15803d;text-decoration:underline;">View</a></div>';
-  } else if (order.einvoice_requested_at){
-    einvHtml = '<div style="margin-top:.3rem;color:#b45309;font-size:12px;">⏳ E-Invoice requested — awaiting upload.</div>';
+  // ── E-Invoice section — single source of truth lives on the order's
+  //    einvoice_* columns. Shown as its own card so admins have one
+  //    obvious place to upload / replace / remove from Payments,
+  //    identical to the strip in the order modal. Company orders and
+  //    orders >= RM10k auto-qualify (surface the Upload action even
+  //    without an explicit customer request); personal <RM10k orders
+  //    only surface it once the customer has requested or the admin
+  //    has issued one anyway. Uploaded state exposes View + Replace
+  //    + Remove so a wrong file never gets stuck.
+  var _isCompanyPV = (order.billing_type === 'company') || (!order.billing_type && !!order.billing_tax_id);
+  var _isHiValuePV = (Number(order.total) || 0) >= 10000;
+  var _autoIssuePV = _isCompanyPV || _isHiValuePV;
+  var _einvUp      = order.einvoice_uploaded_at && order.einvoice_url;
+  var _einvReq     = !!order.einvoice_requested_at && !_einvUp;
+  var einvCardHtml = '';
+  if (_einvUp){
+    einvCardHtml = ''+
+      '<div style="margin-top:1.2rem;padding:.9rem 1rem;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem;">'+
+          '<div style="font-weight:600;font-size:13px;color:#15803d;">E-Invoice · Issued</div>'+
+          '<span style="font-size:11px;color:var(--ink3);">'+fmtDate(order.einvoice_uploaded_at)+'</span>'+
+        '</div>'+
+        '<div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">'+
+          '<a href="'+esc(order.einvoice_url)+'" target="_blank" rel="noopener" style="color:#15803d;text-decoration:underline;font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📄 '+esc(order.einvoice_name||'E-Invoice')+'</a>'+
+          '<button class="btn btn-outline btn-sm" style="font-size:11px;" onclick="uploadEInvoiceFromPayments(\''+idJs+'\')">Replace</button>'+
+          '<button class="btn btn-outline btn-sm" style="font-size:11px;color:var(--red);border-color:var(--red);" onclick="removeEInvoiceFromPayments(\''+idJs+'\')">Remove</button>'+
+        '</div>'+
+      '</div>';
+  } else if (_einvReq || _autoIssuePV){
+    var _label = _einvReq ? 'Requested by customer · awaiting upload'
+                           : (_isCompanyPV ? 'Company order · E-Invoice required'
+                                           : 'Order ≥ RM 10k · E-Invoice required');
+    einvCardHtml = ''+
+      '<div style="margin-top:1.2rem;padding:.9rem 1rem;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.4rem;">'+
+          '<div>'+
+            '<div style="font-weight:600;font-size:13px;color:#92400e;">E-Invoice · '+(_einvReq?'Requested':'Pending')+'</div>'+
+            '<div style="font-size:11px;color:#78350f;margin-top:.15rem;">'+esc(_label)+'</div>'+
+          '</div>'+
+          '<button class="btn btn-primary btn-sm" style="font-size:11px;" onclick="uploadEInvoiceFromPayments(\''+idJs+'\')">📄 Upload E-Invoice</button>'+
+        '</div>'+
+      '</div>';
   }
+
+  // Legacy slot — keep harmlessly empty since the E-Invoice detail now
+  // lives in its own card above. Removed from the Order block (Row 1).
+  var einvHtml = '';
 
   var timelineHtml = timeline.length
     ? timeline.slice(0,8).map(function(t){
@@ -825,6 +865,10 @@ function renderPaymentReview(order, items, attachments, timeline, bills, payment
     // Row 4 — Credit bills (credit only)
     creditHtml +
 
+    // Row 4a — E-Invoice (single source of truth; same action set
+    // as the order modal strip, so Payments and Orders stay linked)
+    einvCardHtml +
+
     // Row 5 — Documents (bidirectional with order Attached Documents)
     '<div style="margin-top:1.2rem;">'+
       '<div class="mp-section-title">Documents</div>'+
@@ -832,10 +876,8 @@ function renderPaymentReview(order, items, attachments, timeline, bills, payment
       '<div style="margin-top:.6rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">'+
         '<input type="file" id="pay-attach-input" multiple style="font-size:12px;">'+
         '<button class="btn btn-primary btn-sm" onclick="uploadPaymentAttachments(\''+idJs+'\')">📤 Upload</button>'+
-        ((order.einvoice_requested_at && !order.einvoice_uploaded_at) ?
-          '<button class="btn btn-outline btn-sm" style="border-color:#7c5cbf;color:#7c5cbf;" onclick="uploadEInvoiceFromPayments(\''+idJs+'\')">📄 Upload E-Invoice (mark done)</button>' : '')+
       '</div>'+
-      '<div style="font-size:11px;color:var(--ink4);margin-top:.4rem;">Uploads are attached to the customer order and shown under Attached Documents.</div>'+
+      '<div style="font-size:11px;color:var(--ink4);margin-top:.4rem;">Uploads are attached to the customer order and shown under Attached Documents. For E-Invoices, use the dedicated section above so the customer\'s "E-Invoice issued" chip updates too.</div>'+
     '</div>'+
 
     // Row 6 — Internal notes
@@ -923,52 +965,54 @@ window.uploadPaymentAttachments = uploadPaymentAttachments;
 //   1. Uploads the PDF to storage
 //   2. Calls mark_einvoice_uploaded RPC (stamps einvoice_uploaded_at
 //      + einvoice_url + einvoice_name on the order row)
-// After it returns we also drop a row into salesweb_order_attachments
-// so the customer sees the E-Invoice in their Attached Documents list.
+//
+// The E-Invoice is stored ONCE — on the order's einvoice_* columns.
+// No mirror into salesweb_order_attachments: both Payments and Orders
+// surfaces read from the same columns, so there's one source of truth
+// and deleting the file in one place removes it everywhere.
 async function uploadEInvoiceFromPayments(orderId){
   if (typeof window.openEInvoiceUpload !== 'function'){
     toast('E-Invoice uploader not available on this page','error');
     return;
   }
-  // openEInvoiceUpload opens a file picker + updates the order row.
-  // When it finishes, refresh the payment list + re-open the modal.
   var beforeUp = Date.now();
   window.openEInvoiceUpload(orderId);
-  // Poll for the row change so we can mirror it into attachments +
-  // refresh the UI once the upload lands. Timeout after 90s.
+  // Poll the order row and refresh the Payments modal once the
+  // einvoice_uploaded_at stamp lands (indicates the picker completed).
+  // Timeout after 90s so an abandoned picker doesn't leak the interval.
   var deadline = Date.now() + 90000;
-  var mirrored = false;
   var interval = setInterval(async function(){
     if (Date.now() > deadline){ clearInterval(interval); return; }
     var { data: fresh } = await sb.from('salesweb_customer_orders')
-      .select('einvoice_url,einvoice_name,einvoice_uploaded_at')
-      .eq('id', orderId).maybeSingle();
+      .select('einvoice_uploaded_at').eq('id', orderId).maybeSingle();
     if (!fresh || !fresh.einvoice_uploaded_at) return;
     var ts = new Date(fresh.einvoice_uploaded_at).getTime();
     if (ts < beforeUp) return;   // pre-existing upload; not the one we just kicked off
     clearInterval(interval);
-    if (!mirrored){
-      mirrored = true;
-      var session = await sb.auth.getSession();
-      var user = session?.data?.session?.user?.email || 'accountant';
-      // Best-effort mirror. Ignore duplicate errors — the E-Invoice row
-      // already lives on the order via einvoice_url so this is only a
-      // convenience for the Attached Documents strip.
-      try {
-        await sb.from('salesweb_order_attachments').insert([{
-          order_id: orderId,
-          file_name: fresh.einvoice_name || 'E-Invoice.pdf',
-          file_url:  fresh.einvoice_url,
-          file_type: 'application/pdf',
-          uploaded_by: user
-        }]);
-      } catch(_){ /* ignore */ }
-    }
     loadPayments();
     openPaymentDetail(orderId);
   }, 1500);
 }
 window.uploadEInvoiceFromPayments = uploadEInvoiceFromPayments;
+
+// Delegate E-Invoice removal to the admin-orders handler so both
+// surfaces share one implementation (null the three einvoice_*
+// columns + re-queue einvoice_requested_at + clean up storage).
+// After it finishes, refresh the Payments list + the modal.
+async function removeEInvoiceFromPayments(orderId){
+  if (typeof window.removeEInvoice !== 'function'){
+    toast('E-Invoice remove not available on this page','error');
+    return;
+  }
+  // removeEInvoice (admin-orders.js) handles its own confirm +
+  // calls viewOrder() when done. We can't suppress that cleanly, but
+  // the orders modal won't be open from Payments, so it's a no-op in
+  // the common case. After a short delay to let the async DB work
+  // settle, re-render the Payment Review modal with fresh data.
+  await window.removeEInvoice(orderId);
+  setTimeout(function(){ loadPayments(); openPaymentDetail(orderId); }, 400);
+}
+window.removeEInvoiceFromPayments = removeEInvoiceFromPayments;
 
 // ═══════════════════════════════════════
 //  MUTATIONS — mark paid / unpaid

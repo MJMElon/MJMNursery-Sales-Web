@@ -23,6 +23,14 @@
 
 var PAYMENTS_VIEW = 'awaiting';   // 'awaiting' | 'partial' | 'credit' | 'einvoice'
 
+// E-Invoice Pending tab lower bound. Orders placed BEFORE this date
+// are not surfaced here, so the historical backlog isn't retroactively
+// tagged when the widened rule goes live. Change this date if the
+// cutover is ever shifted. Local midnight so a Malaysian admin seeing
+// "19 Oct 2026" in their UI matches rows filtered by created_at.
+var EINV_PENDING_SINCE = '2026-10-19T00:00:00+08:00';
+var EINV_PENDING_SINCE_MS = new Date(EINV_PENDING_SINCE).getTime();
+
 function setPaymentView(view){
   PAYMENTS_VIEW = ['awaiting','partial','credit','einvoice'].indexOf(view) >= 0 ? view : 'awaiting';
   document.querySelectorAll('[data-payment-view]').forEach(function(el){
@@ -59,9 +67,15 @@ async function loadPayments(){
     // syntax: comma-separated, each term is "col.op.val". The
     // billing_type heuristic also catches legacy rows that filled in
     // a Tax ID without a billing_type column.
+    //
+    // Cutoff: only orders placed from the EINV_PENDING_SINCE date
+    // forward are surfaced. The admin team doesn't want historical
+    // backlog retroactively tagged — the queue starts fresh from
+    // the day the widened rule went live.
     query = query
       .is('einvoice_uploaded_at', null)
       .not('status','in','("Cancelled","Refunded")')
+      .gte('created_at', EINV_PENDING_SINCE)
       .or('einvoice_requested_at.not.is.null,billing_type.eq.company,total.gte.10000');
   } else if (PAYMENTS_VIEW === 'partial'){
     // Partially Paid tab: filtered client-side after we sum
@@ -205,24 +219,27 @@ async function renderPaymentStats(){
   // tables. Fallbacks below keep the widest set of columns that the
   // schema actually has.
   var res = await sb.from('salesweb_customer_orders')
-    .select('id,status,total,amount_paid,updated_at,deleted_at,archived_at,billing_type,billing_tax_id,einvoice_requested_at,einvoice_uploaded_at,credit_note_flagged_at,credit_note_issued_at');
+    .select('id,status,total,amount_paid,created_at,updated_at,deleted_at,archived_at,billing_type,billing_tax_id,einvoice_requested_at,einvoice_uploaded_at,credit_note_flagged_at,credit_note_issued_at');
   if (res.error && /credit_note_|does not exist/i.test(res.error.message||'')){
     res = await sb.from('salesweb_customer_orders')
-      .select('id,status,total,amount_paid,updated_at,deleted_at,archived_at,billing_type,billing_tax_id,einvoice_requested_at,einvoice_uploaded_at');
+      .select('id,status,total,amount_paid,created_at,updated_at,deleted_at,archived_at,billing_type,billing_tax_id,einvoice_requested_at,einvoice_uploaded_at');
   }
   if (res.error && /billing_type|einvoice_requested_at|does not exist/i.test(res.error.message||'')){
-    res = await sb.from('salesweb_customer_orders').select('id,status,total,amount_paid,updated_at,deleted_at,archived_at');
+    res = await sb.from('salesweb_customer_orders').select('id,status,total,amount_paid,created_at,updated_at,deleted_at,archived_at');
   }
   var all = (res.data || []).filter(function(o){ return !o.deleted_at && !o.archived_at; });
 
   var awaiting = all.filter(function(o){ return o.status==='Pending Payment'; });
   // Mirror the loadPayments einvoice filter — every order that still
-  // owes an E-Invoice upload, whatever the trigger. The legacy
-  // "no billing_type but has a Tax ID" rows count as company via the
-  // same heuristic the admin modal uses.
+  // owes an E-Invoice upload, whatever the trigger, AND placed from
+  // the EINV_PENDING_SINCE cutoff onward (historical backlog isn't
+  // retroactively tagged). The "no billing_type but has a Tax ID"
+  // heuristic matches the admin modal.
   var einvReqs = all.filter(function(o){
     if (o.einvoice_uploaded_at) return false;
     if (o.status === 'Cancelled' || o.status === 'Refunded') return false;
+    if (!o.created_at) return false;
+    if (new Date(o.created_at).getTime() < EINV_PENDING_SINCE_MS) return false;
     if (o.einvoice_requested_at) return true;
     if (o.billing_type === 'company') return true;
     if (!o.billing_type && !!o.billing_tax_id) return true;

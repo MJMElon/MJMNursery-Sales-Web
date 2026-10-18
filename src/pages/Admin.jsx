@@ -399,7 +399,7 @@ export default function Admin() {
                       <button className="filter-chip active" data-payment-view="awaiting" onClick={(e) => { window.setPaymentView('awaiting'); }}>Awaiting Verification <span className="chip-count" id="pv-count-awaiting" data-color="amber"></span></button>
                       <button className="filter-chip" data-payment-view="partial" onClick={(e) => { window.setPaymentView('partial'); }}>Partially Paid <span className="chip-count" id="pv-count-partial" data-color="blue"></span></button>
                       <button className="filter-chip" data-payment-view="credit" onClick={(e) => { window.setPaymentView('credit'); }}>Credit Note <span className="chip-count" id="pv-count-credit" data-color="orange"></span></button>
-                      <button className="filter-chip" data-payment-view="einvoice" onClick={(e) => { window.setPaymentView('einvoice'); }}>E-Invoice Requests <span className="chip-count" id="pv-count-einvoice" data-color="purple"></span></button>
+                      <button className="filter-chip" data-payment-view="einvoice" onClick={(e) => { window.setPaymentView('einvoice'); }}>E-Invoice Pending <span className="chip-count" id="pv-count-einvoice" data-color="purple"></span></button>
                       </div>
                     <div id="payments-table"><div className="loading">Loading payments...</div></div>
                     </div>

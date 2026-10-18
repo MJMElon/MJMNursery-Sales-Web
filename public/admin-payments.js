@@ -52,8 +52,17 @@ async function loadPayments(){
 
   var query = sb.from('salesweb_customer_orders').select('*').order('created_at', {ascending:false});
   if (PAYMENTS_VIEW === 'einvoice'){
-    // E-Invoice tab: customer has requested but accounts hasn't uploaded yet.
-    query = query.not('einvoice_requested_at','is',null).is('einvoice_uploaded_at', null);
+    // E-Invoice tab: every order that still owes an E-Invoice upload —
+    // customer-requested, company billing, or ≥RM10k. Excludes
+    // Cancelled/Refunded (no invoice needed) and anything already
+    // uploaded (einvoice_uploaded_at IS NULL). PostgREST OR filter
+    // syntax: comma-separated, each term is "col.op.val". The
+    // billing_type heuristic also catches legacy rows that filled in
+    // a Tax ID without a billing_type column.
+    query = query
+      .is('einvoice_uploaded_at', null)
+      .not('status','in','("Cancelled","Refunded")')
+      .or('einvoice_requested_at.not.is.null,billing_type.eq.company,total.gte.10000');
   } else if (PAYMENTS_VIEW === 'partial'){
     // Partially Paid tab: filtered client-side after we sum
     // salesweb_order_payments per order (amount_paid is a snapshot that
@@ -196,18 +205,30 @@ async function renderPaymentStats(){
   // tables. Fallbacks below keep the widest set of columns that the
   // schema actually has.
   var res = await sb.from('salesweb_customer_orders')
-    .select('id,status,total,amount_paid,updated_at,deleted_at,archived_at,einvoice_requested_at,einvoice_uploaded_at,credit_note_flagged_at,credit_note_issued_at');
+    .select('id,status,total,amount_paid,updated_at,deleted_at,archived_at,billing_type,billing_tax_id,einvoice_requested_at,einvoice_uploaded_at,credit_note_flagged_at,credit_note_issued_at');
   if (res.error && /credit_note_|does not exist/i.test(res.error.message||'')){
     res = await sb.from('salesweb_customer_orders')
-      .select('id,status,total,amount_paid,updated_at,deleted_at,archived_at,einvoice_requested_at,einvoice_uploaded_at');
+      .select('id,status,total,amount_paid,updated_at,deleted_at,archived_at,billing_type,billing_tax_id,einvoice_requested_at,einvoice_uploaded_at');
   }
-  if (res.error && /einvoice_requested_at|does not exist/i.test(res.error.message||'')){
+  if (res.error && /billing_type|einvoice_requested_at|does not exist/i.test(res.error.message||'')){
     res = await sb.from('salesweb_customer_orders').select('id,status,total,amount_paid,updated_at,deleted_at,archived_at');
   }
   var all = (res.data || []).filter(function(o){ return !o.deleted_at && !o.archived_at; });
 
   var awaiting = all.filter(function(o){ return o.status==='Pending Payment'; });
-  var einvReqs = all.filter(function(o){ return o.einvoice_requested_at && !o.einvoice_uploaded_at; });
+  // Mirror the loadPayments einvoice filter — every order that still
+  // owes an E-Invoice upload, whatever the trigger. The legacy
+  // "no billing_type but has a Tax ID" rows count as company via the
+  // same heuristic the admin modal uses.
+  var einvReqs = all.filter(function(o){
+    if (o.einvoice_uploaded_at) return false;
+    if (o.status === 'Cancelled' || o.status === 'Refunded') return false;
+    if (o.einvoice_requested_at) return true;
+    if (o.billing_type === 'company') return true;
+    if (!o.billing_type && !!o.billing_tax_id) return true;
+    if ((Number(o.total)||0) >= 10000) return true;
+    return false;
+  });
   var paidNow  = all.filter(function(o){ return ['Paid','Ready for Collection','Completed'].indexOf(o.status) >= 0; });
 
   // Partially Paid — sum the per-order payments ledger so cases where
@@ -462,7 +483,7 @@ function renderCreditNoteTable(orders){
 function renderEInvoiceTable(orders){
   if (!orders.length){
     document.getElementById('payments-table').innerHTML =
-      '<div class="loading">No E-Invoice requests waiting.</div>';
+      '<div class="loading">No E-Invoice uploads pending.</div>';
     return;
   }
   var pageSize = 50;
@@ -470,27 +491,32 @@ function renderEInvoiceTable(orders){
   if (!window._paymentsPageEi || window._paymentsPageEi < 1) window._paymentsPageEi = 1;
   if (window._paymentsPageEi > totalPages) window._paymentsPageEi = 1;
   var pageOrders = orders.slice((window._paymentsPageEi - 1) * pageSize, window._paymentsPageEi * pageSize);
+  // Replaced "Days Left" with "Reason" — the tab is no longer limited
+  // to customer requests, so the 5-day countdown no longer applies to
+  // every row. Reason tells the admin WHY this order is in the list:
+  //   • Customer requested
+  //   • Company billing
+  //   • Order ≥ RM10k
+  // Multiple reasons are joined with " · " so the picture is complete.
   var html = '<table class="data-table"><thead><tr>'+
-    '<th>Order</th><th>Billing Name</th><th>TIN</th><th>Requested</th><th>Total</th><th>Days Left</th><th>Action</th>'+
+    '<th>Order</th><th>Billing Name</th><th>TIN</th><th>Status</th><th>Reason</th><th>Total</th><th>Action</th>'+
     '</tr></thead><tbody>';
-  var now = Date.now();
   pageOrders.forEach(function(o){
     var shortId = o.order_number || (o.id||'').substring(0,8).toUpperCase();
     var idJs    = String(o.id||'').replace(/[\\'"<>]/g,'');
-    // 5-day request window is per-customer policy; here we surface how
-    // long the accountant has left before the request is considered
-    // stale (informational — nothing enforces it server-side yet).
-    var reqTs   = o.einvoice_requested_at ? new Date(o.einvoice_requested_at).getTime() : now;
-    var msLeft  = (reqTs + 5*24*60*60*1000) - now;
-    var days    = Math.ceil(msLeft / (24*60*60*1000));
-    var daysCls = days <= 1 ? 'color:#b91c1c;font-weight:600;' : (days <= 2 ? 'color:#b45309;font-weight:600;' : 'color:var(--ink3);');
+    var reasons = [];
+    if (o.einvoice_requested_at) reasons.push('Customer requested');
+    var _isCompany = (o.billing_type === 'company') || (!o.billing_type && !!o.billing_tax_id);
+    if (_isCompany) reasons.push('Company billing');
+    if ((Number(o.total)||0) >= 10000) reasons.push('≥ RM 10k');
+    var reasonTxt = reasons.length ? reasons.join(' · ') : 'E-Invoice required';
     html += '<tr style="cursor:pointer;" onclick="openEInvoiceReview(\''+idJs+'\')">'+
       '<td><strong>'+esc(shortId)+'</strong></td>'+
       '<td>'+esc(o.billing_name||o.customer_name||'—')+'</td>'+
       '<td>'+esc(o.billing_tax_id||'—')+'</td>'+
-      '<td>'+fmtDate(o.einvoice_requested_at)+'</td>'+
+      '<td><span class="badge '+(typeof orderBadgeCls === 'function' ? orderBadgeCls(o.status) : 'badge-grey')+'" style="font-size:10px;">'+esc(o.status||'—')+'</span></td>'+
+      '<td style="color:var(--ink3);font-size:12px;">'+esc(reasonTxt)+'</td>'+
       '<td><strong>RM '+(o.total||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</strong></td>'+
-      '<td style="'+daysCls+'">'+(days>0?(days+' day'+(days===1?'':'s')):'expired')+'</td>'+
       '<td>'+
         '<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();openEInvoiceReview(\''+idJs+'\')">Open</button> '+
         '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();uploadEInvoiceFromPayments(\''+idJs+'\')">📤 Upload E-Invoice</button>'+

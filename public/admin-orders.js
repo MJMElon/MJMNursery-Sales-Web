@@ -2721,7 +2721,13 @@ async function openEInvoiceUpload(orderId){
     var rpc = await sb.rpc('mark_einvoice_uploaded', { p_order_id: orderId, p_url: url, p_name: stdName });
     if(rpc.error){ toast('Save failed: '+rpc.error.message,'error'); return; }
     toast('✓ E-Invoice uploaded');
-    viewOrder(orderId);
+    // Only re-render the Order modal if it's actually open. When the
+    // upload was triggered from Payments > Payment Review, the order
+    // modal wasn't open — refreshing it would pop out a second modal
+    // on top of Payment Review, which admins don't want. The Payments
+    // caller handles its own modal refresh via uploadEInvoiceFromPayments.
+    var _mo = document.getElementById('modal-order');
+    if (_mo && _mo.classList.contains('open')) viewOrder(orderId);
   };
   input.click();
 }
@@ -2784,7 +2790,11 @@ async function removeEInvoice(orderId){
   if(updErr){ toast('Reset failed: '+updErr.message,'error'); return; }
 
   toast('E-Invoice removed — order re-queued in Payments > E-Invoice Requests');
-  viewOrder(orderId);
+  // Same gate as openEInvoiceUpload: only refresh the Order modal
+  // when it's open, so Remove triggered from Payment Review doesn't
+  // pop the Order modal in on top of it.
+  var _mo = document.getElementById('modal-order');
+  if (_mo && _mo.classList.contains('open')) viewOrder(orderId);
 }
 window.removeEInvoice = removeEInvoice;
 

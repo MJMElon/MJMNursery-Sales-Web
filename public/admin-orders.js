@@ -761,19 +761,26 @@ async function viewOrder(id){
     html+='<span style="color:#15803d;font-weight:600;">✓ Issued</span> · <a href="'+esc(_upUrl)+'" target="_blank" rel="noopener" style="color:#15803d;text-decoration:underline;">View</a>';
     html+=' &nbsp;<button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;" onclick="openEInvoiceUpload(\''+id+'\')">Replace</button>';
     html+=' &nbsp;<button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;color:var(--red);border-color:var(--red);" onclick="removeEInvoice(\''+id+'\')">Remove</button>';
-  } else if(_reqAt){
-    html+='<span style="color:#b45309;font-weight:600;">⏳ Requested</span> · '+esc(fmtDate(_reqAt));
-    html+=' &nbsp;<button class="btn btn-primary btn-sm" style="font-size:10px;padding:2px 8px;" onclick="openEInvoiceUpload(\''+id+'\')">Upload E-Invoice</button>';
-  } else if(_autoIssue){
-    html+='<span style="color:var(--ink3);">Auto-issued ('+(_isCompany?'company':'≥RM10k')+') — handled by accounts</span>';
   } else {
-    var _ordered = new Date(order.created_at).getTime();
-    var _daysLeft = Math.ceil((_ordered + 5*24*60*60*1000 - Date.now()) / (24*60*60*1000));
-    if(_daysLeft > 0){
-      html+='<span style="color:var(--ink4);">Not requested — customer has '+_daysLeft+' day'+(_daysLeft===1?'':'s')+' left to request.</span>';
+    // Not yet issued — surface an Upload button in EVERY state so an
+    // admin can always attach the LHDN-compliant PDF on demand,
+    // whether the customer requested, the order auto-qualifies
+    // (company / ≥RM10k), or it's a personal <RM10k order still
+    // inside its 5-day request window.
+    var _stateNote = '';
+    if(_reqAt){
+      _stateNote = '<span style="color:#b45309;font-weight:600;">⏳ Requested</span> · '+esc(fmtDate(_reqAt));
+    } else if(_autoIssue){
+      _stateNote = '<span style="color:var(--ink3);">Auto-issue required ('+(_isCompany?'company':'≥RM10k')+')</span>';
     } else {
-      html+='<span style="color:var(--ink4);">Not requested — request window expired.</span>';
+      var _ordered = new Date(order.created_at).getTime();
+      var _daysLeft = Math.ceil((_ordered + 5*24*60*60*1000 - Date.now()) / (24*60*60*1000));
+      _stateNote = (_daysLeft > 0)
+        ? '<span style="color:var(--ink4);">Not requested — customer has '+_daysLeft+' day'+(_daysLeft===1?'':'s')+' left to request.</span>'
+        : '<span style="color:var(--ink4);">Not requested — request window expired.</span>';
     }
+    html+=_stateNote;
+    html+=' &nbsp;<button class="btn btn-primary btn-sm" style="font-size:10px;padding:2px 8px;" onclick="openEInvoiceUpload(\''+id+'\')">📄 Upload E-Invoice</button>';
   }
   html+='</div>';
   html+='</div>';

@@ -750,14 +750,12 @@ function renderPaymentReview(order, items, attachments, timeline, bills, payment
     : '<div style="color:var(--ink4);font-size:12px;">No documents uploaded yet.</div>';
 
   // ── E-Invoice section — single source of truth lives on the order's
-  //    einvoice_* columns. Shown as its own card so admins have one
-  //    obvious place to upload / replace / remove from Payments,
-  //    identical to the strip in the order modal. Company orders and
-  //    orders >= RM10k auto-qualify (surface the Upload action even
-  //    without an explicit customer request); personal <RM10k orders
-  //    only surface it once the customer has requested or the admin
-  //    has issued one anyway. Uploaded state exposes View + Replace
-  //    + Remove so a wrong file never gets stuck.
+  //    einvoice_* columns. Rendered on EVERY order so admins have one
+  //    obvious place to upload / replace / remove from Payments, same
+  //    contract as the strip in the order modal. The card's framing
+  //    changes with the state (Issued / Requested / Auto-required /
+  //    Not requested yet) but the Upload action is always one click
+  //    away.
   var _isCompanyPV = (order.billing_type === 'company') || (!order.billing_type && !!order.billing_tax_id);
   var _isHiValuePV = (Number(order.total) || 0) >= 10000;
   var _autoIssuePV = _isCompanyPV || _isHiValuePV;
@@ -777,16 +775,33 @@ function renderPaymentReview(order, items, attachments, timeline, bills, payment
           '<button class="btn btn-outline btn-sm" style="font-size:11px;color:var(--red);border-color:var(--red);" onclick="removeEInvoiceFromPayments(\''+idJs+'\')">Remove</button>'+
         '</div>'+
       '</div>';
-  } else if (_einvReq || _autoIssuePV){
-    var _label = _einvReq ? 'Requested by customer · awaiting upload'
-                           : (_isCompanyPV ? 'Company order · E-Invoice required'
-                                           : 'Order ≥ RM 10k · E-Invoice required');
+  } else {
+    // Figure out the state framing so the card header reads the way
+    // the admin would describe this order to a colleague.
+    var _tone, _title, _label;
+    if (_einvReq){
+      _tone  = { bg:'#fffbeb', border:'#fde68a', title:'#92400e', body:'#78350f' };
+      _title = 'Requested';
+      _label = 'Requested by customer · awaiting upload';
+    } else if (_autoIssuePV){
+      _tone  = { bg:'#fffbeb', border:'#fde68a', title:'#92400e', body:'#78350f' };
+      _title = 'Pending';
+      _label = _isCompanyPV ? 'Company order · E-Invoice required'
+                            : 'Order ≥ RM 10k · E-Invoice required';
+    } else {
+      // Personal <RM10k, no explicit request — still show the Upload
+      // action so an admin can proactively issue one (or when the
+      // customer asks offline).
+      _tone  = { bg:'#f8f8f6', border:'#e5e7eb', title:'var(--ink2)', body:'var(--ink3)' };
+      _title = 'Not yet issued';
+      _label = 'Upload only if the customer asks for an E-Invoice.';
+    }
     einvCardHtml = ''+
-      '<div style="margin-top:1.2rem;padding:.9rem 1rem;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;">'+
+      '<div style="margin-top:1.2rem;padding:.9rem 1rem;background:'+_tone.bg+';border:1px solid '+_tone.border+';border-radius:10px;">'+
         '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.4rem;">'+
           '<div>'+
-            '<div style="font-weight:600;font-size:13px;color:#92400e;">E-Invoice · '+(_einvReq?'Requested':'Pending')+'</div>'+
-            '<div style="font-size:11px;color:#78350f;margin-top:.15rem;">'+esc(_label)+'</div>'+
+            '<div style="font-weight:600;font-size:13px;color:'+_tone.title+';">E-Invoice · '+_title+'</div>'+
+            '<div style="font-size:11px;color:'+_tone.body+';margin-top:.15rem;">'+esc(_label)+'</div>'+
           '</div>'+
           '<button class="btn btn-primary btn-sm" style="font-size:11px;" onclick="uploadEInvoiceFromPayments(\''+idJs+'\')">📄 Upload E-Invoice</button>'+
         '</div>'+

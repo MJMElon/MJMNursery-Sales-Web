@@ -1119,6 +1119,13 @@
   .portal-tab{background:none;border:1.5px solid var(--green-pale);color:var(--text-mid);font-size:12px;font-weight:600;padding:.45rem 1rem;border-radius:8px;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;}
   .portal-tab:hover{border-color:var(--green-mid);color:var(--green-dark);}
   .portal-tab.active{background:var(--green-dark);color:#fff;border-color:var(--green-dark);}
+  /* Underline-style sub-tabs under "My Order" — borderless buttons
+     sharing a bottom rule, the active one lifts a thicker brand-green
+     bar. Mirrors the Reviews / Details reference pattern. */
+  .pp-subtabs{display:flex;gap:1.6rem;border-bottom:1.5px solid var(--green-pale);margin-bottom:.8rem;}
+  .pp-subtab{appearance:none;background:none;border:none;padding:.55rem 0;margin-bottom:-1.5px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;color:var(--text-light);cursor:pointer;border-bottom:3px solid transparent;transition:color .15s,border-color .15s;letter-spacing:.01em;}
+  .pp-subtab:hover{color:var(--green-mid);}
+  .pp-subtab.active{color:var(--green-dark);border-bottom-color:var(--green-dark);}
   .btn-book-collection{
     background:linear-gradient(135deg,#C9A84C,#E8D49A,#C9A84C);background-size:200% 200%;
     color:var(--green-dark);font-size:11px;font-weight:800;padding:.5rem 1.1rem;border-radius:8px;

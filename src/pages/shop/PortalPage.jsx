@@ -23,39 +23,47 @@ export default function PortalPage() {
               Book Seedling Collection
             </a>
 
-            {/* Row 2 — Active / History / Messages / Profile tabs.
-                Active Orders and History share the same panel below;
-                clicking a tab swaps the content, searching merges both
-                sets into one combined view. */}
+            {/* Row 2 — top-level sections: My Order (default), Messages, Profile.
+                "My Order" wraps the Active/History sub-tabs below so the
+                orders list has a clear category label. Messages / Profile
+                swap into the same column underneath. */}
             <div style={css('display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem;')}>
-              <button className="portal-tab active" id="ptab-active" onClick={(e) => window.pShowOrderView('active', e.currentTarget)}>Active Orders</button>
-              <button className="portal-tab" id="ptab-history" onClick={(e) => window.pShowOrderView('history', e.currentTarget)}>Order History</button>
+              <button className="portal-tab active" id="ptab-myorder" onClick={(e) => window.pShowOrderView('myorder', e.currentTarget)}>My Order</button>
               <button className="portal-tab" id="ptab-messages" onClick={(e) => window.pShowOrderView('messages', e.currentTarget)}>Messages</button>
               <button className="portal-tab" id="ptab-profile" onClick={(e) => window.pShowOrderView('profile', e.currentTarget)}>Profile</button>
             </div>
-            <div id="pp-search-wrap" style={css('margin-bottom:.8rem;')}>
-              <input
-                type="text"
-                id="pp-order-search"
-                name="mjm-portal-search"
-                autoComplete="off"
-                inputMode="search"
-                data-form-type="other"
-                data-1p-ignore=""
-                data-lpignore="true"
-                placeholder="Search by order #, billing name, item..."
-                onInput={() => window.pFilterOrders()}
-                style={css("width:100%;padding:8px 12px;border:1.5px solid var(--green-pale);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;background:var(--cream);color:var(--text-dark);transition:border-color .15s;")}
-                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--green-mid)'; }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--green-pale)'; }}
-              />
+
+            {/* My Order section — underline sub-tabs + search + list panel.
+                Active + History share one panel (#pp-orders); clicking a
+                sub-tab swaps the content, searching merges both sets. */}
+            <div id="pp-myorder-section">
+              <div className="pp-subtabs" role="tablist" aria-label="My Orders">
+                <button className="pp-subtab active" id="ptab-active" role="tab" aria-selected="true" onClick={(e) => window.pShowOrdersSubTab('active', e.currentTarget)}>Active Orders</button>
+                <button className="pp-subtab" id="ptab-history" role="tab" aria-selected="false" onClick={(e) => window.pShowOrdersSubTab('history', e.currentTarget)}>Order History</button>
+              </div>
+              <div id="pp-search-wrap" style={css('margin-bottom:.8rem;')}>
+                <input
+                  type="text"
+                  id="pp-order-search"
+                  name="mjm-portal-search"
+                  autoComplete="off"
+                  inputMode="search"
+                  data-form-type="other"
+                  data-1p-ignore=""
+                  data-lpignore="true"
+                  placeholder="Search by order #, billing name, item..."
+                  onInput={() => window.pFilterOrders()}
+                  style={css("width:100%;padding:8px 12px;border:1.5px solid var(--green-pale);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;background:var(--cream);color:var(--text-dark);transition:border-color .15s;")}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--green-mid)'; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--green-pale)'; }}
+                />
+              </div>
+              <div id="pp-orders"></div>
+              {/* Legacy history panel — kept as an empty, hidden placeholder
+                  so no runtime that reaches for #pp-history by id crashes
+                  while the real content moves into #pp-orders. */}
+              <div id="pp-history" style={css('display:none;')}></div>
             </div>
-            {/* Single shared panel for Active + History + search-across. */}
-            <div id="pp-orders"></div>
-            {/* Legacy history panel — kept as an empty, hidden placeholder
-                so no runtime that reaches for #pp-history by id crashes
-                while the real content moves into #pp-orders. */}
-            <div id="pp-history" style={css('display:none;')}></div>
             {/* Messages the customer sent through Contact Us while logged in.
                 Rendered by pRenderMessages() in main.js. */}
             <div id="pp-messages" style={css('display:none;')}></div>

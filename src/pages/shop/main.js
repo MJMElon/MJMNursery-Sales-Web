@@ -1475,8 +1475,19 @@ export function initShopMain() {
     try{pRenderPointsActivity();}catch(e){console.error('points activity:',e);}
     try{loadBillingFromDb().then(function(){renderBillingEntries();}).catch(function(){loadBillingFromStorage();renderBillingEntries();});}catch(e){loadBillingFromStorage();renderBillingEntries();}
 
+    // Restore the last-selected top-level section. Legacy stored
+    // values ('active' / 'history') map to the My Order section with
+    // the matching sub-tab preselected — handled inside pShowOrderView.
     var lastTab=sessionStorage.getItem('mjm_portal_tab');
-    if(lastTab){var btn=document.getElementById('ptab-'+lastTab);if(btn)pShowOrderView(lastTab,btn);}
+    if(lastTab){
+      if (lastTab === 'active' || lastTab === 'history'){
+        window._portalOrdersView = lastTab;
+        pShowOrderView('myorder', document.getElementById('ptab-myorder'));
+      } else {
+        var btn=document.getElementById('ptab-'+lastTab);
+        if(btn) pShowOrderView(lastTab,btn);
+      }
+    }
   }
 
   async function loadCustomerOrders(){
@@ -1612,24 +1623,52 @@ export function initShopMain() {
   }
 
   function pShowOrderView(view,btn){
-    document.querySelectorAll('#page-portal .portal-tab').forEach(function(b){b.classList.remove('active');});
-    if(btn)btn.classList.add('active');
-    // Active + History share one panel (#pp-orders) now — pRenderOrders
-    // reads the saved view and renders accordingly. #pp-history is a
-    // hidden legacy placeholder (left in the DOM to avoid breaking any
-    // code that still looks it up by id).
-    var isList = (view==='active' || view==='history');
-    document.getElementById('pp-orders').style.display = isList ? 'block' : 'none';
-    document.getElementById('pp-history').style.display = 'none';
-    document.getElementById('pp-profile').style.display = view==='profile' ? 'block' : 'none';
-    var msgEl=document.getElementById('pp-messages'); if(msgEl) msgEl.style.display=view==='messages'?'block':'none';
-    var sw=document.getElementById('pp-search-wrap'); if(sw) sw.style.display=view==='messages'?'none':'';
-    if(view==='messages') pRenderMessages();
-    if(isList){
-      window._portalOrdersView = view;    // remember for pRenderOrders
-      pRenderOrders();
+    // Normalise legacy callers that still pass 'active' / 'history'
+    // as the top-level view — those are now sub-tabs of "My Order".
+    var subTab = null;
+    if (view === 'active' || view === 'history'){
+      subTab = view;
+      view = 'myorder';
     }
-    sessionStorage.setItem('mjm_portal_tab',view);
+    // Top-level tabs: My Order / Messages / Profile.
+    document.querySelectorAll('#page-portal .portal-tab').forEach(function(b){b.classList.remove('active');});
+    if (btn && btn.classList.contains('portal-tab')) btn.classList.add('active');
+    // Fallback: if a stored sub-tab mapping came in, light up the
+    // My Order top tab so the UI stays consistent.
+    if (view === 'myorder'){
+      var moBtn = document.getElementById('ptab-myorder');
+      if (moBtn) moBtn.classList.add('active');
+    }
+    var moSection = document.getElementById('pp-myorder-section');
+    if (moSection) moSection.style.display = view === 'myorder' ? 'block' : 'none';
+    document.getElementById('pp-profile').style.display = view === 'profile' ? 'block' : 'none';
+    var msgEl = document.getElementById('pp-messages'); if (msgEl) msgEl.style.display = view === 'messages' ? 'block' : 'none';
+    if (view === 'messages') pRenderMessages();
+    if (view === 'myorder'){
+      // Default to Active sub-tab on first open; or honour the one
+      // the legacy caller explicitly asked for.
+      var want = subTab || window._portalOrdersView || 'active';
+      pShowOrdersSubTab(want, document.getElementById('ptab-'+want));
+    }
+    sessionStorage.setItem('mjm_portal_tab', view);
+  }
+
+  // Switch between the Active Orders / Order History sub-tabs under
+  // My Order. Underline-tab visual via the .pp-subtab[.active] CSS
+  // class. Rerenders the shared #pp-orders panel.
+  function pShowOrdersSubTab(sub, btn){
+    if (sub !== 'active' && sub !== 'history') sub = 'active';
+    window._portalOrdersView = sub;
+    document.querySelectorAll('#page-portal .pp-subtab').forEach(function(b){
+      b.classList.remove('active');
+      b.setAttribute('aria-selected', 'false');
+    });
+    var target = btn || document.getElementById('ptab-'+sub);
+    if (target){
+      target.classList.add('active');
+      target.setAttribute('aria-selected', 'true');
+    }
+    pRenderOrders();
   }
 
   // ── MY MESSAGES ──
@@ -4169,7 +4208,7 @@ export function initShopMain() {
     // cart (generated cart rows + footer)
     removeCartItem, changeCartQty, setCartQty, proceedToCheckout,
     // portal (static tabs + generated order cards / detail modal)
-    pShowOrderView, pFilterOrders, saveProfileDetails, toggleCollapse,
+    pShowOrderView, pShowOrdersSubTab, pFilterOrders, saveProfileDetails, toggleCollapse,
     showPw, hidePw,
     goPayOrder, openOrderDetail, downloadOrder, pCancelOrder,
     pOpenRating, pSetRating, pSubmitRating,

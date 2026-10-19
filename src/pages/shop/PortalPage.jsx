@@ -23,14 +23,14 @@ export default function PortalPage() {
               Book Seedling Collection
             </a>
 
-            {/* Row 2 — top-level sections: My Order (default), Messages, Profile.
-                "My Order" wraps the Active/History sub-tabs below so the
-                orders list has a clear category label. Messages / Profile
-                swap into the same column underneath. */}
-            <div style={css('display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem;')}>
-              <button className="portal-tab active" id="ptab-myorder" onClick={(e) => window.pShowOrderView('myorder', e.currentTarget)}>My Order</button>
-              <button className="portal-tab" id="ptab-messages" onClick={(e) => window.pShowOrderView('messages', e.currentTarget)}>Messages</button>
-              <button className="portal-tab" id="ptab-profile" onClick={(e) => window.pShowOrderView('profile', e.currentTarget)}>Profile</button>
+            {/* Row 2 — top-level sections: My Order (default), My Case, My Profile.
+                Segmented-pill control: active chip gets a solid green
+                pill + white text; inactive chips are plain text sharing
+                the pale pill-rail background. */}
+            <div className="portal-tab-group" role="tablist" aria-label="Portal sections">
+              <button className="portal-tab active" id="ptab-myorder" role="tab" aria-selected="true" onClick={(e) => window.pShowOrderView('myorder', e.currentTarget)}>My Order</button>
+              <button className="portal-tab" id="ptab-messages" role="tab" aria-selected="false" onClick={(e) => window.pShowOrderView('messages', e.currentTarget)}>My Case</button>
+              <button className="portal-tab" id="ptab-profile" role="tab" aria-selected="false" onClick={(e) => window.pShowOrderView('profile', e.currentTarget)}>My Profile</button>
             </div>
 
             {/* My Order section — underline sub-tabs + search + list panel.

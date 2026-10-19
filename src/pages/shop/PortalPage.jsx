@@ -17,18 +17,21 @@ export default function PortalPage() {
         <div className="portal-layout">
           {/* LEFT: Orders + History + Profile */}
           <div className="portal-left">
-            {/* Order tabs */}
-            <div style={css('display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem;')}>
-              <div style={css('display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;')}>
-                <a href="https://collect.mjmnursery.com" target="_blank" className="btn-book-collection">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
-                  {' '}Book Collection
-                </a>
-                <button className="portal-tab active" id="ptab-active" onClick={(e) => window.pShowOrderView('active', e.currentTarget)}>Active Orders</button>
-                <button className="portal-tab" id="ptab-history" onClick={(e) => window.pShowOrderView('history', e.currentTarget)}>History</button>
-                <button className="portal-tab" id="ptab-messages" onClick={(e) => window.pShowOrderView('messages', e.currentTarget)}>Messages</button>
-                <button className="portal-tab" id="ptab-profile" onClick={(e) => window.pShowOrderView('profile', e.currentTarget)}>Profile</button>
-              </div>
+            {/* Row 1 — full-width Book Seedling Collection CTA */}
+            <a href="https://collect.mjmnursery.com" target="_blank" className="btn-book-collection" style={css('display:flex;align-items:center;justify-content:center;gap:.5rem;width:100%;padding:.75rem 1rem;font-size:13px;margin-bottom:.8rem;')}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+              Book Seedling Collection
+            </a>
+
+            {/* Row 2 — Active / History / Messages / Profile tabs.
+                Active Orders and History share the same panel below;
+                clicking a tab swaps the content, searching merges both
+                sets into one combined view. */}
+            <div style={css('display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem;')}>
+              <button className="portal-tab active" id="ptab-active" onClick={(e) => window.pShowOrderView('active', e.currentTarget)}>Active Orders</button>
+              <button className="portal-tab" id="ptab-history" onClick={(e) => window.pShowOrderView('history', e.currentTarget)}>Order History</button>
+              <button className="portal-tab" id="ptab-messages" onClick={(e) => window.pShowOrderView('messages', e.currentTarget)}>Messages</button>
+              <button className="portal-tab" id="ptab-profile" onClick={(e) => window.pShowOrderView('profile', e.currentTarget)}>Profile</button>
             </div>
             <div id="pp-search-wrap" style={css('margin-bottom:.8rem;')}>
               <input
@@ -47,7 +50,11 @@ export default function PortalPage() {
                 onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--green-pale)'; }}
               />
             </div>
+            {/* Single shared panel for Active + History + search-across. */}
             <div id="pp-orders"></div>
+            {/* Legacy history panel — kept as an empty, hidden placeholder
+                so no runtime that reaches for #pp-history by id crashes
+                while the real content moves into #pp-orders. */}
             <div id="pp-history" style={css('display:none;')}></div>
             {/* Messages the customer sent through Contact Us while logged in.
                 Rendered by pRenderMessages() in main.js. */}

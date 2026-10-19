@@ -1614,12 +1614,21 @@ export function initShopMain() {
   function pShowOrderView(view,btn){
     document.querySelectorAll('#page-portal .portal-tab').forEach(function(b){b.classList.remove('active');});
     if(btn)btn.classList.add('active');
-    document.getElementById('pp-orders').style.display=view==='active'?'block':'none';
-    document.getElementById('pp-history').style.display=view==='history'?'block':'none';
-    document.getElementById('pp-profile').style.display=view==='profile'?'block':'none';
+    // Active + History share one panel (#pp-orders) now — pRenderOrders
+    // reads the saved view and renders accordingly. #pp-history is a
+    // hidden legacy placeholder (left in the DOM to avoid breaking any
+    // code that still looks it up by id).
+    var isList = (view==='active' || view==='history');
+    document.getElementById('pp-orders').style.display = isList ? 'block' : 'none';
+    document.getElementById('pp-history').style.display = 'none';
+    document.getElementById('pp-profile').style.display = view==='profile' ? 'block' : 'none';
     var msgEl=document.getElementById('pp-messages'); if(msgEl) msgEl.style.display=view==='messages'?'block':'none';
     var sw=document.getElementById('pp-search-wrap'); if(sw) sw.style.display=view==='messages'?'none':'';
     if(view==='messages') pRenderMessages();
+    if(isList){
+      window._portalOrdersView = view;    // remember for pRenderOrders
+      pRenderOrders();
+    }
     sessionStorage.setItem('mjm_portal_tab',view);
   }
 
@@ -1701,39 +1710,56 @@ export function initShopMain() {
     setTimeout(function(){t.style.opacity='0';t.style.transform='translateX(-50%) translateY(80px)';},3000);
   }
 
-  // Orders (active only — left side)
+  // One shared renderer for Active Orders + Order History. Reads
+  //   window._portalOrdersView   — 'active' | 'history' (default 'active')
+  //   pp-order-search            — search box
+  // Rules:
+  //   • Search text present → render BOTH active + history that match
+  //     (so the user doesn't have to click the "other" tab to find
+  //     an older match), newest first.
+  //   • Search empty → render only the active tab's set.
+  // Writes into #pp-orders; #pp-history is a hidden placeholder now.
   function pRenderOrders(){
     // Final safety net: if the input still contains autofilled noise (the user's
     // email, or whitespace from a paste), treat it as no filter at all. Browser
     // autofill into a "search by order #" box is virtually always wrong.
     var q=(document.getElementById('pp-order-search').value||'').trim().toLowerCase();
     if(q.indexOf('@')>=0) q='';
-    var recent=P_ORDERS.filter(function(o){return !pIsOrderDone(o);});
-    if(q)recent=recent.filter(function(o){return pOrderMatchSearch(o,q);});
-    var html='';
-    if(recent.length){recent.forEach(function(o){html+=pOrderCard(o);});}
-    else if(q){html='<div class="p-card" style="text-align:center;padding:1.5rem;font-size:13px;color:var(--text-light);">No matching orders found.</div>';}
-    else{html='<div class="p-card" style="text-align:center;padding:2.5rem 1.5rem;"><div style="font-size:2rem;margin-bottom:.6rem;">📦</div><div style="font-family:\'Cormorant Garamond\',serif;font-size:1.1rem;color:var(--text-dark);margin-bottom:.4rem;">No Active Orders</div><div style="font-size:12px;color:var(--text-light);line-height:1.5;">You don\'t have any active orders at the moment.<br>Browse our shop to place your first order.</div><button onclick="showPage(\'home\')" class="p-btn" style="margin-top:1rem;">Browse Shop</button></div>';}
-    document.getElementById('pp-orders').innerHTML=html;
+    var view = window._portalOrdersView || 'active';
+
+    var list;
+    if (q){
+      // Combined search across both sets, newest first.
+      list = P_ORDERS.slice().filter(function(o){ return pOrderMatchSearch(o,q); });
+      list.sort(function(a,b){
+        var ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        var tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return tb - ta;
+      });
+    } else if (view === 'history'){
+      list = P_ORDERS.filter(pIsOrderDone);
+    } else {
+      list = P_ORDERS.filter(function(o){ return !pIsOrderDone(o); });
+    }
+
+    var html = '';
+    if (list.length){
+      list.forEach(function(o){ html += pOrderCard(o); });
+    } else if (q){
+      html = '<div class="p-card" style="text-align:center;padding:1.5rem;font-size:13px;color:var(--text-light);">No matching orders found.</div>';
+    } else if (view === 'history'){
+      html = '<div class="p-card" style="text-align:center;padding:2.5rem 1.5rem;"><div style="font-size:2rem;margin-bottom:.6rem;">📋</div><div style="font-family:\'Cormorant Garamond\',serif;font-size:1.1rem;color:var(--text-dark);margin-bottom:.4rem;">No Order History</div><div style="font-size:12px;color:var(--text-light);line-height:1.5;">Your completed orders will appear here.</div></div>';
+    } else {
+      html = '<div class="p-card" style="text-align:center;padding:2.5rem 1.5rem;"><div style="font-size:2rem;margin-bottom:.6rem;">📦</div><div style="font-family:\'Cormorant Garamond\',serif;font-size:1.1rem;color:var(--text-dark);margin-bottom:.4rem;">No Active Orders</div><div style="font-size:12px;color:var(--text-light);line-height:1.5;">You don\'t have any active orders at the moment.<br>Browse our shop to place your first order.</div><button onclick="showPage(\'home\')" class="p-btn" style="margin-top:1rem;">Browse Shop</button></div>';
+    }
+    document.getElementById('pp-orders').innerHTML = html;
     pStartEInvoiceCountdowns();
   }
 
-  // History (left side — separate panel)
-  function pRenderHistory(){
-    // Final safety net: if the input still contains autofilled noise (the user's
-    // email, or whitespace from a paste), treat it as no filter at all. Browser
-    // autofill into a "search by order #" box is virtually always wrong.
-    var q=(document.getElementById('pp-order-search').value||'').trim().toLowerCase();
-    if(q.indexOf('@')>=0) q='';
-    var hist=P_ORDERS.filter(pIsOrderDone);
-    if(q)hist=hist.filter(function(o){return pOrderMatchSearch(o,q);});
-    var html='';
-    if(hist.length){hist.forEach(function(o){html+=pOrderCard(o);});}
-    else if(q){html='<div class="p-card" style="text-align:center;padding:1.5rem;font-size:13px;color:var(--text-light);">No matching orders found.</div>';}
-    else{html='<div class="p-card" style="text-align:center;padding:2.5rem 1.5rem;"><div style="font-size:2rem;margin-bottom:.6rem;">📋</div><div style="font-family:\'Cormorant Garamond\',serif;font-size:1.1rem;color:var(--text-dark);margin-bottom:.4rem;">No Order History</div><div style="font-size:12px;color:var(--text-light);line-height:1.5;">Your completed orders will appear here.</div></div>';}
-    document.getElementById('pp-history').innerHTML=html;
-    pStartEInvoiceCountdowns();
-  }
+  // Legacy entry point — Active + History share one renderer now, so
+  // this is just an alias that redraws the current panel. Kept so any
+  // place that calls pRenderHistory() still works.
+  function pRenderHistory(){ pRenderOrders(); }
 
   function pOrderMatchSearch(o,q){
     return o.id.toLowerCase().includes(q)||
@@ -1745,7 +1771,6 @@ export function initShopMain() {
 
   function pFilterOrders(){
     pRenderOrders();
-    pRenderHistory();
   }
 
   function pOrderCard(o){

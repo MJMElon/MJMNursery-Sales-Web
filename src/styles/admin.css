@@ -106,9 +106,18 @@ input,select,textarea,button{font-family:inherit;}
 .filter-input{background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:7px 12px;font-size:12px;outline:none;min-width:200px;}
 .filter-input:focus{border-color:var(--green);}
 .filter-select{background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:7px 12px;font-size:12px;outline:none;cursor:pointer;}
-.filter-chip{background:var(--surface);border:1.5px solid var(--border);border-radius:999px;padding:6px 14px;font-size:11px;font-weight:600;color:var(--ink3);cursor:pointer;transition:all .15s;}
-.filter-chip:hover{border-color:var(--green);color:var(--green);}
-.filter-chip.active{background:var(--green);border-color:var(--green);color:#fff;}
+.filter-chip{background:transparent;border:none;border-radius:999px;padding:7px 14px;font-size:11px;font-weight:600;color:var(--ink3);cursor:pointer;transition:background .15s, color .15s;font-family:inherit;letter-spacing:.02em;}
+.filter-chip:hover{color:var(--green);}
+.filter-chip.active{background:var(--green);color:#fff;}
+.filter-chip.active:hover{color:#fff;}
+
+/* Segmented pill rail that wraps a run of .filter-chip buttons so the
+   group reads as one unit — matches the "Recent / Pending / Completed"
+   reference used across the sales admin portal. Chips inside keep the
+   active-purple fill from .filter-chip.active; inactive chips are
+   borderless and share the rail background. */
+.chip-rail{display:inline-flex;align-items:center;gap:.15rem;background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:.25rem;flex-wrap:wrap;}
+.chip-rail .filter-chip{padding:6px 12px;}
 /* Count badge lives inside a filter-chip. Empty by default so a
    count of 0 doesn't take up space; the JS sets its text only when
    the count > 0. Colour comes from data-color so each tab can carry

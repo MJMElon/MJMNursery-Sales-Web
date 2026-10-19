@@ -1116,9 +1116,25 @@
   }
 
   /* ── PORTAL STYLES (inside sales web) ── */
+  /* Portal legacy pill buttons used in multiple spots (My Case 'send
+     another', billing-info toggle, 'add new billing info'). Original
+     bordered-rectangle look — kept untouched because those surfaces
+     still rely on it. */
   .portal-tab{background:none;border:1.5px solid var(--green-pale);color:var(--text-mid);font-size:12px;font-weight:600;padding:.45rem 1rem;border-radius:8px;cursor:pointer;transition:all .15s;font-family:'DM Sans',sans-serif;}
   .portal-tab:hover{border-color:var(--green-mid);color:var(--green-dark);}
   .portal-tab.active{background:var(--green-dark);color:#fff;border-color:var(--green-dark);}
+
+  /* Segmented pill control for the three top-level portal sections —
+     matches the "Recent / Pending / Completed" reference. Active chip
+     lifts into a solid brand-green pill with white text; inactive
+     chips are plain text sharing the pale pill-rail background so
+     the group reads as one unit. Scoped to .portal-tab-group so the
+     legacy .portal-tab styling above stays intact. */
+  .portal-tab-group{display:inline-flex;gap:.2rem;padding:.3rem;background:var(--cream);border:1px solid var(--green-pale);border-radius:999px;margin-bottom:1rem;flex-wrap:wrap;}
+  .portal-tab-group .portal-tab{background:transparent;border:none;color:var(--text-mid);font-size:12.5px;font-weight:600;padding:.5rem 1.1rem;border-radius:999px;letter-spacing:.02em;}
+  .portal-tab-group .portal-tab:hover{border:none;color:var(--green-dark);}
+  .portal-tab-group .portal-tab.active{background:var(--green-dark);color:#fff;border:none;}
+  .portal-tab-group .portal-tab.active:hover{color:#fff;}
   /* Underline-style sub-tabs under "My Order" — borderless buttons
      sharing a bottom rule, the active one lifts a thicker brand-green
      bar. Mirrors the Reviews / Details reference pattern. */

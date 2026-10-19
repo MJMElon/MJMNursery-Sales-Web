@@ -169,6 +169,24 @@ async function loadPayments(){
     });
     renderCreditNoteTable(creditRows);
   } else if (PAYMENTS_VIEW === 'einvoice') {
+    // Belt-and-braces: the server-side filter already excludes
+    // Cancelled / Refunded via .not('status','in',…), but a stale
+    // PostgREST cache or a dual-write trigger timing window could in
+    // principle leak a cancelled row through. Re-filter client-side
+    // against BOTH the legacy status column and the split
+    // order_status column so a cancelled order (however it got that
+    // way) can never surface in the E-Invoice Pending queue.
+    orders = orders.filter(function(o){
+      if (!o) return false;
+      if (o.deleted_at || o.archived_at) return false;
+      var _s   = o.status || '';
+      var _ost = o.order_status || '';
+      var _pst = o.payment_status || '';
+      if (_s   === 'Cancelled' || _s   === 'Refunded') return false;
+      if (_ost === 'Cancelled' || _ost === 'Refunded') return false;
+      if (_pst === 'Refunded')                         return false;
+      return true;
+    });
     renderEInvoiceTable(orders);
   } else if (PAYMENTS_VIEW === 'partial') {
     // Sum salesweb_order_payments per order — one query, then bucket
@@ -219,12 +237,12 @@ async function renderPaymentStats(){
   // tables. Fallbacks below keep the widest set of columns that the
   // schema actually has.
   var res = await sb.from('salesweb_customer_orders')
-    .select('id,status,total,amount_paid,created_at,updated_at,deleted_at,archived_at,billing_type,billing_tax_id,einvoice_requested_at,einvoice_uploaded_at,credit_note_flagged_at,credit_note_issued_at');
+    .select('id,status,order_status,payment_status,total,amount_paid,created_at,updated_at,deleted_at,archived_at,billing_type,billing_tax_id,einvoice_requested_at,einvoice_uploaded_at,credit_note_flagged_at,credit_note_issued_at');
   if (res.error && /credit_note_|does not exist/i.test(res.error.message||'')){
     res = await sb.from('salesweb_customer_orders')
-      .select('id,status,total,amount_paid,created_at,updated_at,deleted_at,archived_at,billing_type,billing_tax_id,einvoice_requested_at,einvoice_uploaded_at');
+      .select('id,status,order_status,payment_status,total,amount_paid,created_at,updated_at,deleted_at,archived_at,billing_type,billing_tax_id,einvoice_requested_at,einvoice_uploaded_at');
   }
-  if (res.error && /billing_type|einvoice_requested_at|does not exist/i.test(res.error.message||'')){
+  if (res.error && /order_status|payment_status|billing_type|einvoice_requested_at|does not exist/i.test(res.error.message||'')){
     res = await sb.from('salesweb_customer_orders').select('id,status,total,amount_paid,created_at,updated_at,deleted_at,archived_at');
   }
   var all = (res.data || []).filter(function(o){ return !o.deleted_at && !o.archived_at; });
@@ -234,10 +252,18 @@ async function renderPaymentStats(){
   // owes an E-Invoice upload, whatever the trigger, AND placed from
   // the EINV_PENDING_SINCE cutoff onward (historical backlog isn't
   // retroactively tagged). The "no billing_type but has a Tax ID"
-  // heuristic matches the admin modal.
+  // heuristic matches the admin modal. Also skips Cancelled /
+  // Refunded on both the legacy status column AND the split
+  // order_status / payment_status columns, so the chip count can
+  // never drift from the tab list.
   var einvReqs = all.filter(function(o){
     if (o.einvoice_uploaded_at) return false;
-    if (o.status === 'Cancelled' || o.status === 'Refunded') return false;
+    var _s   = o.status || '';
+    var _ost = o.order_status || '';
+    var _pst = o.payment_status || '';
+    if (_s   === 'Cancelled' || _s   === 'Refunded') return false;
+    if (_ost === 'Cancelled' || _ost === 'Refunded') return false;
+    if (_pst === 'Refunded')                         return false;
     if (!o.created_at) return false;
     if (new Date(o.created_at).getTime() < EINV_PENDING_SINCE_MS) return false;
     if (o.einvoice_requested_at) return true;

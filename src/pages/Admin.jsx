@@ -274,12 +274,14 @@ export default function Admin() {
                         </select>
                       </div>
                     <div className="filter-bar" style={{ marginTop: '-.3rem' }}>
+                      <div className="chip-rail">
                       <button className="filter-chip active" data-msg-view="open" onClick={(e) => { window.setMessageView('open'); }}>Open <span className="chip-count" id="msg-count-open" data-color="amber"></span></button>
                       <button className="filter-chip" data-msg-view="New" onClick={(e) => { window.setMessageView('New'); }}>New <span className="chip-count" id="msg-count-new" data-color="amber"></span></button>
                       <button className="filter-chip" data-msg-view="In Progress" onClick={(e) => { window.setMessageView('In Progress'); }}>In Progress</button>
                       <button className="filter-chip" data-msg-view="Resolved" onClick={(e) => { window.setMessageView('Resolved'); }}>Resolved</button>
                       <button className="filter-chip" data-msg-view="Closed" onClick={(e) => { window.setMessageView('Closed'); }}>Closed</button>
                       <button className="filter-chip" data-msg-view="all" onClick={(e) => { window.setMessageView('all'); }}>All</button>
+                      </div>
                       </div>
                     <div id="messages-count" style={{ display: 'flex', justifyContent: 'flex-end', fontSize: '12px', color: 'var(--ink3)', marginBottom: '.4rem' }} />
                     <div id="messages-table"><div className="loading">Loading messages...</div></div>
@@ -294,11 +296,13 @@ export default function Admin() {
                       <input className="filter-input" id="seal-search" placeholder="Search seal number, customer, AL, DO..." onInput={(e) => { window.sealSearchChanged(); }} />
                       </div>
                     <div className="filter-bar" style={{ marginTop: '-.3rem' }}>
+                      <div className="chip-rail">
                       <button className="filter-chip active" data-seal-status="" onClick={(e) => { window.setSealStatus(''); }}>All</button>
                       <button className="filter-chip" data-seal-status="in_stock" onClick={(e) => { window.setSealStatus('in_stock'); }}>In stock <span className="chip-count" id="seal-count-in_stock"></span></button>
                       <button className="filter-chip" data-seal-status="pending" onClick={(e) => { window.setSealStatus('pending'); }}>Pending collection <span className="chip-count" id="seal-count-pending" data-color="amber"></span></button>
                       <button className="filter-chip" data-seal-status="scanned" onClick={(e) => { window.setSealStatus('scanned'); }}>Scanned <span className="chip-count" id="seal-count-scanned" data-color="blue"></span></button>
                       <button className="filter-chip" data-seal-status="collected" onClick={(e) => { window.setSealStatus('collected'); }}>Collected <span className="chip-count" id="seal-count-collected"></span></button>
+                      </div>
                       </div>
                     <div id="seal-count" style={{ display: 'flex', justifyContent: 'flex-end', fontSize: '12px', color: 'var(--ink3)', marginBottom: '.4rem' }} />
                     <div id="seal-table"><div className="loading">Loading seals...</div></div>
@@ -396,10 +400,12 @@ export default function Admin() {
                   <div className="card">
                     <div className="filter-bar">
                       <input className="filter-input" id="payment-search" placeholder="Search order number or customer..." onInput={(e) => { window.loadPayments(); }} />
+                      <div className="chip-rail">
                       <button className="filter-chip active" data-payment-view="awaiting" onClick={(e) => { window.setPaymentView('awaiting'); }}>Awaiting Verification <span className="chip-count" id="pv-count-awaiting" data-color="amber"></span></button>
                       <button className="filter-chip" data-payment-view="partial" onClick={(e) => { window.setPaymentView('partial'); }}>Partially Paid <span className="chip-count" id="pv-count-partial" data-color="blue"></span></button>
                       <button className="filter-chip" data-payment-view="credit" onClick={(e) => { window.setPaymentView('credit'); }}>Credit Note <span className="chip-count" id="pv-count-credit" data-color="orange"></span></button>
                       <button className="filter-chip" data-payment-view="einvoice" onClick={(e) => { window.setPaymentView('einvoice'); }}>E-Invoice Pending <span className="chip-count" id="pv-count-einvoice" data-color="purple"></span></button>
+                      </div>
                       </div>
                     <div id="payments-table"><div className="loading">Loading payments...</div></div>
                     </div>
@@ -433,11 +439,13 @@ export default function Admin() {
                       </div>
                     </div>
                   <div className="filter-bar" style={{ marginBottom: '1rem' }}>
+                    <div className="chip-rail">
                     <button className="filter-chip active" data-promo-status="" onClick={(e) => { window.setPromoFilter(''); }}>All</button>
                     <button className="filter-chip" data-promo-status="live" onClick={(e) => { window.setPromoFilter('live'); }}>Live</button>
                     <button className="filter-chip" data-promo-status="scheduled" onClick={(e) => { window.setPromoFilter('scheduled'); }}>Scheduled</button>
                     <button className="filter-chip" data-promo-status="draft" onClick={(e) => { window.setPromoFilter('draft'); }}>Drafts</button>
                     <button className="filter-chip" data-promo-status="ended" onClick={(e) => { window.setPromoFilter('ended'); }}>Ended</button>
+                    </div>
                     </div>
                   <div className="card"><div id="promos-table"><div className="loading">Loading promotions...</div></div></div>
                   </div>
@@ -454,12 +462,14 @@ export default function Admin() {
                   <div className="card">
                     <div className="filter-bar">
                       <input className="filter-input" id="coupon-search" placeholder="Search code or name..." onInput={(e) => { window.loadCoupons(); }} />
+                      <div className="chip-rail">
                       <button className="filter-chip active" data-coupon-status="" onClick={(e) => { window.setCouponFilter(''); }}>All</button>
                       <button className="filter-chip" data-coupon-status="active" onClick={(e) => { window.setCouponFilter('active'); }}>Active</button>
                       <button className="filter-chip" data-coupon-status="scheduled" onClick={(e) => { window.setCouponFilter('scheduled'); }}>Scheduled</button>
                       <button className="filter-chip" data-coupon-status="expired" onClick={(e) => { window.setCouponFilter('expired'); }}>Expired</button>
                       <button className="filter-chip" data-coupon-status="exhausted" onClick={(e) => { window.setCouponFilter('exhausted'); }}>Exhausted</button>
                       <button className="filter-chip" data-coupon-status="inactive" onClick={(e) => { window.setCouponFilter('inactive'); }}>Inactive</button>
+                      </div>
                       </div>
                     <div id="coupons-table"><div className="loading">Loading coupons...</div></div>
                     </div>

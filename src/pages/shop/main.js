@@ -2634,11 +2634,10 @@ export function initShopMain() {
     if(!url){return;}
     document.getElementById('p-file-viewer-title').textContent = name || 'File';
     var dl = document.getElementById('p-file-viewer-dl');
-    dl.href = url;
-    // download attribute is only honoured for same-origin URLs but it
-    // doesn't hurt to set it — the link still works as a plain new-tab
-    // fallback for cross-origin storage URLs.
-    dl.setAttribute('download', name || '');
+    // Store the target on the button so pDownloadFile can read it
+    // without rebinding onclick every time.
+    dl.setAttribute('data-url', url);
+    dl.setAttribute('data-name', name || '');
     var body = document.getElementById('p-file-viewer-body');
     var lowerName = String(name||'').toLowerCase();
     var lowerType = String(type||'').toLowerCase();
@@ -2668,6 +2667,44 @@ export function initShopMain() {
     // Clear iframe src so a PDF doesn't keep loading in the background
     // (mostly relevant for mobile data plans).
     document.getElementById('p-file-viewer-body').innerHTML = '';
+  }
+
+  // Force a true download, not a new tab. Supabase storage URLs are
+  // cross-origin, so <a download> is ignored by the browser (the file
+  // just opens in a new tab). Fetch as a blob and trigger the save
+  // via Object URL — works for images, PDFs, docs, anything.
+  async function pDownloadFile(){
+    var btn = document.getElementById('p-file-viewer-dl');
+    if (!btn) return;
+    var url  = btn.getAttribute('data-url') || '';
+    var name = btn.getAttribute('data-name') || 'download';
+    if (!url) return;
+    var orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Preparing…';
+    try {
+      var res = await fetch(url, { credentials: 'omit' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var blob = await res.blob();
+      var objectUrl = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Revoke after the browser has had a tick to kick the save off.
+      setTimeout(function(){ try { URL.revokeObjectURL(objectUrl); } catch(_){} }, 1500);
+    } catch (e) {
+      // Fallback: cross-origin fetch may be blocked (e.g. signed URL
+      // expired, CORS misconfig). Open in a new tab as a last resort
+      // so the file is still reachable.
+      try { window.open(url, '_blank', 'noopener'); } catch(_){}
+      showPortalToast('Download failed — opened in a new tab instead.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
   }
 
   function openOrderDetail(ordNum){
@@ -4212,7 +4249,7 @@ export function initShopMain() {
     showPw, hidePw,
     goPayOrder, openOrderDetail, downloadOrder, pCancelOrder,
     pOpenRating, pSetRating, pSubmitRating,
-    pViewFile, pCloseFileViewer,
+    pViewFile, pCloseFileViewer, pDownloadFile,
     pEditBooking, pCloseBookingEdit, pSaveBookingEdit,
     pBePrevMonth, pBeNextMonth, pBeSelectDate,
     pShareBookingWhatsApp, pTogglePointsActivity,

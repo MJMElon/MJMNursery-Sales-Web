@@ -223,16 +223,21 @@ async function loadOrders(){
   if(!wantArchived) orders = orders.filter(function(o){ return !o.archived_at; });
 
   // ── Sidebar Status filter (multi-select, OR within the group) ──
-  //   Open                 → an active order (not cancelled/refunded/completed,
-  //                          not archived/deleted)
+  //   Open                 → an active order (not cancelled/refunded/completed/
+  //                          closed, not archived/deleted)
   //   Cancelled            → status = 'Cancelled'
   //   Ready for Collection → status = 'Ready for Collection'
   //   Completed            → status = 'Completed'
   //   Deleted              → deleted_at IS NOT NULL
+  //
+  //   Closed isn't a sidebar option of its own — it is never picked by
+  //   hand, only set by closing the linked AL in the AI system — but it
+  //   has to drop OUT of Open the same way Cancelled/Refunded/Completed
+  //   do, or an order the office closed keeps reading as outstanding work.
   if(sideStatuses.length){
     orders = orders.filter(function(o){
       var ok = false;
-      if(sideStatuses.indexOf('Open') !== -1 && o.status!=='Cancelled' && o.status!=='Refunded' && o.status!=='Completed' && !o.archived_at && !o.deleted_at) ok = true;
+      if(sideStatuses.indexOf('Open') !== -1 && o.status!=='Cancelled' && o.status!=='Refunded' && o.status!=='Completed' && o.status!=='Closed' && !o.archived_at && !o.deleted_at) ok = true;
       if(sideStatuses.indexOf('Pending Payment') !== -1 && o.status==='Pending Payment' && !o.deleted_at && !o.archived_at) ok = true;
       if(sideStatuses.indexOf('Cancelled') !== -1 && o.status==='Cancelled' && !o.deleted_at && !o.archived_at) ok = true;
       if(sideStatuses.indexOf('Ready for Collection') !== -1 && o.status==='Ready for Collection' && !o.deleted_at && !o.archived_at) ok = true;
@@ -472,7 +477,18 @@ window.mjmRenderPagination = function(currentPage, totalPages, handlerName, tota
 };
 
 function orderBadgeCls(s){
-  return{'Pending Payment':'badge-amber','Partially Paid':'badge-amber','Paid':'badge-blue','Ready for Collection':'badge-green','Completed':'badge-grey','Cancelled':'badge-red','Refunded':'badge-red'}[s]||'badge-grey';
+  return{'Pending Payment':'badge-amber','Partially Paid':'badge-amber','Paid':'badge-blue','Ready for Collection':'badge-green','Completed':'badge-grey','Cancelled':'badge-red','Refunded':'badge-red','Closed':'badge-grey'}[s]||'badge-grey';
+}
+
+// Closed is not one of ORDER_STATUSES — it is never picked from this
+// page's own dropdown, only ever set by closing the linked AL in the AI
+// system (operation_booking.html's Close AL). The reason is stamped into
+// customer_remark as "Closed: <reason>" by that same propagation, and the
+// full note is also in the Order Timeline below — this just surfaces it
+// right next to the status so nobody has to scroll to find it.
+function _closedReasonOf(remark){
+  var m = String(remark||'').match(/(?:^|\s\|\s)Closed:\s*(.*?)(?:\s\||$)/);
+  return m ? m[1] : '';
 }
 
 // After a credit-bill or per-invoice payment mutation, refresh whichever
@@ -668,12 +684,26 @@ async function viewOrder(id){
   html+='<div style="font-size:13px;font-weight:600;">Order Status</div>';
   html+='<span class="badge '+orderBadgeCls(order.status)+'" style="font-size:11px;padding:4px 10px;">'+order.status+'</span>';
   html+='</div>';
-  html+='<div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;">';
-  html+='<select id="mo-status-select" class="form-input" style="flex:1;min-width:140px;font-size:12px;padding:6px 10px;">';
-  ORDER_STATUSES.forEach(function(s){html+='<option'+(s===order.status?' selected':'')+'>'+s+'</option>';});
-  html+='</select>';
-  html+='<button class="btn btn-primary btn-sm" onclick="updateOrderStatus(\''+id+'\')">Update</button>';
-  html+='</div></div>';
+  if(order.status==='Closed'){
+    // Closed is not one of ORDER_STATUSES, so the dropdown below has no
+    // option to mark "selected" and the browser falls back to the FIRST
+    // one — Pending Payment. A select showing the wrong value next to an
+    // "Update" button is how this order gets silently reopened by a click
+    // nobody meant. So this card goes read-only instead: the one way back
+    // in is re-verifying the AL in the AI system, same door it closed by.
+    var _reason=_closedReasonOf(order.customer_remark);
+    html+='<div style="font-size:12px;color:var(--ink3);">Closed via its linked Approval Letter in the AI system.';
+    if(_reason) html+=' <strong>Reason:</strong> '+esc(_reason);
+    html+='</div>';
+  } else {
+    html+='<div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;">';
+    html+='<select id="mo-status-select" class="form-input" style="flex:1;min-width:140px;font-size:12px;padding:6px 10px;">';
+    ORDER_STATUSES.forEach(function(s){html+='<option'+(s===order.status?' selected':'')+'>'+s+'</option>';});
+    html+='</select>';
+    html+='<button class="btn btn-primary btn-sm" onclick="updateOrderStatus(\''+id+'\')">Update</button>';
+    html+='</div>';
+  }
+  html+='</div>';
 
   // Payment Terms card
   html+='<div style="background:var(--bg);border-radius:10px;padding:1rem;">';

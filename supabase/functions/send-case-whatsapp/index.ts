@@ -103,7 +103,7 @@ serve(async (req) => {
     const template = Deno.env.get('WHATSAPP_TEMPLATE') || 'case_assigned'
     const lang = Deno.env.get('WHATSAPP_TEMPLATE_LANG') || 'en'
     const staffPhone = '+' + waNumber(msg.assigned_phone)
-    const res = await fetch(`https://graph.facebook.com/v21.0/${PHONE_ID}/messages`, {
+    const res = await fetch(`https://graph.facebook.com/v25.0/${PHONE_ID}/messages`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({

@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
   const lang = Deno.env.get('WHATSAPP_OTP_TEMPLATE_LANG') || 'en'
 
   try {
-    const res = await fetch(`https://graph.facebook.com/v21.0/${PHONE_ID}/messages`, {
+    const res = await fetch(`https://graph.facebook.com/v25.0/${PHONE_ID}/messages`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(otpMessage(to, otp, template, lang)),

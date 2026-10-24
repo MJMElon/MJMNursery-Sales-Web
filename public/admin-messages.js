@@ -10,10 +10,11 @@
      1. Assign it to a handler (Settings ⚙ keeps the list of handlers and
         the WhatsApp number each one uses).
      2. Assigning sends the customer ONE WhatsApp from the nursery number
-        (edge function send-case-whatsapp) saying who will handle it and
-        the number they will be contacted from. Until the WhatsApp API is
-        registered that step reports "not set up" and offers to open
-        WhatsApp by hand — nothing breaks.
+        (edge function whatsapp, action send_case) saying who will handle
+        it and the number they will be contacted from. The template, and
+        whether it is sent at all, are set on the WhatsApp tab. Until the
+        WhatsApp API is connected that step reports "not set up" and
+        offers to open WhatsApp by hand — nothing breaks.
      3. The handler contacts the customer from their OWN WhatsApp (the
         "WhatsApp customer" button), and records what happened as an
         internal note. Notes are never shown to the customer.
@@ -35,7 +36,7 @@ var MSG_PHOTO_BUCKET = 'contact-message-photos';
 var MSG_STATUSES = ['New', 'In Progress', 'Resolved', 'Closed'];
 
 // Malaysian numbers as WhatsApp wants them: digits only, country code
-// first. Same rule as waNumber() in supabase/functions/send-case-whatsapp
+// first. Same rule as waNumber() in supabase/functions/whatsapp
 // and pWaNumber() in the storefront — change all three.
 function waNumber(raw) {
   var d = String(raw || '').replace(/\D/g, '');
@@ -329,6 +330,7 @@ async function renderMessageDetail() {
   if (m.wa_status === 'sent') waLine = '<div class="msg-wa msg-wa-ok">✓ Customer was told on WhatsApp who is handling this (' + msgWhen(m.wa_sent_at) + ').</div>';
   else if (m.wa_status === 'not_configured') waLine = '<div class="msg-wa msg-wa-warn">WhatsApp API not set up yet — the customer was <strong>not</strong> messaged automatically. ' +
       (waCust && m.assigned_name ? '<a href="https://wa.me/' + waCust + '?text=' + encodeURIComponent('Hi ' + m.name + ', thank you for contacting MJM Nursery. Your case ' + m.ref + ' has been assigned to ' + m.assigned_name + ', who will contact you on WhatsApp from +' + waNumber(m.assigned_phone) + ' shortly.') + '" target="_blank" rel="noopener">Send it by hand</a>.' : '') + '</div>';
+  else if (m.wa_status === 'disabled') waLine = '<div class="msg-wa msg-wa-warn">The case assigned WhatsApp is switched off on the WhatsApp tab — the customer was <strong>not</strong> messaged automatically.</div>';
   else if (m.wa_status === 'failed') waLine = '<div class="msg-wa msg-wa-err">WhatsApp to customer failed: ' + esc(m.wa_detail || '') + ' <button class="btn btn-outline btn-sm" onclick="sendCaseWhatsapp()">Try again</button></div>';
 
   var row = function (k, v) { return '<div class="msg-kv"><span>' + k + '</span><div>' + v + '</div></div>'; };
@@ -490,11 +492,12 @@ async function saveMessageCase() {
 async function sendCaseWhatsapp(quiet) {
   var m = MSG_CURRENT; if (!m) return;
   try {
-    var r = await sb.functions.invoke('send-case-whatsapp', { body: { id: m.id } });
+    var r = await sb.functions.invoke('whatsapp', { body: { action: 'send_case', id: m.id } });
     var d = r.data || {};
     if (r.error) toast('WhatsApp: ' + (r.error.message || 'failed'), 'error');
     else if (d.ok) toast('Customer notified on WhatsApp');
     else if (d.not_configured) { if (!quiet) toast('WhatsApp API not set up yet', 'error'); }
+    else if (d.disabled) toast('Not sent: the case assigned WhatsApp is switched off on the WhatsApp tab', 'error');
     else toast('WhatsApp: ' + (d.error || 'failed'), 'error');
   } catch (e) {
     toast('WhatsApp: ' + (e.message || e), 'error');

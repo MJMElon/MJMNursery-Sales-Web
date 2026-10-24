@@ -69,6 +69,10 @@ export default function Admin() {
                     <span>Messages</span>
                     <span className="sb-count" id="sb-messages-count" style={{ display: 'none' }} title="New messages not yet handled">0</span>
                     </div>
+                  <div className="sb-item" id="sb-whatsapp-item" onClick={(e) => { switchTab('whatsapp',e.currentTarget); }}>
+                    <span className="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg></span>
+                    <span>WhatsApp</span>
+                    </div>
                   <div className="sb-item" id="sb-seal-item" onClick={(e) => { switchTab('seal',e.currentTarget); }}>
                     <span className="sb-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" /><line x1="7" y1="7" x2="7.01" y2="7" /></svg></span>
                     <span>Seal Management</span>
@@ -286,6 +290,11 @@ export default function Admin() {
                     <div id="messages-count" style={{ display: 'flex', justifyContent: 'flex-end', fontSize: '12px', color: 'var(--ink3)', marginBottom: '.4rem' }} />
                     <div id="messages-table"><div className="loading">Loading messages...</div></div>
                     </div>
+                  </div>
+                {/* WHATSAPP — the nursery WhatsApp Business number (public/admin-whatsapp.js) */}
+                <div className="tab-content" id="tab-whatsapp">
+                  <div className="main-header"><div className="main-title">WhatsApp</div><button className="btn btn-outline" onClick={(e) => { window.loadWhatsapp(); }}>↻ Refresh</button></div>
+                  <div id="wa-root"><div className="loading">Loading…</div></div>
                   </div>
                 {/* SEAL — seal stickers by range and state (public/admin-seal.js) */}
                 <div className="tab-content" id="tab-seal">
@@ -1152,6 +1161,7 @@ export default function Admin() {
                 </div></div>
             {/* MESSAGE DETAIL + MESSAGE SETTINGS (public/admin-messages.js) */}
             <div className="modal-overlay" id="modal-message" style={{ zIndex: '255' }}><div className="modal msg-modal"><div className="modal-head"><h2 id="mmsg-title">Message</h2><button className="modal-close" onClick={(e) => { window.closeMessageModal(); }}>✕</button></div><div className="modal-body" id="mmsg-body" style={{ maxHeight: '74vh', overflowY: 'auto', background: 'var(--bg)' }} /><div className="modal-foot" id="mmsg-foot" /></div></div>
+            <div className="modal-overlay" id="modal-wa-template" style={{ zIndex: '260' }}><div className="modal" style={{ maxWidth: '640px' }}><div className="modal-head"><h2 id="wat-title">New Template</h2><button className="modal-close" onClick={(e) => { closeModal('modal-wa-template'); }}>✕</button></div><div className="modal-body" id="wat-body" style={{ maxHeight: '72vh', overflowY: 'auto' }} /><div className="modal-foot"><button className="btn btn-outline" onClick={(e) => { closeModal('modal-wa-template'); }}>Cancel</button><button className="btn btn-primary" id="wat-save" onClick={(e) => { window.saveWaTemplate(); }}>Send to Meta for Approval</button></div></div></div>
             <div className="modal-overlay" id="modal-message-settings" style={{ zIndex: '260' }}><div className="modal" style={{ maxWidth: '620px' }}><div className="modal-head"><h2>Messages — Settings</h2><button className="modal-close" onClick={(e) => { closeModal('modal-message-settings'); }}>✕</button></div><div className="modal-body" id="mms-body" style={{ maxHeight: '78vh', overflowY: 'auto' }} /></div></div>
             {/* TOAST */}
             <div className="toast" id="toast" />

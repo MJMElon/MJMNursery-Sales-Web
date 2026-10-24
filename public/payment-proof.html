@@ -315,8 +315,7 @@ async function payOnline(){
   try{
     var{data:billResp,error:billErr}=await _sb.functions.invoke('create-billplz-bill',{
       body:{
-        order_id:orderId,
-        amount:Math.round(orderTotal*100),
+        order_id:orderId,   // the amount is read from the order by the server
         email:email,
         name:name,
         phone:phone||'',

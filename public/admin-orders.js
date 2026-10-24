@@ -2962,6 +2962,7 @@ async function submitInvoiceUpload(){
 var _newOrderProducts=[];
 var _newOrderItems=[];
 var _newOrderSelectedCustomerId=null;   // null = walk-in / create new on save
+var _newOrderSelectedCustomerLabel='';   // email or phone of the linked customer, for the status line
 var _newOrderCustSearchTimer=null;
 var _newOrderCustResultsCache={};
 
@@ -3049,6 +3050,7 @@ function genOrderNumberAdmin(){
 async function openNewOrder(){
   _newOrderItems=[];
   _newOrderSelectedCustomerId=null;
+  _newOrderSelectedCustomerLabel='';
   _newOrderCustResultsCache={};
 
   // Reset form fields
@@ -3093,11 +3095,11 @@ async function openNewOrder(){
 // match anything signals that submitNewOrder() should create a new
 // customer profile.
 function onNewOrderCustNameInput(){
-  // Any edit invalidates a previous selection — the admin is either
-  // searching for a different customer or typing in a new name.
-  _newOrderSelectedCustomerId=null;
-  _noResetPoints();          // points belong to the (now unlinked) customer
-  recalcNewOrderTotal();
+  // Editing the name no longer drops a customer already picked: correcting a
+  // spelling after picking them used to unlink the order without a word, and
+  // the save then made a NEW account the real customer never logs in to, so
+  // the order was missing from their portal. The link changes only when
+  // another customer is picked or Unlink is pressed.
   updateNewOrderCustStatus();
 
   var q=document.getElementById('no-cust-name').value.trim();
@@ -3125,14 +3127,27 @@ async function searchCustomersForNewOrder(q){
     'email.ilike.%'+like+'%',
     'phone.ilike.%'+like+'%',
   ].join(',');
+  // A phone is stored however it was typed (+60 19-319 4334), so a number
+  // typed as 0193194334 is searched by its last four digits and then
+  // compared digit for digit.
+  var qDigits=q.replace(/[^0-9]/g,'');
+  if(qDigits.length>=6) ors+=',phone.ilike.%'+qDigits.slice(-4)+'%';
   var{data}=await sb.from('shared_profiles')
-    .select('id,full_name,email,phone,user_type,role')
+    .select('id,full_name,email,phone,user_type,role,permissions')
     .or(ors)
-    .limit(25);
+    .limit(100);
+  // Staff are left out by what they can DO, never by user_type: a customer
+  // who signs up by phone code is made as 'system' and was hidden from this
+  // search, so the admin could not pick them and a new account was made.
   var results=(data||[]).filter(function(c){
-    return (c.user_type==='customer' || c.role==='customer')
-        && (c.user_type!=='system')
-        && !isOperationStaff(c.permissions);
+    if(c.role==='admin' || isOperationStaff(c.permissions)) return false;
+    if(qDigits.length>=6 && !(c.full_name||'').toLowerCase().includes(q.toLowerCase())
+       && !(c.email||'').toLowerCase().includes(q.toLowerCase())){
+      var cDigits=String(c.phone||'').replace(/[^0-9]/g,'');
+      return cDigits.indexOf(qDigits)>=0
+          || (!!_noPhoneKey(qDigits) && _noPhoneKey(c.phone)===_noPhoneKey(qDigits));
+    }
+    return true;
   }).slice(0,8);
 
   _newOrderCustResultsCache={};
@@ -3154,10 +3169,29 @@ async function searchCustomersForNewOrder(q){
   el.style.display='block';
 }
 
+// Last nine digits of a phone, so 019-319 4334 and +60193194334 compare equal.
+function _noPhoneKey(p){
+  var d=String(p||'').replace(/[^0-9]/g,'');
+  return d.length>=8 ? d.slice(-9) : '';
+}
+
+function unlinkNewOrderCustomer(){
+  _newOrderSelectedCustomerId=null;
+  _newOrderSelectedCustomerLabel='';
+  _noResetPoints();          // points belong to the customer that was unlinked
+  recalcNewOrderTotal();
+  updateNewOrderCustStatus();
+}
+
 function selectNewOrderCustomer(id){
   var c=_newOrderCustResultsCache[id];
   if(!c) return;
+  if(_newOrderSelectedCustomerId && _newOrderSelectedCustomerId!==id){
+    _noResetPoints();
+    recalcNewOrderTotal();
+  }
   _newOrderSelectedCustomerId=id;
+  _newOrderSelectedCustomerLabel=c.email||c.phone||c.full_name||'';
   document.getElementById('no-cust-name').value=c.full_name||'';
   document.getElementById('no-cust-email').value=c.email||'';
   document.getElementById('no-cust-phone').value=c.phone||'';
@@ -3221,7 +3255,9 @@ function updateNewOrderCustStatus(){
   var el=document.getElementById('no-cust-status');
   var name=(document.getElementById('no-cust-name').value||'').trim();
   if(_newOrderSelectedCustomerId){
-    el.textContent='✓ Linked to existing customer';
+    el.innerHTML='✓ Linked to existing customer'
+      +(_newOrderSelectedCustomerLabel?' · '+esc(_newOrderSelectedCustomerLabel):'')
+      +' · <a href="#" onclick="unlinkNewOrderCustomer();return false;" style="color:#92400e;">Unlink</a>';
     el.style.color='#065f46';
     el.style.display='block';
   } else if(name.length>=2){
@@ -3486,6 +3522,27 @@ async function submitNewOrder(){
         .select('id').ilike('email',email).limit(1);
       if(byEmail && byEmail.length){
         custId=byEmail[0].id;
+      }
+    }
+    // Last check before a new account is made: a customer who already has
+    // one under this phone is asked about, because an order on a new
+    // account is an order the customer never sees in their portal.
+    if(!custId && _noPhoneKey(phone)){
+      var{data:byPhone}=await sb.from('shared_profiles')
+        .select('id,full_name,email,phone,role,permissions')
+        .ilike('phone','%'+_noPhoneKey(phone).slice(-4)+'%')
+        .limit(100);
+      var samePhone=(byPhone||[]).filter(function(c){
+        return _noPhoneKey(c.phone)===_noPhoneKey(phone)
+            && c.role!=='admin' && !isOperationStaff(c.permissions);
+      });
+      if(samePhone.length){
+        var who=samePhone[0];
+        var useIt=confirm('A customer already has this phone number:\n\n'
+          +(who.full_name||'(no name)')+'  '+(who.email||'')+'  '+(who.phone||'')
+          +'\n\nPut this order on their account so they see it in their portal?\n\n'
+          +'OK = use their account.  Cancel = make a new customer account.');
+        if(useIt) custId=who.id;
       }
     }
     if(!custId){

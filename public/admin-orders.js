@@ -3120,8 +3120,13 @@ function onNewOrderCustFieldEdit(){
 }
 
 async function searchCustomersForNewOrder(q){
+  // Asked of the database by the LONGEST word typed and then held to every
+  // word here, so "Ah Kow Tan", a double space or a stray comma in the stored
+  // name still finds the customer.
+  var words=q.toLowerCase().split(/[\s,]+/).filter(Boolean);
+  var key=words.slice().sort(function(a,b){return b.length-a.length;})[0]||q;
   // Escape % and _ so the ilike is taken literally.
-  var like=q.replace(/[%_\\]/g,function(c){return '\\'+c;});
+  var like=key.replace(/[%_\\]/g,function(c){return '\\'+c;});
   var ors=[
     'full_name.ilike.%'+like+'%',
     'email.ilike.%'+like+'%',
@@ -3132,30 +3137,47 @@ async function searchCustomersForNewOrder(q){
   // compared digit for digit.
   var qDigits=q.replace(/[^0-9]/g,'');
   if(qDigits.length>=6) ors+=',phone.ilike.%'+qDigits.slice(-4)+'%';
-  var{data}=await sb.from('shared_profiles')
+  var{data,error}=await sb.from('shared_profiles')
     .select('id,full_name,email,phone,user_type,role,permissions')
     .or(ors)
-    .limit(100);
+    .limit(200);
+  var el=document.getElementById('no-cust-results');
+  if(error){
+    el.innerHTML='<div style="padding:.6rem .8rem;font-size:11px;color:#b91c1c;">Search failed: '+esc(error.message)+' — do not save until the customer is found.</div>';
+    el.style.display='block';
+    return;
+  }
+  function matches(c){
+    if(qDigits.length>=6){
+      var cDigits=String(c.phone||'').replace(/[^0-9]/g,'');
+      if(cDigits.indexOf(qDigits)>=0 || (!!_noPhoneKey(qDigits) && _noPhoneKey(c.phone)===_noPhoneKey(qDigits))) return true;
+    }
+    var hay=((c.full_name||'')+' '+(c.email||'')+' '+(c.phone||'')).toLowerCase();
+    return words.every(function(w){ return hay.indexOf(w)>=0; });
+  }
   // Staff are left out by what they can DO, never by user_type: a customer
   // who signs up by phone code is made as 'system' and was hidden from this
-  // search, so the admin could not pick them and a new account was made.
-  var results=(data||[]).filter(function(c){
-    if(c.role==='admin' || isOperationStaff(c.permissions)) return false;
-    if(qDigits.length>=6 && !(c.full_name||'').toLowerCase().includes(q.toLowerCase())
-       && !(c.email||'').toLowerCase().includes(q.toLowerCase())){
-      var cDigits=String(c.phone||'').replace(/[^0-9]/g,'');
-      return cDigits.indexOf(qDigits)>=0
-          || (!!_noPhoneKey(qDigits) && _noPhoneKey(c.phone)===_noPhoneKey(qDigits));
-    }
-    return true;
-  }).slice(0,8);
+  // search. A match that IS left out is still SHOWN, greyed, with the reason,
+  // so a customer missing from the list says why instead of saying nothing.
+  var found=(data||[]).filter(matches);
+  var results=[], hidden=[];
+  found.forEach(function(c){
+    if(c.role==='admin') hidden.push({c:c, why:'role admin'});
+    else if(isOperationStaff(c.permissions)) hidden.push({c:c, why:'has staff permissions'});
+    else results.push(c);
+  });
+  results=results.slice(0,8);
 
   _newOrderCustResultsCache={};
   results.forEach(function(c){ _newOrderCustResultsCache[c.id]=c; });
 
-  var el=document.getElementById('no-cust-results');
+  var hiddenHtml=hidden.slice(0,3).map(function(h){
+    return '<div style="padding:.45rem .7rem;border-bottom:1px solid var(--rule);font-size:11px;color:var(--ink4);background:#fafafa;">'+
+      esc(h.c.full_name||'(no name)')+' · '+esc(h.c.email||h.c.phone||'')+
+      '<div style="color:#92400e;">Staff account ('+esc(h.why)+') — cannot be picked. Fix it in User Access if this is a customer.</div></div>';
+  }).join('');
   if(!results.length){
-    el.innerHTML='<div style="padding:.6rem .8rem;font-size:11px;color:var(--ink4);">No match — a profile will be created on save.</div>';
+    el.innerHTML=hiddenHtml+'<div style="padding:.6rem .8rem;font-size:11px;color:var(--ink4);">No customer match — a profile will be created on save.</div>';
     el.style.display='block';
     updateNewOrderCustStatus();
     return;
@@ -3165,7 +3187,7 @@ async function searchCustomersForNewOrder(q){
       '<div style="font-weight:600;">'+esc(c.full_name||'(no name)')+'</div>'+
       '<div style="color:var(--ink4);font-size:11px;">'+esc(c.email||'')+(c.phone?'  ·  '+esc(c.phone):'')+'</div>'+
     '</div>';
-  }).join('');
+  }).join('')+hiddenHtml;
   el.style.display='block';
 }
 

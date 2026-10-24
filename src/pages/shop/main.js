@@ -3454,7 +3454,7 @@ export function initShopMain() {
   var clIsSignUp = false;
   var clInputType = 'phone';        // 'phone' or 'email' — driven by active tab
   var clLoginContext = 'nav';       // 'nav' or 'checkout'
-  var clOtpChannel = 'sms';         // 'sms' or 'whatsapp' — for phone OTP
+  var clOtpChannel = 'whatsapp';    // phone codes go by WhatsApp (send-whatsapp-otp)
 
   function openLoginModal(context) {
     // Login needs supabase-js for auth.signInWithPassword etc — kick off the
@@ -3645,7 +3645,7 @@ export function initShopMain() {
   // Send OTP via SMS, WhatsApp, or Email.
   //   channel: 'sms' | 'whatsapp' | 'email'
   async function clSendOTP(channel) {
-    channel = channel || (clInputType === 'phone' ? 'sms' : 'email');
+    channel = channel || (clInputType === 'phone' ? 'whatsapp' : 'email');
     clOtpChannel = channel;
     var isPhone = channel === 'sms' || channel === 'whatsapp';
 
@@ -3696,7 +3696,7 @@ export function initShopMain() {
       if (clickedBtn) clickedBtn.textContent = origLabel;
       return;
     }
-    var destLabel = channel === 'whatsapp' ? 'WhatsApp message sent to ' : channel === 'sms' ? 'SMS sent to ' : 'Code sent to ';
+    var destLabel = channel === 'whatsapp' ? 'Code sent to your WhatsApp at ' : channel === 'sms' ? 'SMS sent to ' : 'Code sent to ';
     clShowStatus(destLabel + identity, 'success');
 
     // Show the right OTP row + focus
@@ -3737,7 +3737,7 @@ export function initShopMain() {
     var otp = (isPhone
       ? document.getElementById('cl-otp-code-phone').value
       : document.getElementById('cl-otp-code').value).trim();
-    if (!identity || !otp) { clShowStatus('Please enter the 8-digit code.', 'error'); return; }
+    if (!identity || !otp) { clShowStatus(isPhone ? 'Please enter the code from WhatsApp.' : 'Please enter the 8-digit code.', 'error'); return; }
     clShowStatus('Verifying...', 'success');
     // For Supabase verifyOtp, the type is 'sms' for both SMS and WhatsApp channels.
     var opts = isPhone
@@ -3781,7 +3781,7 @@ export function initShopMain() {
     if (e.target.id === 'cl-otp-code') clVerifyOTP('email');
     else if (e.target.id === 'cl-otp-code-phone') clVerifyOTP('phone');
     else if (e.target.id === 'cl-identity' || e.target.id === 'cl-password') clLoginPassword();
-    else if (e.target.id === 'cl-phone') clSendOTP('sms');
+    else if (e.target.id === 'cl-phone') clSendOTP('whatsapp');
   });
 
   // Sign out

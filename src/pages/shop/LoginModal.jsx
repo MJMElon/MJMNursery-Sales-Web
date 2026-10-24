@@ -1,9 +1,12 @@
 import React from 'react';
 import { css } from './css.js';
 
-// LOGIN MODAL — markup 1:1 from public/index.html. Phone OTP tabs are
-// intentionally absent (hidden until a phone sender is registered with
-// Twilio), exactly as in the legacy page.
+// LOGIN MODAL. Two ways in: Email (password or email code) and WhatsApp
+// (phone number + a code sent on WhatsApp). The WhatsApp code is sent by
+// the send-whatsapp-otp Edge Function through Supabase's Send SMS Hook --
+// there is no SMS button because nothing sends an SMS. Every id here is
+// one main.js already drives (clSwitchMode, clSendOTP, clVerifyOTP,
+// clToggleSignup), so the markup and the logic must keep the same names.
 export default function LoginModal() {
   // Track whether the mousedown started on the overlay itself (not on
   // an input inside the card). If the customer drags to select text
@@ -35,7 +38,34 @@ export default function LoginModal() {
         <div className="login-modal-body">
           <div className="cl-status" id="cl-status"></div>
 
-          {/* ── EMAIL PANE (only mode for now) ── */}
+          <div className="lm-tabs">
+            <button className="lm-tab active" id="lm-tab-email" onClick={() => window.clSwitchMode('email')}>✉️ Email</button>
+            <button className="lm-tab" id="lm-tab-phone" onClick={() => window.clSwitchMode('phone')}>💬 WhatsApp</button>
+          </div>
+
+          {/* ── WHATSAPP PANE ── */}
+          <div className="lm-pane" id="lm-pane-phone">
+            <div style={css('display:flex;flex-direction:column;gap:.65rem;')}>
+              <div id="cl-signup-fields-phone" style={css('display:none;')}>
+                <input type="text" id="cl-signup-name-phone" className="cl-input" placeholder="Full Name" />
+              </div>
+
+              <input type="tel" id="cl-phone" className="cl-input" placeholder="Phone number, e.g. 012 345 6789" autoComplete="tel" inputMode="tel" />
+
+              <button className="cl-btn" id="cl-btn-wa" onClick={() => window.clSendOTP('whatsapp')}>Send code to WhatsApp</button>
+
+              <div className="cl-otp-row" id="cl-otp-row-phone">
+                <input type="text" id="cl-otp-code-phone" className="cl-input" placeholder="Enter code from WhatsApp" maxLength="8" inputMode="numeric" autoComplete="one-time-code" />
+                <button className="cl-otp-verify" onClick={() => window.clVerifyOTP('phone')}>Login</button>
+              </div>
+            </div>
+
+            <div style={css('display:flex;justify-content:flex-end;align-items:center;margin-top:.8rem;')}>
+              <button className="cl-link" id="cl-btn-toggle-phone" onClick={() => window.clToggleSignup('phone')}>First time? Create Account</button>
+            </div>
+          </div>
+
+          {/* ── EMAIL PANE ── */}
           <div className="lm-pane active" id="lm-pane-email">
             <div style={css('display:flex;flex-direction:column;gap:.65rem;')}>
               <div id="cl-signup-fields" style={css('display:none;')}>

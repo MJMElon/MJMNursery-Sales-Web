@@ -11,3 +11,8 @@ verify_jwt = false
 
 [functions.verify-billplz-bill]
 verify_jwt = false
+
+# Called by Supabase Auth (the Send SMS Hook), which signs the request
+# itself instead of sending a user JWT. The function checks that signature.
+[functions.send-whatsapp-otp]
+verify_jwt = false

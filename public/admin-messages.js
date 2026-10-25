@@ -7,10 +7,10 @@
      customer also sees it, and its status, under My Account → Messages.
 
    What the office does with it here
-     1. Assign it to a PIC and press Save & Send. Settings ⚙ keeps the
+     1. Assign it to a PIC and press Assign & Notify. Settings ⚙ keeps the
         list of people who can be assigned, with their email and the
         WhatsApp number each one uses.
-     2. Save & Send emails the PIC the case, and the customer who will
+     2. Assign & Notify emails the PIC the case, and the customer who will
         contact them and from which number (edge function
         message-notify). WhatsApp copies follow once the WhatsApp
         Business number is connected.
@@ -229,15 +229,15 @@ function startMessagesBadge() {
 // Title row: case number, topic, and the status badge at the right.
 // Then one section under the other: ① customer (name, phone, email,
 // order # with View), ② the message, ③ case handling (Assigned To +
-// Save & Send, which emails the PIC and the customer), ④ the case
-// timeline, ⑤ notes, with Save Note for the everyday and Solve Case
-// when it is done.
-// The status is not picked by hand: Save & Send moves a New case to In
-// Progress, Solve Case moves it to Solved (stored as Resolved), and a
+// Assign & Notify, which emails the PIC and the customer), ④ the four
+// milestones across (Case Received, Assigned PIC, Solving, Solved), ⑤
+// notes, with Save Note and every note listed under it. Solve Case sits
+// at the bottom right, where Close was.
+// The status is not picked by hand: Assign & Notify moves a New case to
+// In Progress, Solve Case moves it to Solved (stored as Resolved), and a
 // solved case can be reopened from the title row.
-// Every change lands in the timeline: the database trigger writes
-// status, assignment, order and first-opened entries, notes are their
-// own entries, and the message-notify function writes who was emailed.
+// The database trigger still records status, assignment, order and
+// first-opened entries, and message-notify records who was emailed.
 var MSG_NOTIFY_FN = 'message-notify';
 
 function msgStatusLabel(s) { return s === 'Resolved' ? 'Solved' : s; }
@@ -284,10 +284,10 @@ function msgHandlerChanged() {
   var btn = document.getElementById('mmsg-send');
   if (!sel || !btn) return;
   var v = sel.value;
-  if (v === '__keep') { btn.textContent = 'Send Again'; btn.disabled = false; return; }
-  if (!v) { btn.textContent = m.assigned_name ? 'Unassign' : 'Save & Send'; btn.disabled = !m.assigned_name; return; }
+  if (v === '__keep') { btn.textContent = 'Notify Again'; btn.disabled = false; return; }
+  if (!v) { btn.textContent = m.assigned_name ? 'Unassign' : 'Assign & Notify'; btn.disabled = !m.assigned_name; return; }
   btn.disabled = false;
-  btn.textContent = v === m.assigned_user_id ? 'Send Again' : 'Save & Send';
+  btn.textContent = v === m.assigned_user_id ? 'Notify Again' : 'Assign & Notify';
 }
 
 function msgDur(ms) {
@@ -300,40 +300,54 @@ function msgDur(ms) {
   return d + 'd' + (h % 24 ? ' ' + (h % 24) + 'h' : '');
 }
 
-var MSG_EV_ICON = { created: '📩', opened: '👁', assign: '👤', status: '🔄', order: '🧾', note: '📝', whatsapp: '💬', email: '✉️', linked: '🔗' };
-var MSG_EV_LABEL = { created: 'Received', opened: 'Opened', assign: 'Assignment', status: 'Status', order: 'Order', note: 'Note', whatsapp: 'WhatsApp', email: 'Email', linked: 'Customer account' };
-
-function msgTimelineHtml(m, events) {
+// The four milestones, left to right. Each lights up with its date the
+// moment it happens. Solving is the first note saved, so it means
+// somebody has started on it. A reopened case goes back to not solved.
+function msgMilestonesHtml(m, events) {
   var t0 = new Date(m.created_at).getTime();
-  var firstOf = function (kinds) { return events.find(function (e) { return kinds.indexOf(e.kind) >= 0; }); };
-  var opened = firstOf(['opened']);
   var assigned = events.filter(function (e) { return e.kind === 'assign' && e.body !== 'Unassigned'; })[0];
-  var response = firstOf(['note', 'whatsapp']);
+  var firstNote = events.find(function (e) { return e.kind === 'note'; });
+  var solvedEv = m.resolved_at ? events.filter(function (e) { return e.kind === 'status' && /Resolved$/.test(e.body || ''); }).slice(-1)[0] : null;
   var steps = [
-    { label: 'Received', at: m.created_at, who: m.name },
-    { label: 'First opened', at: m.read_at, who: opened && opened.actor_name },
-    { label: 'Assigned', at: assigned ? assigned.created_at : m.assigned_at, who: assigned ? assigned.body.replace(/^Assigned to /, '').replace(/ \(.*\)$/, '') : m.assigned_name },
-    { label: 'First response', at: response && response.created_at, who: response && response.actor_name },
-    { label: (m.status === 'Closed' ? 'Closed' : 'Solved'), at: m.resolved_at, who: null },
+    { label: 'Case Received', at: m.created_at, who: m.name },
+    { label: 'Assigned PIC', at: assigned ? assigned.created_at : m.assigned_at, who: m.assigned_name || (assigned ? assigned.body.replace(/^Assigned to /, '').replace(/ \(.*\)$/, '') : '') },
+    { label: 'Solving', at: firstNote && firstNote.created_at, who: firstNote && firstNote.actor_name },
+    { label: m.status === 'Closed' ? 'Closed' : 'Solved', at: m.resolved_at, who: solvedEv && solvedEv.actor_name },
   ];
-  var summary = '<div class="msg-steps">' + steps.map(function (s, i) {
-    var done = !!s.at;
-    var after = done && i > 0 ? msgDur(new Date(s.at).getTime() - t0) : '';
-    return '<div class="msg-step' + (done ? ' done' : '') + '">' +
-      '<div class="msg-step-dot"></div>' +
-      '<div class="msg-step-body"><div class="msg-step-label">' + s.label + (after ? ' <span class="msg-step-after">+' + after + '</span>' : '') + '</div>' +
-      '<div class="msg-step-when">' + (done ? msgWhen(s.at) + (s.who ? ' · ' + esc(s.who) : '') : 'Not yet') + '</div></div>' +
+  // A step only counts once every step before it has happened.
+  var reached = true;
+  return '<div class="msg-mile">' + steps.map(function (st, i) {
+    var done = reached && !!st.at;
+    if (!done) reached = false;
+    var after = done && i > 0 ? msgDur(new Date(st.at).getTime() - t0) : '';
+    return '<div class="msg-mile-step' + (done ? ' done' : '') + '">' +
+      '<div class="msg-mile-dot">' + (done ? '✓' : (i + 1)) + '</div>' +
+      '<div class="msg-mile-label">' + st.label + '</div>' +
+      '<div class="msg-mile-when">' + (done ? msgWhen(st.at) : 'Not yet') + '</div>' +
+      (done && (st.who || after) ? '<div class="msg-mile-who">' + esc(st.who || '') + (after ? (st.who ? ' · ' : '') + '+' + after : '') + '</div>' : '') +
     '</div>';
   }).join('') + '</div>';
+}
 
-  var log = events.length ? events.slice().reverse().map(function (e) {
-    var body = e.kind === 'status' ? String(e.body || '').replace(/\bResolved\b/g, 'Solved') : e.body;
-    return '<div class="msg-ev msg-ev-' + esc(e.kind) + '">' +
-      '<div class="msg-ev-head">' + (MSG_EV_ICON[e.kind] || '•') + ' <strong>' + esc(MSG_EV_LABEL[e.kind] || e.kind) + '</strong> · ' + esc(e.actor_name || 'System') + ' · ' + msgWhen(e.created_at) + '</div>' +
-      '<div class="msg-ev-body">' + esc(body) + '</div></div>';
-  }).join('') : '<div style="font-size:12px;color:var(--ink4);">Nothing yet.</div>';
-
-  return summary + '<div class="msg-subtitle">Every entry <span>newest first</span></div><div class="msg-history">' + log + '</div>';
+// Every note on the case, newest first. The note saved with Solve Case is
+// marked as how the case was solved.
+function msgNotesHtml(events) {
+  var notes = events.filter(function (e) { return e.kind === 'note'; });
+  if (!notes.length) return '<div class="msg-notes-empty">No notes yet.</div>';
+  // For each time it was solved, the last note saved just before it.
+  var solution = [];
+  events.forEach(function (e) {
+    if (e.kind !== 'status' || !/Resolved$/.test(e.body || '')) return;
+    var x = new Date(e.created_at).getTime(), best = null;
+    notes.forEach(function (n) { var t = new Date(n.created_at).getTime(); if (t <= x + 1000 && x - t < 60000) best = n; });
+    if (best) solution.push(best);
+  });
+  return '<div class="msg-notes">' + notes.slice().reverse().map(function (n) {
+    var isSolution = solution.indexOf(n) >= 0;
+    return '<div class="msg-note-item' + (isSolution ? ' solution' : '') + '">' +
+      '<div class="msg-note-head">' + msgWhen(n.created_at) + ' · ' + esc(n.actor_name || 'Staff') + (isSolution ? ' <span class="badge badge-green">How it was solved</span>' : '') + '</div>' +
+      '<div class="msg-note-body">' + esc(n.body) + '</div></div>';
+  }).join('') + '</div>';
 }
 
 async function renderMessageDetail() {
@@ -405,7 +419,7 @@ async function renderMessageDetail() {
           '<label class="msg-field-label" for="mmsg-handler">Assigned To</label>' +
           '<div class="msg-assign-row">' +
             '<select class="form-input" id="mmsg-handler" onchange="msgHandlerChanged()">' + handlerOpts + '</select>' +
-            '<button class="btn btn-primary" id="mmsg-send" onclick="sendMessageCase()">Save & Send</button>' +
+            '<button class="btn btn-primary" id="mmsg-send" onclick="sendMessageCase()">Assign & Notify</button>' +
           '</div>' +
           (MSG_HANDLERS_ERR ? '<div style="font-size:11px;color:var(--red);margin-top:.3rem;">Could not load the list of staff: ' + esc(MSG_HANDLERS_ERR) + '</div>'
             : MSG_HANDLERS.length ? '' : '<div style="font-size:11px;color:var(--ink4);margin-top:.3rem;">Nobody on the list yet. Add people in ⚙ on the Messages tab.</div>') +
@@ -414,7 +428,7 @@ async function renderMessageDetail() {
         // ④ Timeline
         '<div class="msg-card">' +
           '<div class="msg-section-title"><span class="msg-num">4</span> Case Timeline</div>' +
-          msgTimelineHtml(m, events) +
+          msgMilestonesHtml(m, events) +
         '</div>' +
         // ⑤ Notes
         '<div class="msg-card">' +
@@ -422,8 +436,8 @@ async function renderMessageDetail() {
           '<textarea class="form-input" id="mmsg-note" rows="3" placeholder="What was done or agreed, e.g. Called customer, replacing 50 seedlings on Friday"></textarea>' +
           '<div class="msg-note-actions">' +
             '<button class="btn btn-outline" id="mmsg-save-note" onclick="saveMessageNote()">Save Note</button>' +
-            (solved ? '' : '<button class="btn btn-primary msg-solve-btn" id="mmsg-solve" onclick="solveMessageCase()">✓ Solve Case</button>') +
           '</div>' +
+          msgNotesHtml(events) +
         '</div>' +
       '</div>' +
     '</div>';
@@ -435,7 +449,8 @@ async function renderMessageDetail() {
 
   document.getElementById('mmsg-foot').innerHTML =
     (window.__SW_IS_ADMIN__ ? '<button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red);margin-right:auto;" onclick="deleteMessage()">Delete Message</button>' : '<span style="margin-right:auto;"></span>') +
-    '<button class="btn btn-outline" onclick="closeMessageModal()">Close</button>';
+    (solved ? '<button class="btn btn-outline" onclick="closeMessageModal()">Close</button>'
+            : '<button class="btn btn-primary msg-solve-btn" id="mmsg-solve" onclick="solveMessageCase()">✓ Solve Case</button>');
 
   if (m.photo_path) {
     var s = await sb.storage.from(MSG_PHOTO_BUCKET).createSignedUrl(m.photo_path, 3600);
@@ -486,7 +501,7 @@ async function msgNotify(event) {
   }
 }
 
-// ③ Save & Send: assign (or send again), then email the PIC and the
+// ③ Assign & Notify: assign (or notify again), then email the PIC and the
 // customer. Picking nobody unassigns and sends nothing.
 async function sendMessageCase() {
   var m = MSG_CURRENT; if (!m) return;
@@ -494,7 +509,7 @@ async function sendMessageCase() {
   var v = document.getElementById('mmsg-handler').value;
 
   if (v === '__keep' || (v && v === m.assigned_user_id)) {
-    if (!confirm('Send the emails for ' + m.ref + ' again to ' + m.assigned_name + ' and the customer?')) return;
+    if (!confirm('Notify ' + m.assigned_name + ' and the customer about ' + m.ref + ' again?')) return;
     btn.disabled = true; btn.textContent = 'Sending…';
     await msgNotify('assigned');
     await reloadCurrentMessage();
@@ -548,7 +563,7 @@ async function solveMessageCase() {
   var m = MSG_CURRENT; if (!m) return;
   var el = document.getElementById('mmsg-note');
   var text = (el.value || '').trim();
-  if (!text) { toast('Write in Notes how the case was solved, then press Solve Case', 'error'); el.focus(); return; }
+  if (!text) { toast('Write in Notes how the case was solved, then press Solve Case', 'error'); el.scrollIntoView({ block: 'center' }); el.focus(); return; }
   if (!confirm('Mark ' + m.ref + ' as solved?\n\nThe customer' + (m.email ? ' (' + m.email + ')' : '') + ' and the people ticked for "Case solved" will be told.')) return;
   var btn = document.getElementById('mmsg-solve'); btn.disabled = true; btn.textContent = 'Solving…';
   var n = await insertMessageNote(m, text);

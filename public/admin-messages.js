@@ -329,8 +329,9 @@ function msgMilestonesHtml(m, events) {
   }).join('') + '</div>';
 }
 
-// Every note on the case, newest first. The note saved with Solve Case is
-// marked as how the case was solved.
+// Every note on the case, above the box, oldest first so the newest sits
+// right above where the next one is typed. The note saved with Solve
+// Case is marked as how the case was solved.
 function msgNotesHtml(events) {
   var notes = events.filter(function (e) { return e.kind === 'note'; });
   if (!notes.length) return '<div class="msg-notes-empty">No notes yet.</div>';
@@ -342,7 +343,7 @@ function msgNotesHtml(events) {
     notes.forEach(function (n) { var t = new Date(n.created_at).getTime(); if (t <= x + 1000 && x - t < 60000) best = n; });
     if (best) solution.push(best);
   });
-  return '<div class="msg-notes">' + notes.slice().reverse().map(function (n) {
+  return '<div class="msg-notes">' + notes.map(function (n) {
     var isSolution = solution.indexOf(n) >= 0;
     return '<div class="msg-note-item' + (isSolution ? ' solution' : '') + '">' +
       '<div class="msg-note-head">' + msgWhen(n.created_at) + ' · ' + esc(n.actor_name || 'Staff') + (isSolution ? ' <span class="badge badge-green">How it was solved</span>' : '') + '</div>' +
@@ -433,16 +434,17 @@ async function renderMessageDetail() {
         // ⑤ Notes
         '<div class="msg-card">' +
           '<div class="msg-section-title"><span class="msg-num">5</span> Notes</div>' +
+          msgNotesHtml(events) +
           '<textarea class="form-input" id="mmsg-note" rows="3" placeholder="What was done or agreed, e.g. Called customer, replacing 50 seedlings on Friday"></textarea>' +
           '<div class="msg-note-actions">' +
             '<button class="btn btn-outline" id="mmsg-save-note" onclick="saveMessageNote()">Save Note</button>' +
           '</div>' +
-          msgNotesHtml(events) +
         '</div>' +
       '</div>' +
     '</div>';
 
   if (keepNote) document.getElementById('mmsg-note').value = keepNote;
+  var nl = document.querySelector('#mmsg-body .msg-notes'); if (nl) nl.scrollTop = nl.scrollHeight;
   var hs = document.getElementById('mmsg-handler');
   if (keepH !== null && hs.querySelector('option[value="' + keepH + '"]')) hs.value = keepH;
   msgHandlerChanged();

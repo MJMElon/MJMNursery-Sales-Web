@@ -294,8 +294,7 @@ input,select,textarea,button{font-family:inherit;}
 .msg-table tr.msg-complaint td{background:#fff5f5;}
 .msg-table tr.msg-complaint td:first-child{box-shadow:inset 3px 0 0 var(--red);}
 .msg-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);}
-.msg-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;align-items:start;}
-@media(max-width:768px){.msg-grid{grid-template-columns:1fr;}}
+.msg-grid{display:grid;grid-template-columns:1fr;gap:1rem;}
 .msg-section-title{font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem;}
 .msg-text{white-space:pre-wrap;word-break:break-word;font-size:14px;line-height:1.6;background:var(--bg);border-radius:10px;padding:.9rem 1rem;}
 .msg-photo{display:block;max-width:100%;max-height:340px;margin-top:.7rem;border-radius:10px;border:1px solid var(--border);}
@@ -325,7 +324,7 @@ input,select,textarea,button{font-family:inherit;}
 .msg-order-empty{font-size:12px;color:var(--ink4);padding:.4rem .5rem;}
 
 /* Case pop-up: two columns of cards, one Save in the footer */
-.msg-modal{max-width:1080px !important;}
+.msg-modal{max-width:820px !important;}
 .msg-col{display:flex;flex-direction:column;gap:1rem;min-width:0;}
 .msg-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1rem 1.1rem;}
 .msg-num{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--green);color:#fff;font-size:10px;margin-right:.3rem;letter-spacing:0;}

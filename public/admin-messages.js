@@ -227,10 +227,11 @@ function startMessagesBadge() {
 
 // ── Case pop-up ─────────────────────────────────────────────────────
 // Title row: case number, topic, and the status badge at the right.
-// Left: ① customer (name, phone, email, order # with View), ② the
-// message. Right: ③ case handling (Assigned To + Save & Send, which
-// emails the PIC and the customer), ④ the case timeline, ⑤ notes, with
-// Save Note for the everyday and Solve Case when it is done.
+// Then one section under the other: ① customer (name, phone, email,
+// order # with View), ② the message, ③ case handling (Assigned To +
+// Save & Send, which emails the PIC and the customer), ④ the case
+// timeline, ⑤ notes, with Save Note for the everyday and Solve Case
+// when it is done.
 // The status is not picked by hand: Save & Send moves a New case to In
 // Progress, Solve Case moves it to Solved (stored as Resolved), and a
 // solved case can be reopened from the title row.

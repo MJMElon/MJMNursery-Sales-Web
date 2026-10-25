@@ -2175,10 +2175,10 @@ export function initShopMain() {
     // fast, and the customer would otherwise edit against a stale
     // capacity snapshot from a few minutes ago.
     try{
-      var{data}=await _sb.from('shared_collection_bookings')
-        .select('id,booking_date,start_time,end_time,collection_qty,status')
-        .eq('booking_date', ds)
-        .neq('status','cancelled');
+      // Every booking that day, for the capacity check — through
+      // booking_slots, which carries no names. Read from the table this
+      // would only see the customer's own bookings and overbook the slot.
+      var{data}=await _sb.rpc('booking_slots',{p_from:ds,p_to:ds});
       _BE_BOOKINGS_BY_DATE[ds]=data||[];
     }catch(e){
       console.warn('bookings fetch failed:',e);

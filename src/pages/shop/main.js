@@ -997,7 +997,7 @@ export function initShopMain() {
   // The form used to say "Message Sent!" and save nothing. It now goes to
   // salesweb_messages through salesweb_submit_message() (which validates,
   // rate-limits and hands back an MSG-00042 reference), then pokes the
-  // notify-new-message edge function to email the office. "Sent" is only
+  // message-notify edge function to email the office. "Sent" is only
   // shown once the database has the row; a failure keeps everything the
   // customer typed and says what went wrong.
   var CONTACT_PHOTO_MAX = 5 * 1024 * 1024;
@@ -1147,7 +1147,7 @@ export function initShopMain() {
       var row=Array.isArray(res.data)?res.data[0]:res.data;
 
       // Email to the office. Fire and forget — the message is already safe.
-      try{ client.functions.invoke('notify-new-message',{body:{id:row.id}}).catch(function(){}); }catch(_){}
+      try{ client.functions.invoke('message-notify',{body:{event:'new',id:row.id}}).catch(function(){}); }catch(_){}
 
       done(row && row.ref, signedIn);
     }catch(err){
@@ -1718,7 +1718,7 @@ export function initShopMain() {
         return;
       }
       var badge={'New':'p-badge-amber','In Progress':'p-badge-teal','Resolved':'p-badge-green','Closed':'p-badge-grey'};
-      var label={'New':'Received','In Progress':'In Progress','Resolved':'Resolved','Closed':'Closed'};
+      var label={'New':'Received','In Progress':'In Progress','Resolved':'Solved','Closed':'Closed'};
       var fd=function(d){ return d?new Date(d).toLocaleDateString('en-MY',{day:'2-digit',month:'short',year:'numeric'}):''; };
       host.innerHTML=newBtn+rows.map(function(m){
         var who='';

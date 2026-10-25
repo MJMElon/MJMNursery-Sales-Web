@@ -262,7 +262,7 @@ export default function Admin() {
                   </aside>
                 {/* MESSAGES — Contact Us enquiries & complaints (public/admin-messages.js) */}
                 <div className="tab-content" id="tab-messages">
-                  <div className="main-header"><div className="main-title">Messages</div><button className="btn btn-outline" onClick={(e) => { window.openMessageSettings(); }}>⚙ Settings</button></div>
+                  <div className="main-header"><div className="main-title">Messages</div><button className="msg-gear-btn" title="Settings" aria-label="Messages settings" onClick={(e) => { window.openMessageSettings(); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg></button></div>
                   <div className="stats-grid" id="message-stats" />
                   <div className="card">
                     <div className="filter-bar">
@@ -278,7 +278,7 @@ export default function Admin() {
                       <button className="filter-chip active" data-msg-view="open" onClick={(e) => { window.setMessageView('open'); }}>Open <span className="chip-count" id="msg-count-open" data-color="amber"></span></button>
                       <button className="filter-chip" data-msg-view="New" onClick={(e) => { window.setMessageView('New'); }}>New <span className="chip-count" id="msg-count-new" data-color="amber"></span></button>
                       <button className="filter-chip" data-msg-view="In Progress" onClick={(e) => { window.setMessageView('In Progress'); }}>In Progress</button>
-                      <button className="filter-chip" data-msg-view="Resolved" onClick={(e) => { window.setMessageView('Resolved'); }}>Resolved</button>
+                      <button className="filter-chip" data-msg-view="Resolved" onClick={(e) => { window.setMessageView('Resolved'); }}>Solved</button>
                       <button className="filter-chip" data-msg-view="Closed" onClick={(e) => { window.setMessageView('Closed'); }}>Closed</button>
                       <button className="filter-chip" data-msg-view="all" onClick={(e) => { window.setMessageView('all'); }}>All</button>
                       </div>
@@ -1151,8 +1151,8 @@ export default function Admin() {
                   </div>
                 </div></div>
             {/* MESSAGE DETAIL + MESSAGE SETTINGS (public/admin-messages.js) */}
-            <div className="modal-overlay" id="modal-message" style={{ zIndex: '255' }}><div className="modal msg-modal"><div className="modal-head"><h2 id="mmsg-title">Message</h2><button className="modal-close" onClick={(e) => { window.closeMessageModal(); }}>✕</button></div><div className="modal-body" id="mmsg-body" style={{ maxHeight: '74vh', overflowY: 'auto', background: 'var(--bg)' }} /><div className="modal-foot" id="mmsg-foot" /></div></div>
-            <div className="modal-overlay" id="modal-message-settings" style={{ zIndex: '260' }}><div className="modal" style={{ maxWidth: '620px' }}><div className="modal-head"><h2>Messages — Settings</h2><button className="modal-close" onClick={(e) => { closeModal('modal-message-settings'); }}>✕</button></div><div className="modal-body" id="mms-body" style={{ maxHeight: '78vh', overflowY: 'auto' }} /></div></div>
+            <div className="modal-overlay" id="modal-message" style={{ zIndex: '255' }}><div className="modal msg-modal"><div className="modal-head"><h2 id="mmsg-title">Message</h2><div id="mmsg-status-slot" className="msg-status-slot" /><button className="modal-close" onClick={(e) => { window.closeMessageModal(); }}>✕</button></div><div className="modal-body" id="mmsg-body" style={{ maxHeight: '74vh', overflowY: 'auto', background: 'var(--bg)' }} /><div className="modal-foot" id="mmsg-foot" /></div></div>
+            <div className="modal-overlay" id="modal-message-settings" style={{ zIndex: '260' }}><div className="modal" style={{ maxWidth: '860px' }}><div className="modal-head"><h2>Messages Settings</h2><button className="modal-close" onClick={(e) => { closeModal('modal-message-settings'); }}>✕</button></div><div className="modal-body" id="mms-body" style={{ maxHeight: '78vh', overflowY: 'auto' }} /></div></div>
             {/* TOAST */}
             <div className="toast" id="toast" />
             

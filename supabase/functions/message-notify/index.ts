@@ -6,7 +6,8 @@
 //             needs no login, and it CLAIMS the message (notified_at) so a
 //             second call, or an old id, sends nothing.
 //   assigned  "Save & Send" on a case. Tells the PIC they have the case,
-//             and the customer who will contact them and from which number.
+//             unless their "Upon assigned" tick is off, and the customer
+//             who will contact them and from which number.
 //   solved    "Solve Case". Tells the customer the case is solved, and the
 //             people ticked "Case solved".
 //
@@ -172,6 +173,7 @@ Deno.serve(async (req) => {
 
     const done: string[] = []
     const failed: string[] = []
+    const skipped: string[] = []
 
     // ── New case ───────────────────────────────────────────────────
     if (event === 'new') {
@@ -192,8 +194,13 @@ Deno.serve(async (req) => {
       if (!msg.assigned_user_id || !msg.assigned_name) return json({ ok: false, error: 'assign the case to somebody first' }, 400)
       const pic = await emailOf(msg.assigned_user_id)
       const picPhone = msg.assigned_phone ? '+' + waNumber(msg.assigned_phone) : ''
+      // Off only when somebody unticked it. Before the column exists the
+      // read fails and the answer is still yes.
+      const { data: picRow } = await sb.from('salesweb_message_pics').select('*').eq('user_id', msg.assigned_user_id).maybeSingle()
+      const picWants = !picRow || picRow.notify_assigned !== false
 
-      if (!pic) failed.push(`${msg.assigned_name} (PIC): has no email`)
+      if (!picWants) skipped.push(`${msg.assigned_name} (PIC): Upon assigned is off in Settings`)
+      else if (!pic) failed.push(`${msg.assigned_name} (PIC): has no email`)
       else {
         const r = await send([pic.email], `Case ${msg.ref} is assigned to you — ${msg.name}`,
           page(fromName, isComplaint ? '#9B2C2C' : '#2D4A30', 'Case assigned to you', `${msg.ref} · ${msg.subject}`,
@@ -248,8 +255,9 @@ Deno.serve(async (req) => {
     const parts = []
     if (done.length) parts.push('Email sent to ' + done.join(', '))
     if (failed.length) parts.push('Not emailed: ' + failed.join('; '))
+    if (skipped.length) parts.push('Not emailed by choice: ' + skipped.join('; '))
     if (parts.length) await note(parts.join('. '))
-    return json({ ok: failed.length === 0, sent: done, failed })
+    return json({ ok: failed.length === 0, sent: done, failed, skipped })
   } catch (e) {
     console.error('message-notify:', e)
     return json({ error: String((e as Error)?.message || e) }, 500)

@@ -408,7 +408,7 @@ async function renderMessageDetail() {
           '</div>' +
           (MSG_HANDLERS_ERR ? '<div style="font-size:11px;color:var(--red);margin-top:.3rem;">Could not load the list of staff: ' + esc(MSG_HANDLERS_ERR) + '</div>'
             : MSG_HANDLERS.length ? '' : '<div style="font-size:11px;color:var(--ink4);margin-top:.3rem;">Nobody on the list yet. Add people in ⚙ on the Messages tab.</div>') +
-          (lastEmail ? '<div class="msg-wa ' + (/Not emailed/.test(lastEmail.body) ? 'msg-wa-warn' : 'msg-wa-ok') + '">' + esc(lastEmail.body) + ' <span style="opacity:.7;">(' + msgWhen(lastEmail.created_at) + ')</span></div>' : '') +
+          (lastEmail ? '<div class="msg-wa ' + (/Not emailed:/.test(lastEmail.body) ? 'msg-wa-warn' : 'msg-wa-ok') + '">' + esc(lastEmail.body) + ' <span style="opacity:.7;">(' + msgWhen(lastEmail.created_at) + ')</span></div>' : '') +
         '</div>' +
         // ④ Timeline
         '<div class="msg-card">' +
@@ -477,8 +477,9 @@ async function msgNotify(event) {
     }
     var d = r.data || {};
     var sent = (d.sent || []).join(', ');
-    if (d.failed && d.failed.length) toast((sent ? 'Emailed ' + sent + '. ' : '') + 'Not emailed: ' + d.failed.join('; '), 'error');
-    else if (sent) toast('Emailed ' + sent);
+    var off = (d.skipped && d.skipped.length) ? ' (' + d.skipped.join('; ') + ')' : '';
+    if (d.failed && d.failed.length) toast((sent ? 'Emailed ' + sent + '. ' : '') + 'Not emailed: ' + d.failed.join('; ') + off, 'error');
+    else if (sent || off) toast((sent ? 'Emailed ' + sent : 'Nobody emailed') + off);
   } catch (e) {
     toast('Saved, but the emails failed: ' + (e.message || e), 'error');
   }
@@ -693,7 +694,7 @@ async function openMessageSettings() {
 async function renderMessageSettings() {
   var res = await Promise.all([
     loadMessageHandlers(),
-    sb.from('salesweb_message_pics').select('user_id,notify_new,notify_solved'),
+    sb.from('salesweb_message_pics').select('*'),
     sb.rpc('salesweb_portal_staff'),
   ]);
   MSG_PICS = {};
@@ -701,26 +702,33 @@ async function renderMessageSettings() {
   MSG_PORTAL_STAFF = (res[2] && res[2].data) || [];
   var err = MSG_HANDLERS_ERR || (res[1] && res[1].error && res[1].error.message) || (res[2] && res[2].error && res[2].error.message) || '';
 
+  // Upon assigned is on unless somebody turned it off (and before
+  // contact_messages_part6.sql adds the column, it reads as on).
   var tick = function (h, key) {
-    var on = MSG_PICS[h.user_id] && MSG_PICS[h.user_id][key];
+    var row = MSG_PICS[h.user_id] || {};
+    var on = key === 'notify_assigned' ? row[key] !== false : !!row[key];
     return '<input type="checkbox"' + (on ? ' checked' : '') + ' onchange="setPicNotify(\'' + h.user_id + '\',\'' + key + '\',this.checked)">';
   };
 
   document.getElementById('mms-body').innerHTML =
     '<div class="msg-section-title">Who Can Be Assigned</div>' +
     '<div class="msg-pic-search">' +
-      '<input class="form-input" id="mms-pic-q" placeholder="Search a name to add…" autocomplete="off" oninput="searchPortalStaff()" onfocus="searchPortalStaff()">' +
+      '<div class="msg-pic-add">' +
+        '<input class="form-input" id="mms-pic-q" placeholder="Search a name to add…" autocomplete="off" oninput="MSG_PIC_PICK=null;searchPortalStaff()" onfocus="searchPortalStaff()">' +
+        '<button class="btn btn-primary" id="mms-pic-add" onclick="addPic()" disabled>Add</button>' +
+      '</div>' +
       '<div class="msg-pic-results" id="mms-pic-results" style="display:none;"></div>' +
     '</div>' +
     (err ? '<div style="font-size:12px;color:var(--red);padding:.4rem 0;">Could not load: ' + esc(err) + '</div>' : '') +
     (MSG_HANDLERS.length
-      ? '<div class="msg-pic-table-wrap"><table class="msg-pic-table"><thead><tr><th>Name</th><th>Email</th><th>WhatsApp number</th><th class="c">New case</th><th class="c">Case solved</th><th></th></tr></thead><tbody>' +
+      ? '<div class="msg-pic-table-wrap"><table class="msg-pic-table"><thead><tr><th>Name</th><th>Email</th><th>WhatsApp number</th><th class="c">Upon assigned</th><th class="c">New case</th><th class="c">Case solved</th><th></th></tr></thead><tbody>' +
         MSG_HANDLERS.map(function (h) {
           return '<tr class="msg-staff-row" data-user="' + h.user_id + '">' +
             '<td><strong>' + esc(h.name) + '</strong></td>' +
             '<td class="msg-pic-email">' + esc(h.email || '—') + '</td>' +
             '<td><div style="display:flex;gap:.3rem;"><input class="form-input" id="mms-ph-' + h.user_id + '" type="tel" value="' + esc(h.phone || '') + '" placeholder="e.g. 012-345 6789" style="width:140px;padding:5px 8px;font-size:12px;' + (h.phone ? '' : 'border-color:var(--amber);') + '">' +
               '<button class="btn btn-outline btn-sm" onclick="saveStaffPhone(\'' + h.user_id + '\')">Save</button></div></td>' +
+            '<td class="c">' + tick(h, 'notify_assigned') + '</td>' +
             '<td class="c">' + tick(h, 'notify_new') + '</td>' +
             '<td class="c">' + tick(h, 'notify_solved') + '</td>' +
             '<td><button class="btn btn-outline btn-sm" style="color:var(--red);" title="Take off the list" onclick="removePic(\'' + h.user_id + '\')">Remove</button></td>' +
@@ -729,8 +737,12 @@ async function renderMessageSettings() {
       : (err ? '' : '<div style="font-size:12px;color:var(--ink4);padding:.6rem 0;">Nobody yet. Search a name above to add them.</div>'));
 }
 
+// Clicking a name only picks it. Add saves it.
+var MSG_PIC_PICK = null;
+
 function searchPortalStaff() {
   var box = document.getElementById('mms-pic-results'); if (!box) return;
+  var add = document.getElementById('mms-pic-add'); if (add) add.disabled = !MSG_PIC_PICK;
   var q = (document.getElementById('mms-pic-q').value || '').trim().toLowerCase();
   var rows = MSG_PORTAL_STAFF.filter(function (s) {
     if (MSG_HANDLERS.some(function (h) { return h.user_id === s.user_id; })) return false;
@@ -738,16 +750,28 @@ function searchPortalStaff() {
   }).slice(0, 12);
   box.style.display = '';
   box.innerHTML = rows.length ? rows.map(function (s) {
-    return '<div class="msg-order-row" onclick="addPic(\'' + s.user_id + '\')"><strong>' + esc(s.name) + '</strong>' +
+    return '<div class="msg-order-row" onclick="pickPic(\'' + s.user_id + '\')"><strong>' + esc(s.name) + '</strong>' +
       '<div class="msg-order-sub">' + esc(s.email || '') + ' · ' + esc(s.level) + '</div></div>';
   }).join('') : '<div class="msg-order-empty">' + (q ? 'Nobody with admin portal access matches.' : 'Everybody with admin portal access is already on the list.') + '</div>';
 }
 
-async function addPic(userId) {
+function pickPic(userId) {
+  var s = MSG_PORTAL_STAFF.find(function (x) { return x.user_id === userId; });
+  if (!s) return;
+  MSG_PIC_PICK = userId;
+  document.getElementById('mms-pic-q').value = s.name;
+  document.getElementById('mms-pic-results').style.display = 'none';
+  var add = document.getElementById('mms-pic-add'); add.disabled = false; add.focus();
+}
+
+async function addPic() {
+  var userId = MSG_PIC_PICK;
+  if (!userId) { toast('Search and pick a name first', 'error'); return; }
   var s = MSG_PORTAL_STAFF.find(function (x) { return x.user_id === userId; });
   var nameEl = document.getElementById('admin-name');
   var r = await sb.from('salesweb_message_pics').upsert({ user_id: userId, added_by: nameEl ? nameEl.textContent : null }, { onConflict: 'user_id' });
   if (r.error) { toast('Error: ' + r.error.message, 'error'); return; }
+  MSG_PIC_PICK = null;
   toast('Added ' + (s ? s.name : ''));
   await renderMessageSettings();
 }
@@ -755,7 +779,7 @@ async function addPic(userId) {
 async function removePic(userId) {
   var h = MSG_HANDLERS.find(function (x) { return x.user_id === userId; });
   var open = MSG_ROWS.filter(function (m) { return m.assigned_user_id === userId && msgIsOpen(m); }).length;
-  if (!confirm('Take ' + (h ? h.name : 'this person') + ' off the list?' + (open ? '\n\nThey still have ' + open + ' open case' + (open === 1 ? '' : 's') + ', which stay assigned to them.' : '') + '\n\nThey will no longer be emailed about new or solved cases.')) return;
+  if (!confirm('Take ' + (h ? h.name : 'this person') + ' off the list?' + (open ? '\n\nThey still have ' + open + ' open case' + (open === 1 ? '' : 's') + ', which stay assigned to them.' : '') + '\n\nThey will no longer be emailed about any case.')) return;
   var r = await sb.from('salesweb_message_pics').delete().eq('user_id', userId);
   if (r.error) { toast('Error: ' + r.error.message, 'error'); return; }
   toast('Removed');
@@ -768,7 +792,8 @@ async function setPicNotify(userId, key, on) {
   if (r.error) { toast('Error: ' + r.error.message, 'error'); await renderMessageSettings(); return; }
   if (MSG_PICS[userId]) MSG_PICS[userId][key] = !!on;
   var h = MSG_HANDLERS.find(function (x) { return x.user_id === userId; });
-  toast((h ? h.name : '') + (on ? ' will' : ' will not') + ' be told when ' + (key === 'notify_new' ? 'a new case comes in' : 'a case is solved'));
+  var when = { notify_assigned: 'a case is assigned to them', notify_new: 'a new case comes in', notify_solved: 'a case is solved' }[key];
+  toast((h ? h.name : '') + (on ? ' will' : ' will not') + ' be told when ' + when);
 }
 
 // The number typed here is kept for the Messages tab only and wins over

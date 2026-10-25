@@ -1152,7 +1152,7 @@ export default function Admin() {
                 </div></div>
             {/* MESSAGE DETAIL + MESSAGE SETTINGS (public/admin-messages.js) */}
             <div className="modal-overlay" id="modal-message" style={{ zIndex: '255' }}><div className="modal msg-modal"><div className="modal-head"><h2 id="mmsg-title">Message</h2><div id="mmsg-status-slot" className="msg-status-slot" /><button className="modal-close" onClick={(e) => { window.closeMessageModal(); }}>✕</button></div><div className="modal-body" id="mmsg-body" style={{ maxHeight: '74vh', overflowY: 'auto', background: 'var(--bg)' }} /><div className="modal-foot" id="mmsg-foot" /></div></div>
-            <div className="modal-overlay" id="modal-message-settings" style={{ zIndex: '260' }}><div className="modal" style={{ maxWidth: '860px' }}><div className="modal-head"><h2>Messages Settings</h2><button className="modal-close" onClick={(e) => { closeModal('modal-message-settings'); }}>✕</button></div><div className="modal-body" id="mms-body" style={{ maxHeight: '78vh', overflowY: 'auto' }} /></div></div>
+            <div className="modal-overlay" id="modal-message-settings" style={{ zIndex: '260' }}><div className="modal" style={{ maxWidth: '860px' }}><div className="modal-head"><h2>Messages Settings</h2><button className="modal-close" onClick={(e) => { window.closeMessageSettings(); }}>✕</button></div><div className="modal-body" id="mms-body" style={{ height: '62vh', overflowY: 'auto' }} /><div className="modal-foot" id="mms-foot" style={{ alignItems: 'center' }} /></div></div>
             {/* TOAST */}
             <div className="toast" id="toast" />
             

@@ -374,6 +374,8 @@ input,select,textarea,button{font-family:inherit;}
 .msg-pic-table .c{text-align:center;}
 .msg-pic-table input[type=checkbox]{width:16px;height:16px;accent-color:var(--green);}
 .msg-pic-email{font-size:12px;color:var(--ink3);}
+.msg-pic-phone{width:150px;padding:5px 8px !important;font-size:12px !important;}
+#mms-save:disabled{opacity:.55;cursor:default;}
 @media (max-width:768px){
   .msg-status-slot{margin-right:.4rem;}
   .msg-assign-row{flex-direction:column;}

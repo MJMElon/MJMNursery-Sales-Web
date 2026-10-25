@@ -670,13 +670,17 @@ async function setMessageOrder(orderNumber) {
 
 // ── Settings: the people who handle cases ──────────────────────────
 // One list. Everybody on it can be picked in Assigned To, and each one
-// can be ticked to be told when a new case comes in and when a case is
-// solved. People are added from everybody with admin portal access.
+// has three ticks: told when a case is assigned to them, when a new case
+// comes in, and when a case is solved. People are added from everybody
+// with admin portal access.
+// Nothing is written until the one Save at the bottom: added and removed
+// people, WhatsApp numbers and ticks all go together.
 // A failure here must SAY so: an empty Assigned To list looks exactly
 // like "nobody added yet", which sends people to the wrong fix.
 var MSG_HANDLERS_ERR = '';
-var MSG_PICS = {};            // user_id → { notify_new, notify_solved }
 var MSG_PORTAL_STAFF = [];    // salesweb_portal_staff()
+var MSG_SET = null;           // { rows, orig, hasAssignedCol, err }
+var MSG_PIC_PICK = null;      // the name picked in the search, not yet added
 
 async function loadMessageHandlers() {
   var r = await sb.rpc('salesweb_message_assignees');
@@ -687,72 +691,104 @@ async function loadMessageHandlers() {
 
 async function openMessageSettings() {
   document.getElementById('mms-body').innerHTML = '<div class="loading">Loading…</div>';
+  document.getElementById('mms-foot').innerHTML = '';
   openModal('modal-message-settings');
-  await renderMessageSettings();
+  await loadMessageSettings();
 }
 
-async function renderMessageSettings() {
+async function loadMessageSettings() {
   var res = await Promise.all([
     loadMessageHandlers(),
     sb.from('salesweb_message_pics').select('*'),
     sb.rpc('salesweb_portal_staff'),
   ]);
-  MSG_PICS = {};
-  ((res[1] && res[1].data) || []).forEach(function (p) { MSG_PICS[p.user_id] = p; });
+  var pics = {};
+  var picRows = (res[1] && res[1].data) || [];
+  picRows.forEach(function (p) { pics[p.user_id] = p; });
   MSG_PORTAL_STAFF = (res[2] && res[2].data) || [];
-  var err = MSG_HANDLERS_ERR || (res[1] && res[1].error && res[1].error.message) || (res[2] && res[2].error && res[2].error.message) || '';
-
-  // Upon assigned is on unless somebody turned it off (and before
-  // contact_messages_part6.sql adds the column, it reads as on).
-  var tick = function (h, key) {
-    var row = MSG_PICS[h.user_id] || {};
-    var on = key === 'notify_assigned' ? row[key] !== false : !!row[key];
-    return '<input type="checkbox"' + (on ? ' checked' : '') + ' onchange="setPicNotify(\'' + h.user_id + '\',\'' + key + '\',this.checked)">';
+  // Upon assigned is on unless somebody turned it off. Before
+  // contact_messages_part6.sql adds the column it reads as on and is
+  // not written.
+  var hasCol = picRows.length ? ('notify_assigned' in picRows[0]) : true;
+  var rows = MSG_HANDLERS.map(function (h) {
+    var p = pics[h.user_id] || {};
+    return { user_id: h.user_id, name: h.name, email: h.email, phone: h.phone || '', phone_source: h.phone_source,
+             notify_assigned: p.notify_assigned !== false, notify_new: !!p.notify_new, notify_solved: !!p.notify_solved };
+  });
+  MSG_SET = {
+    rows: rows, removed: [], hasAssignedCol: hasCol,
+    orig: JSON.stringify(rows),
+    err: MSG_HANDLERS_ERR || (res[1] && res[1].error && res[1].error.message) || (res[2] && res[2].error && res[2].error.message) || '',
   };
+  MSG_PIC_PICK = null;
+  renderMessageSettings();
+}
 
+function msgSetDirty() {
+  return !!MSG_SET && (MSG_SET.removed.length > 0 || JSON.stringify(MSG_SET.rows) !== MSG_SET.orig);
+}
+
+function msgSetRefreshFoot() {
+  var b = document.getElementById('mms-save'); if (!b) return;
+  var dirty = msgSetDirty();
+  b.disabled = !dirty;
+  b.textContent = dirty ? 'Save' : 'Saved';
+  var w = document.getElementById('mms-dirty'); if (w) w.style.display = dirty ? '' : 'none';
+}
+
+function renderMessageSettings() {
+  var S = MSG_SET; if (!S) return;
+  var tick = function (r, key) {
+    if (key === 'notify_assigned' && !S.hasAssignedCol) return '<input type="checkbox" checked disabled title="Run contact_messages_part6.sql to turn this off">';
+    return '<input type="checkbox"' + (r[key] ? ' checked' : '') + ' onchange="setPicField(\'' + r.user_id + '\',\'' + key + '\',this.checked)">';
+  };
   document.getElementById('mms-body').innerHTML =
     '<div class="msg-section-title">Who Can Be Assigned</div>' +
     '<div class="msg-pic-search">' +
       '<div class="msg-pic-add">' +
-        '<input class="form-input" id="mms-pic-q" placeholder="Search a name to add…" autocomplete="off" oninput="MSG_PIC_PICK=null;searchPortalStaff()" onfocus="searchPortalStaff()">' +
+        '<input class="form-input" id="mms-pic-q" placeholder="Search a name to add…" autocomplete="off" oninput="MSG_PIC_PICK=null;searchPortalStaff()" onkeydown="if(event.key===\'Enter\'&&MSG_PIC_PICK)addPic()">' +
         '<button class="btn btn-primary" id="mms-pic-add" onclick="addPic()" disabled>Add</button>' +
       '</div>' +
       '<div class="msg-pic-results" id="mms-pic-results" style="display:none;"></div>' +
     '</div>' +
-    (err ? '<div style="font-size:12px;color:var(--red);padding:.4rem 0;">Could not load: ' + esc(err) + '</div>' : '') +
-    (MSG_HANDLERS.length
+    (S.err ? '<div style="font-size:12px;color:var(--red);padding:.4rem 0;">Could not load: ' + esc(S.err) + '</div>' : '') +
+    (S.rows.length
       ? '<div class="msg-pic-table-wrap"><table class="msg-pic-table"><thead><tr><th>Name</th><th>Email</th><th>WhatsApp number</th><th class="c">Upon assigned</th><th class="c">New case</th><th class="c">Case solved</th><th></th></tr></thead><tbody>' +
-        MSG_HANDLERS.map(function (h) {
-          return '<tr class="msg-staff-row" data-user="' + h.user_id + '">' +
-            '<td><strong>' + esc(h.name) + '</strong></td>' +
-            '<td class="msg-pic-email">' + esc(h.email || '—') + '</td>' +
-            '<td><div style="display:flex;gap:.3rem;"><input class="form-input" id="mms-ph-' + h.user_id + '" type="tel" value="' + esc(h.phone || '') + '" placeholder="e.g. 012-345 6789" style="width:140px;padding:5px 8px;font-size:12px;' + (h.phone ? '' : 'border-color:var(--amber);') + '">' +
-              '<button class="btn btn-outline btn-sm" onclick="saveStaffPhone(\'' + h.user_id + '\')">Save</button></div></td>' +
-            '<td class="c">' + tick(h, 'notify_assigned') + '</td>' +
-            '<td class="c">' + tick(h, 'notify_new') + '</td>' +
-            '<td class="c">' + tick(h, 'notify_solved') + '</td>' +
-            '<td><button class="btn btn-outline btn-sm" style="color:var(--red);" title="Take off the list" onclick="removePic(\'' + h.user_id + '\')">Remove</button></td>' +
+        S.rows.map(function (r) {
+          return '<tr class="msg-staff-row" data-user="' + r.user_id + '">' +
+            '<td><strong>' + esc(r.name) + '</strong>' + (r.isNew ? ' <span class="msg-pending">new</span>' : '') + '</td>' +
+            '<td class="msg-pic-email">' + esc(r.email || '—') + '</td>' +
+            '<td><input class="form-input msg-pic-phone" id="mms-ph-' + r.user_id + '" type="tel" value="' + esc(r.phone) + '" placeholder="e.g. 012-345 6789" oninput="setPicField(\'' + r.user_id + '\',\'phone\',this.value)" style="' + (r.phone ? '' : 'border-color:var(--amber);') + '"></td>' +
+            '<td class="c">' + tick(r, 'notify_assigned') + '</td>' +
+            '<td class="c">' + tick(r, 'notify_new') + '</td>' +
+            '<td class="c">' + tick(r, 'notify_solved') + '</td>' +
+            '<td><button class="btn btn-outline btn-sm" style="color:var(--red);" title="Take off the list" onclick="removePic(\'' + r.user_id + '\')">Remove</button></td>' +
           '</tr>';
         }).join('') + '</tbody></table></div>'
-      : (err ? '' : '<div style="font-size:12px;color:var(--ink4);padding:.6rem 0;">Nobody yet. Search a name above to add them.</div>'));
+      : (S.err ? '' : '<div style="font-size:12px;color:var(--ink4);padding:.6rem 0;">Nobody yet. Search a name above to add them.</div>'));
+
+  document.getElementById('mms-foot').innerHTML =
+    '<span id="mms-dirty" class="msg-pending" style="display:none;margin-right:auto;align-self:center;">Unsaved changes</span>' +
+    '<button class="btn btn-outline" onclick="closeMessageSettings()">Close</button>' +
+    '<button class="btn btn-primary" id="mms-save" onclick="saveMessageSettings()" disabled>Saved</button>';
+  msgSetRefreshFoot();
 }
 
-// Clicking a name only picks it. Add saves it.
-var MSG_PIC_PICK = null;
-
+// The list only shows once something is typed.
 function searchPortalStaff() {
   var box = document.getElementById('mms-pic-results'); if (!box) return;
   var add = document.getElementById('mms-pic-add'); if (add) add.disabled = !MSG_PIC_PICK;
   var q = (document.getElementById('mms-pic-q').value || '').trim().toLowerCase();
+  if (!q) { box.style.display = 'none'; box.innerHTML = ''; return; }
   var rows = MSG_PORTAL_STAFF.filter(function (s) {
-    if (MSG_HANDLERS.some(function (h) { return h.user_id === s.user_id; })) return false;
-    return !q || (s.name + ' ' + (s.email || '')).toLowerCase().indexOf(q) >= 0;
+    if (MSG_SET.rows.some(function (r) { return r.user_id === s.user_id; })) return false;
+    return (s.name + ' ' + (s.email || '')).toLowerCase().indexOf(q) >= 0;
   }).slice(0, 12);
   box.style.display = '';
   box.innerHTML = rows.length ? rows.map(function (s) {
     return '<div class="msg-order-row" onclick="pickPic(\'' + s.user_id + '\')"><strong>' + esc(s.name) + '</strong>' +
       '<div class="msg-order-sub">' + esc(s.email || '') + ' · ' + esc(s.level) + '</div></div>';
-  }).join('') : '<div class="msg-order-empty">' + (q ? 'Nobody with admin portal access matches.' : 'Everybody with admin portal access is already on the list.') + '</div>';
+  }).join('') : '<div class="msg-order-empty">Nobody with admin portal access matches, or they are already on the list.</div>';
 }
 
 function pickPic(userId) {
@@ -764,52 +800,83 @@ function pickPic(userId) {
   var add = document.getElementById('mms-pic-add'); add.disabled = false; add.focus();
 }
 
-async function addPic() {
-  var userId = MSG_PIC_PICK;
-  if (!userId) { toast('Search and pick a name first', 'error'); return; }
-  var s = MSG_PORTAL_STAFF.find(function (x) { return x.user_id === userId; });
-  var nameEl = document.getElementById('admin-name');
-  var r = await sb.from('salesweb_message_pics').upsert({ user_id: userId, added_by: nameEl ? nameEl.textContent : null }, { onConflict: 'user_id' });
-  if (r.error) { toast('Error: ' + r.error.message, 'error'); return; }
+// Add puts the person on the list here. Save writes it.
+function addPic() {
+  var s = MSG_PORTAL_STAFF.find(function (x) { return x.user_id === MSG_PIC_PICK; });
+  if (!s) { toast('Search and pick a name first', 'error'); return; }
+  MSG_SET.removed = MSG_SET.removed.filter(function (id) { return id !== s.user_id; });
+  MSG_SET.rows.push({ user_id: s.user_id, name: s.name, email: s.email, phone: '', phone_source: 'none',
+                      notify_assigned: true, notify_new: false, notify_solved: false, isNew: true });
   MSG_PIC_PICK = null;
-  toast('Added ' + (s ? s.name : ''));
-  await renderMessageSettings();
+  renderMessageSettings();
+  var ph = document.getElementById('mms-ph-' + s.user_id); if (ph) ph.focus();
 }
 
-async function removePic(userId) {
-  var h = MSG_HANDLERS.find(function (x) { return x.user_id === userId; });
+function removePic(userId) {
+  var r = MSG_SET.rows.find(function (x) { return x.user_id === userId; }); if (!r) return;
   var open = MSG_ROWS.filter(function (m) { return m.assigned_user_id === userId && msgIsOpen(m); }).length;
-  if (!confirm('Take ' + (h ? h.name : 'this person') + ' off the list?' + (open ? '\n\nThey still have ' + open + ' open case' + (open === 1 ? '' : 's') + ', which stay assigned to them.' : '') + '\n\nThey will no longer be emailed about any case.')) return;
-  var r = await sb.from('salesweb_message_pics').delete().eq('user_id', userId);
-  if (r.error) { toast('Error: ' + r.error.message, 'error'); return; }
-  toast('Removed');
-  await renderMessageSettings();
+  if (open && !confirm(r.name + ' still has ' + open + ' open case' + (open === 1 ? '' : 's') + ', which stay assigned to them. Take them off the list?')) return;
+  MSG_SET.rows = MSG_SET.rows.filter(function (x) { return x.user_id !== userId; });
+  if (!r.isNew) MSG_SET.removed.push(userId);
+  renderMessageSettings();
 }
 
-async function setPicNotify(userId, key, on) {
-  var upd = {}; upd[key] = !!on;
-  var r = await sb.from('salesweb_message_pics').update(upd).eq('user_id', userId);
-  if (r.error) { toast('Error: ' + r.error.message, 'error'); await renderMessageSettings(); return; }
-  if (MSG_PICS[userId]) MSG_PICS[userId][key] = !!on;
-  var h = MSG_HANDLERS.find(function (x) { return x.user_id === userId; });
-  var when = { notify_assigned: 'a case is assigned to them', notify_new: 'a new case comes in', notify_solved: 'a case is solved' }[key];
-  toast((h ? h.name : '') + (on ? ' will' : ' will not') + ' be told when ' + when);
+function setPicField(userId, key, value) {
+  var r = MSG_SET.rows.find(function (x) { return x.user_id === userId; }); if (!r) return;
+  r[key] = key === 'phone' ? String(value) : !!value;
+  msgSetRefreshFoot();
 }
 
-// The number typed here is kept for the Messages tab only and wins over
-// the profile phone. Clearing it goes back to the profile phone.
-async function saveStaffPhone(userId) {
-  var phone = (document.getElementById('mms-ph-' + userId).value || '').trim();
-  var r;
-  if (!phone) r = await sb.from('salesweb_message_staff_phone').delete().eq('user_id', userId);
-  else {
-    var d = waNumber(phone);
-    if (d.length < 10 || d.length > 15) { toast('Enter a valid WhatsApp number', 'error'); return; }
-    r = await sb.from('salesweb_message_staff_phone').upsert({ user_id: userId, phone: phone, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+function closeMessageSettings() {
+  if (msgSetDirty() && !confirm('You have changes that are not saved. Close without saving?')) return;
+  closeModal('modal-message-settings');
+}
+
+// The one Save. A WhatsApp number typed here is kept for the Messages
+// tab only and wins over the profile phone; clearing it goes back to the
+// profile phone.
+async function saveMessageSettings() {
+  var S = MSG_SET; if (!S || !msgSetDirty()) return;
+  var orig = {}; JSON.parse(S.orig).forEach(function (r) { orig[r.user_id] = r; });
+  for (var i = 0; i < S.rows.length; i++) {
+    var ph = S.rows[i].phone.trim();
+    if (ph && (!orig[S.rows[i].user_id] || ph !== orig[S.rows[i].user_id].phone)) {
+      var d = waNumber(ph);
+      if (d.length < 10 || d.length > 15) { toast('Check the WhatsApp number for ' + S.rows[i].name, 'error'); document.getElementById('mms-ph-' + S.rows[i].user_id).focus(); return; }
+    }
   }
-  if (r.error) { toast('Error: ' + r.error.message, 'error'); return; }
-  toast('Saved');
-  await renderMessageSettings();
+  var btn = document.getElementById('mms-save'); btn.disabled = true; btn.textContent = 'Saving…';
+  var nameEl = document.getElementById('admin-name');
+  var who = nameEl ? nameEl.textContent : null;
+  var fail = function (what, err) { toast('Not saved (' + what + '): ' + err.message, 'error'); msgSetRefreshFoot(); };
+
+  if (S.removed.length) {
+    var del = await sb.from('salesweb_message_pics').delete().in('user_id', S.removed);
+    if (del.error) return fail('remove', del.error);
+  }
+  var picRows = S.rows.filter(function (r) {
+    var o = orig[r.user_id];
+    return r.isNew || !o || o.notify_assigned !== r.notify_assigned || o.notify_new !== r.notify_new || o.notify_solved !== r.notify_solved;
+  }).map(function (r) {
+    var row = { user_id: r.user_id, notify_new: r.notify_new, notify_solved: r.notify_solved };
+    if (S.hasAssignedCol) row.notify_assigned = r.notify_assigned;
+    if (r.isNew) row.added_by = who;
+    return row;
+  });
+  if (picRows.length) {
+    var up = await sb.from('salesweb_message_pics').upsert(picRows, { onConflict: 'user_id' });
+    if (up.error) return fail('list', up.error);
+  }
+  for (var j = 0; j < S.rows.length; j++) {
+    var r = S.rows[j], o = orig[r.user_id], phone = r.phone.trim();
+    if (o ? phone === (o.phone || '') : !phone) continue;
+    var w = phone
+      ? await sb.from('salesweb_message_staff_phone').upsert({ user_id: r.user_id, phone: phone, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
+      : await sb.from('salesweb_message_staff_phone').delete().eq('user_id', r.user_id);
+    if (w.error) return fail('WhatsApp number for ' + r.name, w.error);
+  }
+  toast('Settings saved');
+  await loadMessageSettings();
 }
 
 // Close the name search when clicking anywhere else.

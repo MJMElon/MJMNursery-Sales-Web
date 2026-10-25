@@ -523,7 +523,7 @@ async function loadCustomerGroups(){
       '<td style="text-align:right;font-weight:600;">'+(countByGroup[g.id]||0)+'</td>'+
       '<td style="font-size:12px;">'+fmtDate(g.created_at)+'</td>'+
       '<td style="white-space:nowrap;">'+
-        '<button class="btn btn-outline btn-sm" onclick="openManageGroupMembers(\''+esc(g.id)+'\',\''+esc(g.name).replace(/\'/g,'&#39;')+'\')">Manage Members</button> '+
+        '<button class="btn btn-outline btn-sm" onclick="openManageGroupMembers('+jsArg(g.id)+','+jsArg(g.name)+')">Manage Members</button> '+
         '<button class="btn btn-outline btn-sm" onclick="openEditGroup(\''+esc(g.id)+'\')">Edit</button> '+
         '<button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red);" onclick="deleteGroup(\''+esc(g.id)+'\')">Delete</button>'+
       '</td>'+
@@ -963,7 +963,7 @@ async function viewCustomer(id){
   var blackBtn=c.blacklisted_at
     ? '<button class="btn btn-outline btn-sm" style="color:var(--green);border-color:var(--green);" onclick="unblacklistCustomer(\''+id+'\')">Un-blacklist</button>'
     : '<button class="btn btn-outline btn-sm" style="color:#92400e;border-color:#fde68a;" onclick="blacklistCustomer(\''+id+'\')">Blacklist</button>';
-  html+='<div style="display:flex;gap:.4rem;"><button class="btn btn-outline btn-sm" onclick="resetCustomerPassword(\''+c.email+'\')">Reset Password</button>'+blackBtn+'<button class="btn btn-outline btn-sm" onclick="deleteCustomer(\''+id+'\')" style="color:var(--red);">Delete</button></div>';
+  html+='<div style="display:flex;gap:.4rem;"><button class="btn btn-outline btn-sm" onclick="resetCustomerPassword('+jsArg(c.email)+')">Reset Password</button>'+blackBtn+'<button class="btn btn-outline btn-sm" onclick="deleteCustomer(\''+id+'\')" style="color:var(--red);">Delete</button></div>';
   html+='</div>';
 
   // Stats row

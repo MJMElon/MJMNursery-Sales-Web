@@ -160,7 +160,19 @@ export function toggleSbSub(name){
 export function openModal(id){document.getElementById(id).classList.add('open');}
 export function closeModal(id){document.getElementById(id).classList.remove('open');}
 export function toast(msg,type,duration){var t=document.getElementById('toast');t.textContent=msg;t.className='toast show'+(type==='error'?' error':'');setTimeout(function(){t.className='toast';},duration||3000);}
-export function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+// Escape for HTML text AND for a quoted attribute. It used to escape only
+// & < >, so a customer name or file name with a quote in it broke out of
+// title="…" / value="…" / onclick="…" on an admin page and ran as code.
+export function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+// A value as ONE argument inside onclick="…": a JSON string literal, then
+// attribute-escaped. HTML escaping alone is not enough there — the browser
+// turns &#39; back into ' before the script runs. Use with no quotes of
+// your own around it:  'onclick="f('+jsArg(x)+')"'
+export function jsArg(v){return esc(JSON.stringify(v==null?'':String(v)));}
+// A link or image address that came from the database. Only http(s) gets
+// through; anything else (javascript:, data:, a typo) becomes '#', so a
+// stored address cannot run script when an admin clicks or previews it.
+export function safeUrl(u){var s=String(u==null?'':u).trim();return /^https?:\/\//i.test(s)?s:'#';}
 export function fmtDate(d){if(!d)return'—';return new Date(d).toLocaleDateString('en-MY',{day:'2-digit',month:'short',year:'numeric'});}
 export function statusBadge(s){return{'Pending':'badge-amber','Confirmed':'badge-blue','Processing':'badge-blue','Shipped':'badge-blue','Completed':'badge-green','Cancelled':'badge-red'}[s]||'badge-grey';}
 
@@ -507,7 +519,7 @@ Object.assign(window, {
   checkAdmin, canSeeTab, applyTabVisibility, SALESWEB_TAB_KEYS, doLogout,
   // navigation + generic UI helpers used across all nine modules
   toggleSidebar, switchTab, toggleSbSub,
-  openModal, closeModal, toast, esc, fmtDate, statusBadge,
+  openModal, closeModal, toast, esc, jsArg, safeUrl, fmtDate, statusBadge,
   // settings tab (adminSettings / notificationConfig / paymentDetails
   // are already window-owned above)
   showSettingsSubTab, loadSettings,
@@ -526,11 +538,11 @@ Object.assign(window, {
 // public/ (still frozen in legacy_urls.txt, still minified by
 // scripts/clean_static.mjs) until each is migrated in its own PR.
 var MODULE_SRCS = [
-  '/admin-orders.js?v=2026-10-24-customer-search',
+  '/admin-orders.js?v=2026-10-25-escape-quotes',
   '/admin-reports.js?v=2026-06-15-charts',
-  '/admin-customers.js?v=2026-10-25-no-staff-demote',
+  '/admin-customers.js?v=2026-10-25-escape-quotes',
   '/admin-products.js?v=2026-09-29-invhist-collapse',
-  '/admin-payments.js?v=2026-10-19-einvoice-skip-cancelled',
+  '/admin-payments.js?v=2026-10-25-escape-quotes',
   '/admin-quotations.js?v=2026-09-25-handle-only-drag',
   '/admin-users.js?v=2026-10-12-seal-tab',
   '/admin-promotions.js?v=2026-05-18-points-ledger',

@@ -743,10 +743,10 @@ function renderPaymentReview(order, items, attachments, timeline, bills, payment
           var attCell = '<span style="color:var(--ink4);">—</span>';
           var rowClick = '', rowStyle = 'background:#fafafa;';
           if (hasAtt){
-            var u = String(p.attachment_url).replace(/'/g,'%27');
-            var n = String(p.attachment_name||'document').replace(/'/g,'\\\'');
+            var u = jsArg(safeUrl(p.attachment_url));
+            var n = jsArg(p.attachment_name||'document');
             attCell = '<span style="color:var(--green);">📎 '+esc(p.attachment_name||'document')+'</span>';
-            rowClick = ' onclick="openAttachmentPreview(\''+u+'\',\''+n+'\',\'\');"';
+            rowClick = ' onclick="openAttachmentPreview('+u+','+n+',&quot;&quot;);"';
             rowStyle += 'cursor:pointer;';
           }
           billsRowsHtml += '<tr style="'+rowStyle+'"'+rowClick+'>'+
@@ -768,10 +768,10 @@ function renderPaymentReview(order, items, attachments, timeline, bills, payment
           var attCell = '<span style="color:var(--ink4);">—</span>';
           var rowClick = '', rowStyle = 'background:#fff7ed;';
           if (hasAtt){
-            var u = String(p.attachment_url).replace(/'/g,'%27');
-            var n = String(p.attachment_name||'document').replace(/'/g,'\\\'');
+            var u = jsArg(safeUrl(p.attachment_url));
+            var n = jsArg(p.attachment_name||'document');
             attCell = '<span style="color:var(--green);">📎 '+esc(p.attachment_name||'document')+'</span>';
-            rowClick = ' onclick="openAttachmentPreview(\''+u+'\',\''+n+'\',\'\');"';
+            rowClick = ' onclick="openAttachmentPreview('+u+','+n+',&quot;&quot;);"';
             rowStyle += 'cursor:pointer;';
           }
           billsRowsHtml += '<tr style="'+rowStyle+'"'+rowClick+'>'+
@@ -811,7 +811,7 @@ function renderPaymentReview(order, items, attachments, timeline, bills, payment
     ? attachments.map(function(a){
         var attIdJs = String(a.id||'').replace(/[\\'"<>]/g,'');
         return '<div style="display:flex;justify-content:space-between;align-items:center;gap:.4rem;padding:.4rem .6rem;border:1px solid var(--border);border-radius:8px;margin-bottom:.3rem;font-size:12px;">'+
-                 '<a href="'+esc(a.file_url)+'" target="_blank" rel="noopener" style="color:var(--ink2);text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📎 '+esc(a.file_name||'file')+'</a>'+
+                 '<a href="'+esc(safeUrl(a.file_url))+'" target="_blank" rel="noopener" style="color:var(--ink2);text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📎 '+esc(a.file_name||'file')+'</a>'+
                  '<span style="color:var(--ink4);font-size:11px;white-space:nowrap;">'+fmtDate(a.created_at)+'</span>'+
                  '<button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;color:var(--red);border-color:var(--red);" onclick="deletePaymentAttachment(\''+attIdJs+'\',\''+idJs+'\')" title="Delete attachment (removes file + row)">✕</button>'+
                '</div>';
@@ -839,7 +839,7 @@ function renderPaymentReview(order, items, attachments, timeline, bills, payment
           '<span style="font-size:11px;color:var(--ink3);">'+fmtDate(order.einvoice_uploaded_at)+'</span>'+
         '</div>'+
         '<div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">'+
-          '<a href="'+esc(order.einvoice_url)+'" target="_blank" rel="noopener" style="color:#15803d;text-decoration:underline;font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📄 '+esc(order.einvoice_name||'E-Invoice')+'</a>'+
+          '<a href="'+esc(safeUrl(order.einvoice_url))+'" target="_blank" rel="noopener" style="color:#15803d;text-decoration:underline;font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📄 '+esc(order.einvoice_name||'E-Invoice')+'</a>'+
           '<button class="btn btn-outline btn-sm" style="font-size:11px;" onclick="uploadEInvoiceFromPayments(\''+idJs+'\')">Replace</button>'+
           '<button class="btn btn-outline btn-sm" style="font-size:11px;color:var(--red);border-color:var(--red);" onclick="removeEInvoiceFromPayments(\''+idJs+'\')">Remove</button>'+
         '</div>'+

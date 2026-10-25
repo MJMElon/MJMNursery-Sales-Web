@@ -788,7 +788,7 @@ async function viewOrder(id){
   html+='<div style="font-size:12px;color:var(--ink3);margin-top:.4rem;padding-top:.4rem;border-top:1px dashed var(--border);">';
   html+='<strong>E-Invoice:</strong> ';
   if(_upAt && _upUrl){
-    html+='<span style="color:#15803d;font-weight:600;">✓ Issued</span> · <a href="'+esc(_upUrl)+'" target="_blank" rel="noopener" style="color:#15803d;text-decoration:underline;">View</a>';
+    html+='<span style="color:#15803d;font-weight:600;">✓ Issued</span> · <a href="'+esc(safeUrl(_upUrl))+'" target="_blank" rel="noopener" style="color:#15803d;text-decoration:underline;">View</a>';
     html+=' &nbsp;<button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;" onclick="openEInvoiceUpload(\''+id+'\')">Replace</button>';
     html+=' &nbsp;<button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;color:var(--red);border-color:var(--red);" onclick="removeEInvoice(\''+id+'\')">Remove</button>';
   } else {
@@ -1133,10 +1133,10 @@ async function viewOrder(id){
             var rowClick = '';
             var rowStyle = 'background:#fafafa;';
             if(hasAtt){
-              var u = String(p.attachment_url).replace(/'/g,'%27');
-              var n = String(p.attachment_name||'document').replace(/'/g,'\\\'');
+              var u = jsArg(safeUrl(p.attachment_url));
+              var n = jsArg(p.attachment_name||'document');
               attCell = '<span style="color:var(--green);">📎 '+esc(p.attachment_name||'document')+'</span>';
-              rowClick = ' onclick="openAttachmentPreview(\''+u+'\',\''+n+'\',\'\');" title="Click to open the attachment"';
+              rowClick = ' onclick="openAttachmentPreview('+u+','+n+',&quot;&quot;);" title="Click to open the attachment"';
               rowStyle += 'cursor:pointer;';
             }
             html+='<tr style="'+rowStyle+'"'+rowClick+'>'+
@@ -1160,10 +1160,10 @@ async function viewOrder(id){
           var rowClick = '';
           var rowStyle = 'background:#fff7ed;';
           if(hasAtt){
-            var u = String(p.attachment_url).replace(/'/g,'%27');
-            var n = String(p.attachment_name||'document').replace(/'/g,'\\\'');
+            var u = jsArg(safeUrl(p.attachment_url));
+            var n = jsArg(p.attachment_name||'document');
             attCell = '<span style="color:var(--green);">📎 '+esc(p.attachment_name||'document')+'</span>';
-            rowClick = ' onclick="openAttachmentPreview(\''+u+'\',\''+n+'\',\'\');" title="Click to open the attachment"';
+            rowClick = ' onclick="openAttachmentPreview('+u+','+n+',&quot;&quot;);" title="Click to open the attachment"';
             rowStyle += 'cursor:pointer;';
           }
           html+='<tr style="'+rowStyle+'"'+rowClick+'>'+
@@ -2009,12 +2009,14 @@ async function loadAttachments(orderId){
     var dt=fmtDate(a.created_at);
     var meta=[a.file_type||'File',fmtFileSize(a.file_size),dt,a.uploaded_by].filter(Boolean).join(' · ');
     var idJs=String(a.id||'').replace(/[\\'"<>]/g,'');
-    var urlJs=String(a.file_url||'').replace(/'/g,'%27');
-    var nameJs=String(a.file_name||'').replace(/'/g,'\\\'');
-    var typeJs=String(a.file_type||'').replace(/'/g,'\\\'');
+    // Each one a whole argument, safe inside onclick="…" — the file name is
+    // whatever the uploader called it, quotes included.
+    var urlJs=jsArg(safeUrl(a.file_url));
+    var nameJs=jsArg(a.file_name||'');
+    var typeJs=jsArg(a.file_type||'');
     return '<div class="mo-att-row" role="button" tabindex="0" style="cursor:pointer;" '+
-             'onclick="openAttachmentPreview(\''+urlJs+'\',\''+nameJs+'\',\''+typeJs+'\')" '+
-             'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openAttachmentPreview(\''+urlJs+'\',\''+nameJs+'\',\''+typeJs+'\');}" '+
+             'onclick="openAttachmentPreview('+urlJs+','+nameJs+','+typeJs+')" '+
+             'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openAttachmentPreview('+urlJs+','+nameJs+','+typeJs+');}" '+
              'title="Click to open this document">'+
       '<div class="mo-att-icon">'+attIcon(a.file_type,a.file_name)+'</div>'+
       '<div class="mo-att-info"><strong>'+esc(a.file_name||'Untitled document')+'</strong><span>'+esc(meta)+'</span></div>'+
@@ -2033,6 +2035,7 @@ async function loadAttachments(orderId){
 var _attPreviewState = { url:'', name:'', isImg:false, isPdf:false };
 
 function openAttachmentPreview(fileUrl, fileName, fileType){
+  fileUrl = safeUrl(fileUrl);
   var url=String(fileUrl||'');
   var name=String(fileName||'Document');
   var t=(fileType||'').toLowerCase();

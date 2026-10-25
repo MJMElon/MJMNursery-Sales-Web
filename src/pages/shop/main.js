@@ -777,7 +777,8 @@ export function initShopMain() {
   var popupQty = 1;
 
   function fmtRM(n) { return 'RM ' + n.toLocaleString('en-MY', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
-  function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+  // Quotes too, both kinds, so a value is safe inside any quoted attribute.
+  function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 
   // Product popup — read-only product detail (photo + description). Qty input
   // and Add-to-Cart now live on the main page card, not in the popup.
@@ -1077,7 +1078,7 @@ export function initShopMain() {
     return Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10);
   }
 
-  function escContact(s){ var d=document.createElement('div'); d.textContent=s==null?'':String(s); return d.innerHTML; }
+  function escContact(s){ return esc(s==null?'':String(s)); }
 
   async function submitContactForm(e) {
     e.preventDefault();
@@ -4203,11 +4204,11 @@ export function initShopMain() {
       var typeLabel=e.type==='personal'?'Personal':'Company';
       var details='';
       if(e.type==='personal'){
-        details=(e.ic?'I/C: '+e.ic:'')+(e.tin?' · TIN: '+e.tin:'')+(e.mpob?'<br>MPOB: '+e.mpob:'');
+        details=(e.ic?'I/C: '+esc(e.ic):'')+(e.tin?' · TIN: '+esc(e.tin):'')+(e.mpob?'<br>MPOB: '+esc(e.mpob):'');
       } else {
-        details=(e.reg?'Reg: '+e.reg:'')+(e.tin?' · TIN: '+e.tin:'')+(e.mpob?'<br>MPOB: '+e.mpob:'')+(e.contact?'<br>Contact: '+e.contact:'')+(e.contactPhone?' · '+e.contactPhone:'');
+        details=(e.reg?'Reg: '+esc(e.reg):'')+(e.tin?' · TIN: '+esc(e.tin):'')+(e.mpob?'<br>MPOB: '+esc(e.mpob):'')+(e.contact?'<br>Contact: '+esc(e.contact):'')+(e.contactPhone?' · '+esc(e.contactPhone):'');
       }
-      return '<div class="p-billing-card"><div style="position:absolute;top:.7rem;right:.7rem;display:flex;gap:.4rem;"><button class="p-billing-edit" onclick="editBillingEntry('+e.id+')" title="Edit">Edit</button><button class="p-billing-del" onclick="deleteBillingEntry('+e.id+')" title="Remove">✕</button></div><div class="p-billing-type">'+icon+' '+typeLabel+'</div><div class="p-billing-name">'+e.name+'</div><div class="p-billing-detail">'+details+'</div></div>';
+      return '<div class="p-billing-card"><div style="position:absolute;top:.7rem;right:.7rem;display:flex;gap:.4rem;"><button class="p-billing-edit" onclick="editBillingEntry('+e.id+')" title="Edit">Edit</button><button class="p-billing-del" onclick="deleteBillingEntry('+e.id+')" title="Remove">✕</button></div><div class="p-billing-type">'+icon+' '+typeLabel+'</div><div class="p-billing-name">'+esc(e.name)+'</div><div class="p-billing-detail">'+details+'</div></div>';
     }).join('');
   }
 

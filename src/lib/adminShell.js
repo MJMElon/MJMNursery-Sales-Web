@@ -528,7 +528,7 @@ Object.assign(window, {
 var MODULE_SRCS = [
   '/admin-orders.js?v=2026-10-24-customer-search',
   '/admin-reports.js?v=2026-06-15-charts',
-  '/admin-customers.js?v=2026-08-13-points-ledger',
+  '/admin-customers.js?v=2026-10-25-no-staff-demote',
   '/admin-products.js?v=2026-09-29-invhist-collapse',
   '/admin-payments.js?v=2026-10-19-einvoice-skip-cancelled',
   '/admin-quotations.js?v=2026-09-25-handle-only-drag',

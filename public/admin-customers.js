@@ -389,13 +389,26 @@ async function submitAddCustomer(){
   btn.disabled=true; btn.textContent='Creating…';
 
   // If an email is given, reuse an existing profile rather than duplicating.
-  var existingId=null;
+  var existingId=null, existing=null;
   if(email){
-    var{data:byEmail}=await sb.from('shared_profiles').select('id').ilike('email',email).limit(1);
-    if(byEmail && byEmail.length) existingId=byEmail[0].id;
+    var{data:byEmail}=await sb.from('shared_profiles').select('id,role,user_type,permissions').ilike('email',email).limit(1);
+    if(byEmail && byEmail.length){ existing=byEmail[0]; existingId=existing.id; }
   }
   if(existingId){
-    await sb.from('shared_profiles').update({full_name:name,phone:phone||null,payment_terms:terms,user_type:'customer',role:'customer'}).eq('id',existingId);
+    // That email belongs to a staff login. Turning it into a customer would
+    // take a colleague's access away, so it is refused here and settled in
+    // User Access by somebody who can see the whole account.
+    if(existing.role==='admin' || isOperationStaff(existing.permissions)){
+      toast('That email belongs to a staff account. Use another email, or fix the account in User Access.','error');
+      btn.disabled=false; btn.textContent='Create Customer';
+      return;
+    }
+    var upd=await sb.from('shared_profiles').update({full_name:name,phone:phone||null,payment_terms:terms,user_type:'customer'}).eq('id',existingId);
+    if(upd.error){
+      toast('Could not update the existing account: '+upd.error.message,'error');
+      btn.disabled=false; btn.textContent='Create Customer';
+      return;
+    }
     toast('Existing customer updated');
     btn.disabled=false; btn.textContent='Create Customer';
     closeModal('modal-add-customer'); loadCustomers();

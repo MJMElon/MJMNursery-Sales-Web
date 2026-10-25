@@ -3630,6 +3630,7 @@ export function initShopMain() {
   //  CHECKOUT LOGIN (inline)
   // ═══════════════════════════════════════
   var clIsSignUp = false;
+  var clOtpIsSignup = false;      // the code box is asking for a signup confirmation code
   var clInputType = 'phone';        // 'phone' or 'email' — driven by active tab
   var clLoginContext = 'nav';       // 'nav' or 'checkout'
   var clOtpChannel = 'sms';         // 'sms' or 'whatsapp' — for phone OTP
@@ -3688,6 +3689,7 @@ export function initShopMain() {
     try {
       var pend = JSON.parse(sessionStorage.getItem('mjm_pending_otp') || 'null');
       if (pend && pend.identity && (Date.now() - pend.ts) < 3600000) {
+        clOtpIsSignup = !!pend.signup;
         clSwitchMode(pend.isPhone ? 'phone' : 'email');
         var idEl = document.getElementById(pend.isPhone ? 'cl-phone' : 'cl-identity');
         if (idEl) idEl.value = pend.identity;
@@ -3813,28 +3815,45 @@ export function initShopMain() {
       if (!name) { clShowStatus('Please enter your full name.', 'error'); return; }
       if (pw.length < 6) { clShowStatus('Password must be at least 6 characters.', 'error'); return; }
       clShowStatus('Creating account...', 'success');
-      var { data: signUpData, error } = await _sb.auth.signUp({ email: identity, password: pw, options: { data: { full_name: name, user_type: 'customer' } } });
-      if (error) {
-        if (error.message.toLowerCase().includes('database')) {
-          var { data: retryData, error: retryErr } = await _sb.auth.signUp({ email: identity, password: pw, options: { data: { full_name: name, user_type: 'customer' } } });
-          if (retryErr) { clShowStatus(retryErr.message, 'error'); return; }
-          if (retryData && retryData.user) {
-            await _sb.from('shared_profiles').upsert({ id: retryData.user.id, email: identity, full_name: name, role: 'customer', user_type: 'customer' }, { onConflict: 'id' });
-          }
-        } else {
-          clShowStatus(error.message, 'error'); return;
-        }
-      } else if (signUpData && signUpData.user) {
-        await _sb.from('shared_profiles').upsert({ id: signUpData.user.id, email: identity, full_name: name, role: 'customer', user_type: 'customer' }, { onConflict: 'id' });
+      // Confirm email is ON for the project, so this makes the account and
+      // emails a code. The account is a customer from the first moment: the
+      // signup trigger reads user_type from this metadata.
+      var { data: signUpData, error } = await _sb.auth.signUp({ email: identity, password: pw, options: {
+        data: { full_name: name, user_type: 'customer' },
+        emailRedirectTo: window.location.origin + '/auth.html'
+      } });
+      if (error) { clShowStatus(error.message, 'error'); return; }
+      // An address that already has a confirmed account comes back with no
+      // identities and no email is sent. Say so rather than wait for a code.
+      if (signUpData && signUpData.user && Array.isArray(signUpData.user.identities) && signUpData.user.identities.length === 0) {
+        clShowStatus('This email already has an account. Please sign in, or use Forgot password.', 'error');
+        return;
       }
-      clShowStatus('Account created! You can now sign in.', 'success');
-      clToggleSignup('email');
+      if (signUpData && signUpData.session) { await clPostLogin(signUpData.session); return; }
+      clAwaitSignupCode(identity);
       return;
     }
     clShowStatus('Signing in...', 'success');
     var { data, error } = await _sb.auth.signInWithPassword({ email: identity, password: pw });
     if (error) { clShowStatus(error.message, 'error'); return; }
     await clPostLogin(data.session);
+  }
+
+  // After an email signup: the same code box the email-code login uses,
+  // asking for the code from the confirmation email. clVerifyOTP checks it
+  // as a signup code, which confirms the address and signs them in.
+  function clAwaitSignupCode(identity) {
+    clOtpIsSignup = true;
+    var row = document.getElementById('cl-otp-row');
+    if (row) row.classList.add('show');
+    var code = document.getElementById('cl-otp-code');
+    if (code) { code.value = ''; setTimeout(function(){ code.focus(); }, 50); }
+    clShowStatus('Almost done. We emailed a code to ' + identity + ' — enter it below to confirm your email. (You can also click the link in that email.)', 'success');
+    try {
+      sessionStorage.setItem('mjm_pending_otp', JSON.stringify({
+        identity: identity, channel: 'email', isPhone: false, signup: true, ts: Date.now()
+      }));
+    } catch (e) {}
   }
 
   // Send OTP via SMS, WhatsApp, or Email.
@@ -3869,13 +3888,18 @@ export function initShopMain() {
     if (clickedBtn) clickedBtn.textContent = 'Sending...';
 
     var opts;
+    // The metadata is read only when the code CREATES the account, and then
+    // it makes the account a customer. Without it a first-time code login
+    // was filed as a system account: hidden from the customer list, and
+    // counted as staff by the AI system database.
+    var meta = { user_type: 'customer' };
+    if (clIsSignUp && signupName) meta.full_name = signupName;
     if (isPhone) {
-      opts = { phone: identity, options: { channel: channel } };
-      if (clIsSignUp && signupName) opts.options.data = { full_name: signupName, user_type: 'customer' };
+      opts = { phone: identity, options: { channel: channel, data: meta } };
     } else {
-      opts = { email: identity };
-      if (clIsSignUp && signupName) opts.options = { data: { full_name: signupName, user_type: 'customer' } };
+      opts = { email: identity, options: { data: meta } };
     }
+    clOtpIsSignup = false;
 
     var { error } = await _sb.auth.signInWithOtp(opts);
     if (error) {
@@ -3930,21 +3954,28 @@ export function initShopMain() {
     // For Supabase verifyOtp, the type is 'sms' for both SMS and WhatsApp channels.
     var opts = isPhone
       ? { phone: identity, token: otp, type: 'sms' }
-      : { email: identity, token: otp, type: 'email' };
+      : { email: identity, token: otp, type: clOtpIsSignup ? 'signup' : 'email' };
     var { data, error } = await _sb.auth.verifyOtp(opts);
+    if (error && !isPhone && clOtpIsSignup) {
+      // Newer Supabase accepts a signup code under the plain email type too.
+      var retry = await _sb.auth.verifyOtp({ email: identity, token: otp, type: 'email' });
+      if (!retry.error) { data = retry.data; error = null; }
+    }
     if (error) { clShowStatus(error.message, 'error'); return; }
+    clOtpIsSignup = false;
     // Code consumed — forget the pending-OTP marker.
     try { sessionStorage.removeItem('mjm_pending_otp'); } catch (e) {}
     // For first-time phone signups, ensure profile row exists with full_name
     if (isPhone && data && data.user) {
       var fullName = data.user.user_metadata?.full_name || '';
       var phoneVal = data.user.phone || identity;
+      // Name and phone only. Whether this is a customer was decided when the
+      // account was made, and a staff member signing in to the shop by phone
+      // must not be turned into one.
       await _sb.from('shared_profiles').upsert({
         id: data.user.id,
         phone: phoneVal,
-        full_name: fullName || phoneVal,
-        role: 'customer',
-        user_type: 'customer'
+        full_name: fullName || phoneVal
       }, { onConflict: 'id' });
     }
     await clPostLogin(data.session);

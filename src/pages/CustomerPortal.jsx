@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { loadOrdersFromDB, loadOrderSeals } from '../lib/portalOrders.js';
-import { formatSealRanges } from '../lib/sealRanges.js';
+import { formatSealRanges, SHOW_SEALS_ON_DO } from '../lib/sealRanges.js';
 import '../styles/customer-portal.css';
 
 // Customer Portal — React port of customer-portal.html +
@@ -423,7 +423,7 @@ function SealCard({ orderNo }) {
   useEffect(() => {
     let live = true;
     setData(null);
-    if (orderNo) loadOrderSeals(orderNo).then(r => { if (live) setData(r); });
+    if (SHOW_SEALS_ON_DO && orderNo) loadOrderSeals(orderNo).then(r => { if (live) setData(r); });
     return () => { live = false; };
   }, [orderNo]);
   if (!data) return null;

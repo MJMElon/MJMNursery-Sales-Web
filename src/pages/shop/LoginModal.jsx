@@ -31,7 +31,7 @@ export default function LoginModal() {
           <div className="login-modal-logo">
             <img src="https://cdn.store-assets.com/s/1408881/f/16655641.png" alt="MJM Nursery" />
           </div>
-          <div className="login-modal-title">Welcome</div>
+          <div className="login-modal-title" id="lm-title">Welcome</div>
           <div className="login-modal-sub" id="lm-sub">Sign in to your account</div>
         </div>
 

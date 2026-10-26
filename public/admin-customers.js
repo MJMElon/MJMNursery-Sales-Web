@@ -506,13 +506,26 @@ async function submitAddCustomer(){
   btn.disabled=true; btn.textContent='Creating…';
 
   // If an email is given, reuse an existing profile rather than duplicating.
-  var existingId=null;
+  var existingId=null, existing=null;
   if(email){
-    var{data:byEmail}=await sb.from('shared_profiles').select('id').ilike('email',email).limit(1);
-    if(byEmail && byEmail.length) existingId=byEmail[0].id;
+    var{data:byEmail}=await sb.from('shared_profiles').select('id,role,user_type,permissions').ilike('email',email).limit(1);
+    if(byEmail && byEmail.length){ existing=byEmail[0]; existingId=existing.id; }
   }
   if(existingId){
-    await sb.from('shared_profiles').update({full_name:name,phone:phone||null,payment_terms:terms,user_type:'customer',role:'customer'}).eq('id',existingId);
+    // That email belongs to a staff login. Turning it into a customer would
+    // take a colleague's access away, so it is refused here and settled in
+    // User Access by somebody who can see the whole account.
+    if(existing.role==='admin' || isOperationStaff(existing.permissions)){
+      toast('That email belongs to a staff account. Use another email, or fix the account in User Access.','error');
+      btn.disabled=false; btn.textContent='Create Customer';
+      return;
+    }
+    var upd=await sb.from('shared_profiles').update({full_name:name,phone:phone||null,payment_terms:terms,user_type:'customer'}).eq('id',existingId);
+    if(upd.error){
+      toast('Could not update the existing account: '+upd.error.message,'error');
+      btn.disabled=false; btn.textContent='Create Customer';
+      return;
+    }
     toast('Existing customer updated');
     btn.disabled=false; btn.textContent='Create Customer';
     closeModal('modal-add-customer'); loadCustomers();
@@ -627,7 +640,7 @@ async function loadCustomerGroups(){
       '<td style="text-align:right;font-weight:600;">'+(countByGroup[g.id]||0)+'</td>'+
       '<td style="font-size:12px;">'+fmtDate(g.created_at)+'</td>'+
       '<td style="white-space:nowrap;">'+
-        '<button class="btn btn-outline btn-sm" onclick="openManageGroupMembers(\''+esc(g.id)+'\',\''+esc(g.name).replace(/\'/g,'&#39;')+'\')">Manage Members</button> '+
+        '<button class="btn btn-outline btn-sm" onclick="openManageGroupMembers('+jsArg(g.id)+','+jsArg(g.name)+')">Manage Members</button> '+
         '<button class="btn btn-outline btn-sm" onclick="openEditGroup(\''+esc(g.id)+'\')">Edit</button> '+
         '<button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red);" onclick="deleteGroup(\''+esc(g.id)+'\')">Delete</button>'+
       '</td>'+
@@ -1067,7 +1080,7 @@ async function viewCustomer(id){
   var blackBtn=c.blacklisted_at
     ? '<button class="btn btn-outline btn-sm" style="color:var(--green);border-color:var(--green);" onclick="unblacklistCustomer(\''+id+'\')">Un-blacklist</button>'
     : '<button class="btn btn-outline btn-sm" style="color:#92400e;border-color:#fde68a;" onclick="blacklistCustomer(\''+id+'\')">Blacklist</button>';
-  html+='<div style="display:flex;gap:.4rem;"><button class="btn btn-outline btn-sm" onclick="resetCustomerPassword(\''+c.email+'\')">Reset Password</button>'+blackBtn+'<button class="btn btn-outline btn-sm" onclick="deleteCustomer(\''+id+'\')" style="color:var(--red);">Delete</button></div>';
+  html+='<div style="display:flex;gap:.4rem;"><button class="btn btn-outline btn-sm" onclick="resetCustomerPassword('+jsArg(c.email)+')">Reset Password</button>'+blackBtn+'<button class="btn btn-outline btn-sm" onclick="deleteCustomer(\''+id+'\')" style="color:var(--red);">Delete</button></div>';
   html+='</div>';
 
   // Stats row

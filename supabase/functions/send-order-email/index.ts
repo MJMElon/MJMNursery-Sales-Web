@@ -28,6 +28,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { isServiceCall, isSalesStaff } from "../_shared/caller.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -252,6 +253,16 @@ serve(async (req) => {
     if (!RESEND_API_KEY) {
       console.error('RESEND_API_KEY missing — refusing to send email')
       return new Response(JSON.stringify({ error: 'RESEND_API_KEY not configured' }), { status: 500, headers: { ...corsHeaders, 'Content-Type':'application/json' } })
+    }
+
+    // Only our own functions (the paid email after Billplz) and Sales Web
+    // staff may send. It used to answer anybody holding the public anon key,
+    // and it takes a `to` address, so a stranger with an order id could have
+    // a full proforma — name, billing name, tax id, address, items — mailed
+    // to themselves.
+    const fromService = isServiceCall(req)
+    if (!fromService && !(await isSalesStaff(req))) {
+      return new Response(JSON.stringify({ error: 'not allowed' }), { status: 403, headers: { ...corsHeaders, 'Content-Type':'application/json' } })
     }
 
     const reqBody = await req.json()

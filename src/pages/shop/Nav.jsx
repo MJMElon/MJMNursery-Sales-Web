@@ -22,12 +22,6 @@ export default function Nav() {
       </div>
       <ul className="nav-links" id="navLinks">
         <li><a onClick={() => { window.showPage('home'); window.scrollToSection('salesweb_products'); }} id="nav-shop" style={css('font-weight:700;')}>Shop</a></li>
-        <li>
-          <a href="https://collect.mjmnursery.com" target="_blank" className="btn-book-collection" style={css('font-size:11px;padding:.45rem 1rem;')}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
-            {' '}Book Seedling Collection
-          </a>
-        </li>
         <li className="nav-dropdown-wrap">
           <a id="nav-information" style={css('display:flex;align-items:center;gap:4px;opacity:.7;')}>Information <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9" /></svg></a>
           <div className="nav-dropdown-menu">
@@ -40,14 +34,36 @@ export default function Nav() {
             <a onClick={() => window.showPage('quotation')}>Request a Quotation</a>
           </div>
         </li>
+        <li>
+          <a href="https://collect.mjmnursery.com" target="_blank" className="btn-book-collection" style={css('font-size:11px;padding:.45rem 1rem;')}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+            {' '}Book Seedling Collection
+          </a>
+        </li>
         <li className="mobile-only-login">
-          <a href="#" id="mob-login-link" onClick={(e) => { e.preventDefault(); window.closeMobileMenu(); window.openLoginModal('nav'); }} style={css('font-weight:700;color:var(--gold-light);')}>Log In</a>
+          <a href="#" id="mob-login-link" onClick={(e) => { e.preventDefault(); window.closeMobileMenu(); window.openLoginModal('nav'); }} style={css('font-weight:700;color:var(--gold-light);display:inline-flex;align-items:center;gap:.4rem;')}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={css('flex:none;')}>
+              <circle cx="12" cy="8" r="4.2" />
+              <path d="M4 20.4c0-4 3.6-6.4 8-6.4s8 2.4 8 6.4V22H4v-1.6z" />
+            </svg>
+            Log In
+          </a>
           <a id="mob-myaccount" onClick={() => { window.closeMobileMenu(); window.showPage('portal'); }} style={css('display:none;cursor:pointer;font-weight:700;color:var(--gold-light);')}>My Account</a>
           <a id="mob-signout" onClick={() => { window.closeMobileMenu(); window.portalSignOut(); }} style={css('display:none;cursor:pointer;font-size:12px;opacity:.7;')}>Sign Out</a>
         </li>
       </ul>
       <div className="nav-actions">
-        <a onClick={() => window.openLoginModal('nav')} id="nav-login-link" style={css('cursor:pointer;')}>Log In</a>
+        <a onClick={() => window.openLoginModal('nav')} id="nav-login-link" style={css('cursor:pointer;display:inline-flex;align-items:center;gap:.4rem;color:#fff;')}>
+          {/* Simple filled user-silhouette: a round head above a
+              shoulder-arc. Reads clean at 18px because it's a solid
+              shape, not a thin stroke; currentColor keeps it in step
+              with the link's white→gold hover palette. */}
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={css('flex:none;')}>
+            <circle cx="12" cy="8" r="4.2" />
+            <path d="M4 20.4c0-4 3.6-6.4 8-6.4s8 2.4 8 6.4V22H4v-1.6z" />
+          </svg>
+          Log In
+        </a>
         <a onClick={() => window.showPage('portal')} id="nav-myaccount" style={css('display:none;cursor:pointer;')}>My Account</a>
         <a onClick={() => window.portalSignOut()} id="nav-signout" style={css('display:none;cursor:pointer;font-size:11px;opacity:.6;')}>Sign Out</a>
         <div style={css('position:relative;')}>

@@ -47,7 +47,12 @@ export default function PortalModals() {
         <div className="portal-modal" style={css('max-width:760px;')}>
           <div style={css('display:flex;justify-content:space-between;align-items:center;gap:1rem;margin-bottom:.8rem;')}>
             <h3 id="p-file-viewer-title" style={css("font-family:'Cormorant Garamond',serif;font-size:1.05rem;flex:1;word-break:break-all;")}>File</h3>
-            <a id="p-file-viewer-dl" href="#" target="_blank" rel="noopener noreferrer" style={css('font-size:11px;font-weight:600;color:var(--green-mid);text-decoration:none;border:1px solid var(--green-pale);padding:.3rem .7rem;border-radius:6px;white-space:nowrap;')}>⬇ Download</a>
+            {/* Button, not an <a>, so pDownloadFile can intercept and
+                fetch the file as a blob — Supabase storage URLs are
+                cross-origin, which neuters the <a download> attribute
+                and dumps the file in a new tab instead of saving to
+                the device. Blob+Object URL path works everywhere. */}
+            <button id="p-file-viewer-dl" type="button" onClick={() => window.pDownloadFile()} style={css('font-size:11px;font-weight:600;color:var(--green-mid);background:transparent;cursor:pointer;border:1px solid var(--green-pale);padding:.3rem .7rem;border-radius:6px;white-space:nowrap;font-family:inherit;')}>⬇ Download</button>
             <button onClick={() => window.pCloseFileViewer()} style={css('background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--text-mid);')}>✕</button>
           </div>
           <div id="p-file-viewer-body" style={css('min-height:300px;max-height:70vh;overflow:auto;background:var(--cream);border:1px solid var(--green-pale);border-radius:10px;padding:.5rem;display:flex;align-items:center;justify-content:center;')}></div>

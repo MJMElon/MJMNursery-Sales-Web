@@ -223,16 +223,21 @@ async function loadOrders(){
   if(!wantArchived) orders = orders.filter(function(o){ return !o.archived_at; });
 
   // ── Sidebar Status filter (multi-select, OR within the group) ──
-  //   Open                 → an active order (not cancelled/refunded/completed,
-  //                          not archived/deleted)
+  //   Open                 → an active order (not cancelled/refunded/completed/
+  //                          closed, not archived/deleted)
   //   Cancelled            → status = 'Cancelled'
   //   Ready for Collection → status = 'Ready for Collection'
   //   Completed            → status = 'Completed'
   //   Deleted              → deleted_at IS NOT NULL
+  //
+  //   Closed isn't a sidebar option of its own — it is never picked by
+  //   hand, only set by closing the linked AL in the AI system — but it
+  //   has to drop OUT of Open the same way Cancelled/Refunded/Completed
+  //   do, or an order the office closed keeps reading as outstanding work.
   if(sideStatuses.length){
     orders = orders.filter(function(o){
       var ok = false;
-      if(sideStatuses.indexOf('Open') !== -1 && o.status!=='Cancelled' && o.status!=='Refunded' && o.status!=='Completed' && !o.archived_at && !o.deleted_at) ok = true;
+      if(sideStatuses.indexOf('Open') !== -1 && o.status!=='Cancelled' && o.status!=='Refunded' && o.status!=='Completed' && o.status!=='Closed' && !o.archived_at && !o.deleted_at) ok = true;
       if(sideStatuses.indexOf('Pending Payment') !== -1 && o.status==='Pending Payment' && !o.deleted_at && !o.archived_at) ok = true;
       if(sideStatuses.indexOf('Cancelled') !== -1 && o.status==='Cancelled' && !o.deleted_at && !o.archived_at) ok = true;
       if(sideStatuses.indexOf('Ready for Collection') !== -1 && o.status==='Ready for Collection' && !o.deleted_at && !o.archived_at) ok = true;
@@ -472,7 +477,18 @@ window.mjmRenderPagination = function(currentPage, totalPages, handlerName, tota
 };
 
 function orderBadgeCls(s){
-  return{'Pending Payment':'badge-amber','Partially Paid':'badge-amber','Paid':'badge-blue','Ready for Collection':'badge-green','Completed':'badge-grey','Cancelled':'badge-red','Refunded':'badge-red'}[s]||'badge-grey';
+  return{'Pending Payment':'badge-amber','Partially Paid':'badge-amber','Paid':'badge-blue','Ready for Collection':'badge-green','Completed':'badge-grey','Cancelled':'badge-red','Refunded':'badge-red','Closed':'badge-grey'}[s]||'badge-grey';
+}
+
+// Closed is not one of ORDER_STATUSES — it is never picked from this
+// page's own dropdown, only ever set by closing the linked AL in the AI
+// system (operation_booking.html's Close AL). The reason is stamped into
+// customer_remark as "Closed: <reason>" by that same propagation, and the
+// full note is also in the Order Timeline below — this just surfaces it
+// right next to the status so nobody has to scroll to find it.
+function _closedReasonOf(remark){
+  var m = String(remark||'').match(/(?:^|\s\|\s)Closed:\s*(.*?)(?:\s\||$)/);
+  return m ? m[1] : '';
 }
 
 // After a credit-bill or per-invoice payment mutation, refresh whichever
@@ -668,12 +684,26 @@ async function viewOrder(id){
   html+='<div style="font-size:13px;font-weight:600;">Order Status</div>';
   html+='<span class="badge '+orderBadgeCls(order.status)+'" style="font-size:11px;padding:4px 10px;">'+order.status+'</span>';
   html+='</div>';
-  html+='<div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;">';
-  html+='<select id="mo-status-select" class="form-input" style="flex:1;min-width:140px;font-size:12px;padding:6px 10px;">';
-  ORDER_STATUSES.forEach(function(s){html+='<option'+(s===order.status?' selected':'')+'>'+s+'</option>';});
-  html+='</select>';
-  html+='<button class="btn btn-primary btn-sm" onclick="updateOrderStatus(\''+id+'\')">Update</button>';
-  html+='</div></div>';
+  if(order.status==='Closed'){
+    // Closed is not one of ORDER_STATUSES, so the dropdown below has no
+    // option to mark "selected" and the browser falls back to the FIRST
+    // one — Pending Payment. A select showing the wrong value next to an
+    // "Update" button is how this order gets silently reopened by a click
+    // nobody meant. So this card goes read-only instead: the one way back
+    // in is re-verifying the AL in the AI system, same door it closed by.
+    var _reason=_closedReasonOf(order.customer_remark);
+    html+='<div style="font-size:12px;color:var(--ink3);">Closed via its linked Approval Letter in the AI system.';
+    if(_reason) html+=' <strong>Reason:</strong> '+esc(_reason);
+    html+='</div>';
+  } else {
+    html+='<div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;">';
+    html+='<select id="mo-status-select" class="form-input" style="flex:1;min-width:140px;font-size:12px;padding:6px 10px;">';
+    ORDER_STATUSES.forEach(function(s){html+='<option'+(s===order.status?' selected':'')+'>'+s+'</option>';});
+    html+='</select>';
+    html+='<button class="btn btn-primary btn-sm" onclick="updateOrderStatus(\''+id+'\')">Update</button>';
+    html+='</div>';
+  }
+  html+='</div>';
 
   // Payment Terms card
   html+='<div style="background:var(--bg);border-radius:10px;padding:1rem;">';
@@ -758,21 +788,29 @@ async function viewOrder(id){
   html+='<div style="font-size:12px;color:var(--ink3);margin-top:.4rem;padding-top:.4rem;border-top:1px dashed var(--border);">';
   html+='<strong>E-Invoice:</strong> ';
   if(_upAt && _upUrl){
-    html+='<span style="color:#15803d;font-weight:600;">✓ Issued</span> · <a href="'+esc(_upUrl)+'" target="_blank" rel="noopener" style="color:#15803d;text-decoration:underline;">View</a>';
+    html+='<span style="color:#15803d;font-weight:600;">✓ Issued</span> · <a href="'+esc(safeUrl(_upUrl))+'" target="_blank" rel="noopener" style="color:#15803d;text-decoration:underline;">View</a>';
     html+=' &nbsp;<button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;" onclick="openEInvoiceUpload(\''+id+'\')">Replace</button>';
-  } else if(_reqAt){
-    html+='<span style="color:#b45309;font-weight:600;">⏳ Requested</span> · '+esc(fmtDate(_reqAt));
-    html+=' &nbsp;<button class="btn btn-primary btn-sm" style="font-size:10px;padding:2px 8px;" onclick="openEInvoiceUpload(\''+id+'\')">Upload E-Invoice</button>';
-  } else if(_autoIssue){
-    html+='<span style="color:var(--ink3);">Auto-issued ('+(_isCompany?'company':'≥RM10k')+') — handled by accounts</span>';
+    html+=' &nbsp;<button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;color:var(--red);border-color:var(--red);" onclick="removeEInvoice(\''+id+'\')">Remove</button>';
   } else {
-    var _ordered = new Date(order.created_at).getTime();
-    var _daysLeft = Math.ceil((_ordered + 5*24*60*60*1000 - Date.now()) / (24*60*60*1000));
-    if(_daysLeft > 0){
-      html+='<span style="color:var(--ink4);">Not requested — customer has '+_daysLeft+' day'+(_daysLeft===1?'':'s')+' left to request.</span>';
+    // Not yet issued — surface an Upload button in EVERY state so an
+    // admin can always attach the LHDN-compliant PDF on demand,
+    // whether the customer requested, the order auto-qualifies
+    // (company / ≥RM10k), or it's a personal <RM10k order still
+    // inside its 5-day request window.
+    var _stateNote = '';
+    if(_reqAt){
+      _stateNote = '<span style="color:#b45309;font-weight:600;">⏳ Requested</span> · '+esc(fmtDate(_reqAt));
+    } else if(_autoIssue){
+      _stateNote = '<span style="color:var(--ink3);">Auto-issue required ('+(_isCompany?'company':'≥RM10k')+')</span>';
     } else {
-      html+='<span style="color:var(--ink4);">Not requested — request window expired.</span>';
+      var _ordered = new Date(order.created_at).getTime();
+      var _daysLeft = Math.ceil((_ordered + 5*24*60*60*1000 - Date.now()) / (24*60*60*1000));
+      _stateNote = (_daysLeft > 0)
+        ? '<span style="color:var(--ink4);">Not requested — customer has '+_daysLeft+' day'+(_daysLeft===1?'':'s')+' left to request.</span>'
+        : '<span style="color:var(--ink4);">Not requested — request window expired.</span>';
     }
+    html+=_stateNote;
+    html+=' &nbsp;<button class="btn btn-primary btn-sm" style="font-size:10px;padding:2px 8px;" onclick="openEInvoiceUpload(\''+id+'\')">📄 Upload E-Invoice</button>';
   }
   html+='</div>';
   html+='</div>';
@@ -1095,10 +1133,10 @@ async function viewOrder(id){
             var rowClick = '';
             var rowStyle = 'background:#fafafa;';
             if(hasAtt){
-              var u = String(p.attachment_url).replace(/'/g,'%27');
-              var n = String(p.attachment_name||'document').replace(/'/g,'\\\'');
+              var u = jsArg(safeUrl(p.attachment_url));
+              var n = jsArg(p.attachment_name||'document');
               attCell = '<span style="color:var(--green);">📎 '+esc(p.attachment_name||'document')+'</span>';
-              rowClick = ' onclick="openAttachmentPreview(\''+u+'\',\''+n+'\',\'\');" title="Click to open the attachment"';
+              rowClick = ' onclick="openAttachmentPreview('+u+','+n+',&quot;&quot;);" title="Click to open the attachment"';
               rowStyle += 'cursor:pointer;';
             }
             html+='<tr style="'+rowStyle+'"'+rowClick+'>'+
@@ -1122,10 +1160,10 @@ async function viewOrder(id){
           var rowClick = '';
           var rowStyle = 'background:#fff7ed;';
           if(hasAtt){
-            var u = String(p.attachment_url).replace(/'/g,'%27');
-            var n = String(p.attachment_name||'document').replace(/'/g,'\\\'');
+            var u = jsArg(safeUrl(p.attachment_url));
+            var n = jsArg(p.attachment_name||'document');
             attCell = '<span style="color:var(--green);">📎 '+esc(p.attachment_name||'document')+'</span>';
-            rowClick = ' onclick="openAttachmentPreview(\''+u+'\',\''+n+'\',\'\');" title="Click to open the attachment"';
+            rowClick = ' onclick="openAttachmentPreview('+u+','+n+',&quot;&quot;);" title="Click to open the attachment"';
             rowStyle += 'cursor:pointer;';
           }
           html+='<tr style="'+rowStyle+'"'+rowClick+'>'+
@@ -1971,12 +2009,14 @@ async function loadAttachments(orderId){
     var dt=fmtDate(a.created_at);
     var meta=[a.file_type||'File',fmtFileSize(a.file_size),dt,a.uploaded_by].filter(Boolean).join(' · ');
     var idJs=String(a.id||'').replace(/[\\'"<>]/g,'');
-    var urlJs=String(a.file_url||'').replace(/'/g,'%27');
-    var nameJs=String(a.file_name||'').replace(/'/g,'\\\'');
-    var typeJs=String(a.file_type||'').replace(/'/g,'\\\'');
+    // Each one a whole argument, safe inside onclick="…" — the file name is
+    // whatever the uploader called it, quotes included.
+    var urlJs=jsArg(safeUrl(a.file_url));
+    var nameJs=jsArg(a.file_name||'');
+    var typeJs=jsArg(a.file_type||'');
     return '<div class="mo-att-row" role="button" tabindex="0" style="cursor:pointer;" '+
-             'onclick="openAttachmentPreview(\''+urlJs+'\',\''+nameJs+'\',\''+typeJs+'\')" '+
-             'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openAttachmentPreview(\''+urlJs+'\',\''+nameJs+'\',\''+typeJs+'\');}" '+
+             'onclick="openAttachmentPreview('+urlJs+','+nameJs+','+typeJs+')" '+
+             'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openAttachmentPreview('+urlJs+','+nameJs+','+typeJs+');}" '+
              'title="Click to open this document">'+
       '<div class="mo-att-icon">'+attIcon(a.file_type,a.file_name)+'</div>'+
       '<div class="mo-att-info"><strong>'+esc(a.file_name||'Untitled document')+'</strong><span>'+esc(meta)+'</span></div>'+
@@ -1995,6 +2035,7 @@ async function loadAttachments(orderId){
 var _attPreviewState = { url:'', name:'', isImg:false, isPdf:false };
 
 function openAttachmentPreview(fileUrl, fileName, fileType){
+  fileUrl = safeUrl(fileUrl);
   var url=String(fileUrl||'');
   var name=String(fileName||'Document');
   var t=(fileType||'').toLowerCase();
@@ -2103,6 +2144,41 @@ async function deleteAttachment(attId,orderId){
   // 3. Remove the row.
   var{error:dbErr} = await sb.from('salesweb_order_attachments').delete().eq('id',attId);
   if(dbErr){ toast('DB delete failed: '+dbErr.message,'error'); return; }
+
+  // 4. If this attachment WAS the order's E-Invoice (mirrored into
+  //    salesweb_order_attachments by uploadEInvoiceFromPayments or
+  //    uploaded directly as a document), the einvoice_url column on
+  //    the order still points at the now-deleted file — and the
+  //    customer portal reads from THAT column, so they'd keep seeing
+  //    "✓ E-Invoice issued" indefinitely. Clear the three einvoice
+  //    columns when the deleted file matches the recorded E-Invoice
+  //    URL (compare normalised to ignore query-string / fragment).
+  try{
+    var{data:ord} = await sb.from('salesweb_customer_orders')
+      .select('einvoice_url, einvoice_requested_at').eq('id',orderId).maybeSingle();
+    var deletedUrl = String(row.file_url||'').split('?')[0];
+    var einvUrl    = String((ord && ord.einvoice_url) || '').split('?')[0];
+    if(deletedUrl && einvUrl && deletedUrl === einvUrl){
+      // Clear the E-Invoice reference AND restamp einvoice_requested_at
+      // (keep an existing stamp, or set now() if none) so the order
+      // re-queues in Payments > E-Invoice Requests ready for a fresh
+      // upload. Customer sees "⏳ E-Invoice requested" again, admin
+      // sees it in the Requests list.
+      var _reqAt = (ord && ord.einvoice_requested_at) || new Date().toISOString();
+      await sb.from('salesweb_customer_orders').update({
+        einvoice_url:          null,
+        einvoice_name:         null,
+        einvoice_uploaded_at:  null,
+        einvoice_requested_at: _reqAt,
+        updated_at:            new Date().toISOString(),
+      }).eq('id',orderId);
+      toast('Attachment + E-Invoice removed — order re-queued in Payments > E-Invoice Requests');
+      loadAttachments(orderId);
+      // Rerender so the E-Invoice strip flips back to the pre-upload state.
+      viewOrder(orderId);
+      return;
+    }
+  }catch(e){ /* non-fatal — primary delete already succeeded */ }
 
   toast('Attachment deleted');
   loadAttachments(orderId);
@@ -2458,6 +2534,18 @@ async function renderItemsEditMode(orderId){
   var{data:items}=await sb.from('salesweb_order_items').select('*').eq('order_id',orderId).order('id');
   items=items||[];
   window._editItems=items.map(function(it){return{id:it.id,product_id:it.product_id||null,product_name:it.product_name||'',unit_price:Number(it.unit_price)||0,quantity:Number(it.quantity)||0,_action:'keep'};});
+  // Preload the published-products list so each row renders the same
+  // product-picker dropdown the admin new-order flow uses (name, price
+  // and remaining stock in one go), with a "Custom (free text)" option
+  // kept at the bottom so one-off items are still typable. Falls back
+  // to an empty list if the fetch fails — the dropdown still renders,
+  // just with only the Custom option.
+  try{
+    var r=await sb.from('salesweb_products')
+      .select('id,name,price,stock_qty,sell_month,sell_year')
+      .eq('is_published',true).order('name');
+    window._editProducts=(r&&r.data)||[];
+  }catch(e){ window._editProducts=[]; }
   drawItemsEditTable(orderId);
 }
 
@@ -2465,6 +2553,21 @@ function drawItemsEditTable(orderId){
   var all=window._editItems||[];
   var rows=all.filter(function(r){return r._action!=='delete';});
   var subtotalNow=rows.reduce(function(s,r){return s+(Number(r.unit_price)||0)*(Number(r.quantity)||0);},0);
+  var products=window._editProducts||[];
+  // Build the product <select> once; row renderers reuse it with their
+  // own selected value stamped in. Including stock + price in each
+  // option label is the whole reason the admin asked for this picker
+  // on the edit flow.
+  function buildProductOpts(currentId, isCustom){
+    var opts='<option value="">— Select product —</option>';
+    products.forEach(function(p){
+      var sel=(currentId && String(currentId)===String(p.id))?' selected':'';
+      var hint=' (RM '+fmtMYR(p.price)+(p.stock_qty!=null?' · '+p.stock_qty+' avail':'')+')';
+      opts+='<option value="'+esc(p.id)+'"'+sel+'>'+esc(p.name)+hint+'</option>';
+    });
+    opts+='<option value="__custom__"'+(isCustom?' selected':'')+'>— Custom (free text) —</option>';
+    return opts;
+  }
   var html='<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:.5rem .7rem;font-size:11px;color:#92400e;margin-bottom:.5rem;">⚠️ Editing items will recalculate the order total (discount and coupon are preserved). Click <strong>Save Changes</strong> when done.</div>';
   html+='<table class="data-table"><thead><tr><th>Product</th><th style="text-align:right;width:110px;">Price (RM)</th><th style="text-align:right;width:80px;">Qty</th><th style="text-align:right;width:100px;">Subtotal</th><th style="width:40px;"></th></tr></thead><tbody>';
   if(!rows.length){
@@ -2473,8 +2576,17 @@ function drawItemsEditTable(orderId){
   rows.forEach(function(r){
     var idx=all.indexOf(r);
     var rowSub=(Number(r.unit_price)||0)*(Number(r.quantity)||0);
+    // Row-level product cell: dropdown on top; name input below. If a
+    // catalogue product is picked, the name is readonly (fed by the
+    // picker); if "Custom" is picked, the admin types in the name
+    // directly. Mirrors the new-order flow for consistency.
+    var isCustom=!r.product_id && (r.product_name||'').length>0;
+    var opts=buildProductOpts(r.product_id, isCustom);
+    var nameInput=r.product_id
+      ? '<input class="form-input" type="text" value="'+esc(r.product_name||'')+'" readonly style="background:#f8fafc;color:#475569;font-size:12px;padding:4px 8px;margin-top:.3rem;width:100%;">'
+      : '<input class="form-input" type="text" value="'+esc(r.product_name||'')+'" placeholder="Item name" oninput="updateEditItem('+idx+',\'product_name\',this.value)" style="font-size:12px;padding:4px 8px;margin-top:.3rem;width:100%;">';
     html+='<tr>';
-    html+='<td><input class="form-input" type="text" value="'+esc(r.product_name)+'" oninput="updateEditItem('+idx+',\'product_name\',this.value)" style="font-size:12px;padding:4px 8px;width:100%;"></td>';
+    html+='<td><select class="form-input" onchange="onEditItemProductSelect('+idx+',this.value,\''+orderId+'\')" style="font-size:12px;padding:4px 8px;width:100%;">'+opts+'</select>'+nameInput+'</td>';
     html+='<td style="text-align:right;"><input class="form-input" type="number" step="0.01" min="0" value="'+r.unit_price+'" oninput="updateEditItemNum('+idx+',\'unit_price\',this.value,\''+orderId+'\')" style="font-size:12px;padding:4px 8px;text-align:right;width:100%;"></td>';
     html+='<td style="text-align:right;"><input class="form-input" type="number" min="0" step="1" value="'+r.quantity+'" oninput="updateEditItemNum('+idx+',\'quantity\',this.value,\''+orderId+'\')" style="font-size:12px;padding:4px 8px;text-align:right;width:100%;"></td>';
     html+='<td style="text-align:right;font-weight:600;font-size:12px;">RM '+fmtMYR(rowSub)+'</td>';
@@ -2482,9 +2594,13 @@ function drawItemsEditTable(orderId){
     html+='</tr>';
   });
   html+='</tbody></table>';
-  // Add new row
+  // Add new row — product picker drives name + price (and both can be
+  // overridden before +Add Item). Custom row flips the picker to the
+  // "Custom (free text)" option and reveals a plain name field.
+  var newRowOpts=buildProductOpts(null, false);
   html+='<div style="display:flex;gap:.4rem;margin-top:.6rem;align-items:center;flex-wrap:wrap;background:var(--bg);padding:.5rem;border-radius:8px;">';
-  html+='<input class="form-input" id="mo-new-item-name" placeholder="Product name" style="flex:1;min-width:160px;font-size:12px;padding:6px 10px;">';
+  html+='<select class="form-input" id="mo-new-item-select" onchange="onNewEditRowProductSelect(this.value)" style="flex:1;min-width:200px;font-size:12px;padding:6px 10px;">'+newRowOpts+'</select>';
+  html+='<input class="form-input" id="mo-new-item-name" placeholder="Product name (custom)" style="flex:1;min-width:160px;font-size:12px;padding:6px 10px;display:none;">';
   html+='<input class="form-input" id="mo-new-item-price" type="number" step="0.01" min="0" placeholder="Price" style="width:90px;font-size:12px;padding:6px 10px;">';
   html+='<input class="form-input" id="mo-new-item-qty" type="number" min="1" step="1" value="1" style="width:60px;font-size:12px;padding:6px 10px;">';
   html+='<button class="btn btn-outline btn-sm" onclick="addEditItem(\''+orderId+'\')" style="font-size:11px;">+ Add Item</button>';
@@ -2504,6 +2620,62 @@ function updateEditItem(idx,field,value){
   window._editItems[idx][field]=value;
   if(window._editItems[idx]._action==='keep')window._editItems[idx]._action='update';
 }
+
+// Catalogue picker for an EXISTING row in Edit Items. Mirrors
+// onNewOrderProductSelect but writes into window._editItems, flags
+// the row as "update" so saveOrderItems persists it, then redraws
+// the table so the name field flips between readonly (catalogue
+// product) and editable (Custom free-text).
+function onEditItemProductSelect(idx, value, orderId){
+  var it=window._editItems && window._editItems[idx];
+  if(!it) return;
+  if(value==='__custom__'){
+    it.product_id=null;
+    it.product_name='';
+  } else if(value){
+    var p=(window._editProducts||[]).find(function(x){return String(x.id)===String(value);});
+    if(p){
+      it.product_id=p.id;
+      it.product_name=p.name;
+      it.unit_price=Number(p.price)||0;
+    }
+  } else {
+    it.product_id=null;
+    it.product_name='';
+  }
+  if(it._action==='keep') it._action='update';
+  drawItemsEditTable(orderId);
+}
+window.onEditItemProductSelect = onEditItemProductSelect;
+
+// Catalogue picker for the NEW ROW footer in Edit Items. Fills the
+// price input + a hidden-until-needed name input (shown only when the
+// admin picks "Custom"). On "Custom" the name field is revealed; the
+// Price input is left for the admin to type manually.
+function onNewEditRowProductSelect(value){
+  var nameEl=document.getElementById('mo-new-item-name');
+  var priceEl=document.getElementById('mo-new-item-price');
+  if(!nameEl || !priceEl) return;
+  if(value==='__custom__'){
+    nameEl.style.display='';
+    nameEl.value='';
+    nameEl.focus();
+    priceEl.value='';
+    return;
+  }
+  if(!value){
+    nameEl.style.display='none';
+    nameEl.value='';
+    priceEl.value='';
+    return;
+  }
+  var p=(window._editProducts||[]).find(function(x){return String(x.id)===String(value);});
+  if(!p) return;
+  nameEl.style.display='none';
+  nameEl.value=p.name;
+  priceEl.value=Number(p.price)||0;
+}
+window.onNewEditRowProductSelect = onNewEditRowProductSelect;
 
 function updateEditItemNum(idx,field,value,orderId){
   if(!window._editItems||!window._editItems[idx])return;
@@ -2537,16 +2709,29 @@ function removeEditItem(idx,orderId){
 }
 
 function addEditItem(orderId){
+  var selEl=document.getElementById('mo-new-item-select');
   var nameEl=document.getElementById('mo-new-item-name');
   var priceEl=document.getElementById('mo-new-item-price');
   var qtyEl=document.getElementById('mo-new-item-qty');
-  var name=(nameEl.value||'').trim();
+  var selValue=(selEl && selEl.value) || '';
+  var isCustom = (selValue === '__custom__') || (!selValue);
+  // Catalogue pick → carry the product_id so stock accounting + the
+  // product-name hint on the receipt / portal all work the same as a
+  // customer-placed order. Custom → leave product_id null, use the
+  // typed name verbatim.
+  var product_id=null, name='';
+  if (!isCustom){
+    var p=(window._editProducts||[]).find(function(x){return String(x.id)===String(selValue);});
+    if(p){ product_id=p.id; name=p.name; }
+  } else {
+    name=(nameEl && nameEl.value || '').trim();
+  }
   var price=parseFloat(priceEl.value)||0;
   var qty=parseInt(qtyEl.value)||0;
-  if(!name){toast('Enter product name','error');return;}
+  if(!name){toast('Pick a product or type a custom name','error');return;}
   if(qty<=0){toast('Quantity must be > 0','error');return;}
   window._editItems=window._editItems||[];
-  window._editItems.push({id:null,product_id:null,product_name:name,unit_price:price,quantity:qty,_action:'add'});
+  window._editItems.push({id:null,product_id:product_id,product_name:name,unit_price:price,quantity:qty,_action:'add'});
   drawItemsEditTable(orderId);
 }
 
@@ -2678,11 +2863,82 @@ async function openEInvoiceUpload(orderId){
     var rpc = await sb.rpc('mark_einvoice_uploaded', { p_order_id: orderId, p_url: url, p_name: stdName });
     if(rpc.error){ toast('Save failed: '+rpc.error.message,'error'); return; }
     toast('✓ E-Invoice uploaded');
-    viewOrder(orderId);
+    // Only re-render the Order modal if it's actually open. When the
+    // upload was triggered from Payments > Payment Review, the order
+    // modal wasn't open — refreshing it would pop out a second modal
+    // on top of Payment Review, which admins don't want. The Payments
+    // caller handles its own modal refresh via uploadEInvoiceFromPayments.
+    var _mo = document.getElementById('modal-order');
+    if (_mo && _mo.classList.contains('open')) viewOrder(orderId);
   };
   input.click();
 }
 window.openEInvoiceUpload = openEInvoiceUpload;
+
+// Remove the current E-Invoice: nulls einvoice_url / einvoice_name /
+// einvoice_uploaded_at on the order row, deletes any mirrored
+// salesweb_order_attachments entry pointing at the same URL, and
+// best-effort removes the storage object. Customer portal reads the
+// strip state from the einvoice_* columns on the order, so clearing
+// them is what actually flips the customer side back to "Requested" /
+// "Not requested" / "Auto-issued".
+async function removeEInvoice(orderId){
+  if(!confirm('Remove this E-Invoice?\n\nThe file is deleted from storage, the order is reset to the pre-upload state, and the customer stops seeing the "✓ E-Invoice issued" chip. This cannot be undone.')) return;
+
+  // 1. Read the current URL so we can clean up storage + any mirrored row.
+  var{data:ord, error:readErr} = await sb.from('salesweb_customer_orders')
+    .select('einvoice_url, einvoice_name, einvoice_requested_at').eq('id',orderId).maybeSingle();
+  if(readErr){ toast('Lookup failed: '+readErr.message,'error'); return; }
+  var url = String((ord && ord.einvoice_url) || '').split('?')[0];
+
+  // 2. Delete the storage object. Best-effort — a missing key is fine.
+  if(url){
+    var m = url.split('/order-attachments/');
+    if(m.length >= 2){
+      var key = decodeURIComponent(m[m.length-1]);
+      try{
+        var{error:storErr} = await sb.storage.from('order-attachments').remove([key]);
+        if(storErr && !/not.*found/i.test(storErr.message||'')){
+          console.warn('[removeEInvoice] storage delete:', storErr.message);
+        }
+      }catch(e){ /* non-fatal */ }
+    }
+  }
+
+  // 3. Delete any salesweb_order_attachments row mirrored by the
+  //    Payments-tab upload path so Documents stays in sync.
+  if(url){
+    try{
+      await sb.from('salesweb_order_attachments')
+        .delete().eq('order_id',orderId).eq('file_url',url);
+    }catch(e){ /* non-fatal */ }
+  }
+
+  // 4. Null the three einvoice_* columns — the step the customer actually sees —
+  //    AND make sure einvoice_requested_at carries a value so the order
+  //    re-queues in Payments > E-Invoice Requests for a fresh upload. If
+  //    the row already had a requested-at stamp (customer explicitly
+  //    requested earlier) we keep it; if the admin uploaded without a
+  //    customer request, we stamp with now() so the request queue
+  //    doesn't lose track of this order.
+  var _reqAt = (ord && ord.einvoice_requested_at) || new Date().toISOString();
+  var{error:updErr} = await sb.from('salesweb_customer_orders').update({
+    einvoice_url:          null,
+    einvoice_name:         null,
+    einvoice_uploaded_at:  null,
+    einvoice_requested_at: _reqAt,
+    updated_at:            new Date().toISOString(),
+  }).eq('id',orderId);
+  if(updErr){ toast('Reset failed: '+updErr.message,'error'); return; }
+
+  toast('E-Invoice removed — order re-queued in Payments > E-Invoice Requests');
+  // Same gate as openEInvoiceUpload: only refresh the Order modal
+  // when it's open, so Remove triggered from Payment Review doesn't
+  // pop the Order modal in on top of it.
+  var _mo = document.getElementById('modal-order');
+  if (_mo && _mo.classList.contains('open')) viewOrder(orderId);
+}
+window.removeEInvoice = removeEInvoice;
 
 async function openInvoiceUploadModalForMonth(orderId,period){
   // Pull the trigger order's customer_id + customer_name, then aggregate all
@@ -2818,6 +3074,7 @@ async function submitInvoiceUpload(){
 var _newOrderProducts=[];
 var _newOrderItems=[];
 var _newOrderSelectedCustomerId=null;   // null = walk-in / create new on save
+var _newOrderSelectedCustomerLabel='';   // email or phone of the linked customer, for the status line
 var _newOrderCustSearchTimer=null;
 var _newOrderCustResultsCache={};
 
@@ -2905,6 +3162,7 @@ function genOrderNumberAdmin(){
 async function openNewOrder(){
   _newOrderItems=[];
   _newOrderSelectedCustomerId=null;
+  _newOrderSelectedCustomerLabel='';
   _newOrderCustResultsCache={};
 
   // Reset form fields
@@ -2949,11 +3207,11 @@ async function openNewOrder(){
 // match anything signals that submitNewOrder() should create a new
 // customer profile.
 function onNewOrderCustNameInput(){
-  // Any edit invalidates a previous selection — the admin is either
-  // searching for a different customer or typing in a new name.
-  _newOrderSelectedCustomerId=null;
-  _noResetPoints();          // points belong to the (now unlinked) customer
-  recalcNewOrderTotal();
+  // Editing the name no longer drops a customer already picked: correcting a
+  // spelling after picking them used to unlink the order without a word, and
+  // the save then made a NEW account the real customer never logs in to, so
+  // the order was missing from their portal. The link changes only when
+  // another customer is picked or Unlink is pressed.
   updateNewOrderCustStatus();
 
   var q=document.getElementById('no-cust-name').value.trim();
@@ -2974,29 +3232,64 @@ function onNewOrderCustFieldEdit(){
 }
 
 async function searchCustomersForNewOrder(q){
+  // Asked of the database by the LONGEST word typed and then held to every
+  // word here, so "Ah Kow Tan", a double space or a stray comma in the stored
+  // name still finds the customer.
+  var words=q.toLowerCase().split(/[\s,]+/).filter(Boolean);
+  var key=words.slice().sort(function(a,b){return b.length-a.length;})[0]||q;
   // Escape % and _ so the ilike is taken literally.
-  var like=q.replace(/[%_\\]/g,function(c){return '\\'+c;});
+  var like=key.replace(/[%_\\]/g,function(c){return '\\'+c;});
   var ors=[
     'full_name.ilike.%'+like+'%',
     'email.ilike.%'+like+'%',
     'phone.ilike.%'+like+'%',
   ].join(',');
-  var{data}=await sb.from('shared_profiles')
-    .select('id,full_name,email,phone,user_type,role')
+  // A phone is stored however it was typed (+60 19-319 4334), so a number
+  // typed as 0193194334 is searched by its last four digits and then
+  // compared digit for digit.
+  var qDigits=q.replace(/[^0-9]/g,'');
+  if(qDigits.length>=6) ors+=',phone.ilike.%'+qDigits.slice(-4)+'%';
+  var{data,error}=await sb.from('shared_profiles')
+    .select('id,full_name,email,phone,user_type,role,permissions')
     .or(ors)
-    .limit(25);
-  var results=(data||[]).filter(function(c){
-    return (c.user_type==='customer' || c.role==='customer')
-        && (c.user_type!=='system')
-        && !isOperationStaff(c.permissions);
-  }).slice(0,8);
+    .limit(200);
+  var el=document.getElementById('no-cust-results');
+  if(error){
+    el.innerHTML='<div style="padding:.6rem .8rem;font-size:11px;color:#b91c1c;">Search failed: '+esc(error.message)+' — do not save until the customer is found.</div>';
+    el.style.display='block';
+    return;
+  }
+  function matches(c){
+    if(qDigits.length>=6){
+      var cDigits=String(c.phone||'').replace(/[^0-9]/g,'');
+      if(cDigits.indexOf(qDigits)>=0 || (!!_noPhoneKey(qDigits) && _noPhoneKey(c.phone)===_noPhoneKey(qDigits))) return true;
+    }
+    var hay=((c.full_name||'')+' '+(c.email||'')+' '+(c.phone||'')).toLowerCase();
+    return words.every(function(w){ return hay.indexOf(w)>=0; });
+  }
+  // Staff are left out by what they can DO, never by user_type: a customer
+  // who signs up by phone code is made as 'system' and was hidden from this
+  // search. A match that IS left out is still SHOWN, greyed, with the reason,
+  // so a customer missing from the list says why instead of saying nothing.
+  var found=(data||[]).filter(matches);
+  var results=[], hidden=[];
+  found.forEach(function(c){
+    if(c.role==='admin') hidden.push({c:c, why:'role admin'});
+    else if(isOperationStaff(c.permissions)) hidden.push({c:c, why:'has staff permissions'});
+    else results.push(c);
+  });
+  results=results.slice(0,8);
 
   _newOrderCustResultsCache={};
   results.forEach(function(c){ _newOrderCustResultsCache[c.id]=c; });
 
-  var el=document.getElementById('no-cust-results');
+  var hiddenHtml=hidden.slice(0,3).map(function(h){
+    return '<div style="padding:.45rem .7rem;border-bottom:1px solid var(--rule);font-size:11px;color:var(--ink4);background:#fafafa;">'+
+      esc(h.c.full_name||'(no name)')+' · '+esc(h.c.email||h.c.phone||'')+
+      '<div style="color:#92400e;">Staff account ('+esc(h.why)+') — cannot be picked. Fix it in User Access if this is a customer.</div></div>';
+  }).join('');
   if(!results.length){
-    el.innerHTML='<div style="padding:.6rem .8rem;font-size:11px;color:var(--ink4);">No match — a profile will be created on save.</div>';
+    el.innerHTML=hiddenHtml+'<div style="padding:.6rem .8rem;font-size:11px;color:var(--ink4);">No customer match — a profile will be created on save.</div>';
     el.style.display='block';
     updateNewOrderCustStatus();
     return;
@@ -3006,14 +3299,33 @@ async function searchCustomersForNewOrder(q){
       '<div style="font-weight:600;">'+esc(c.full_name||'(no name)')+'</div>'+
       '<div style="color:var(--ink4);font-size:11px;">'+esc(c.email||'')+(c.phone?'  ·  '+esc(c.phone):'')+'</div>'+
     '</div>';
-  }).join('');
+  }).join('')+hiddenHtml;
   el.style.display='block';
+}
+
+// Last nine digits of a phone, so 019-319 4334 and +60193194334 compare equal.
+function _noPhoneKey(p){
+  var d=String(p||'').replace(/[^0-9]/g,'');
+  return d.length>=8 ? d.slice(-9) : '';
+}
+
+function unlinkNewOrderCustomer(){
+  _newOrderSelectedCustomerId=null;
+  _newOrderSelectedCustomerLabel='';
+  _noResetPoints();          // points belong to the customer that was unlinked
+  recalcNewOrderTotal();
+  updateNewOrderCustStatus();
 }
 
 function selectNewOrderCustomer(id){
   var c=_newOrderCustResultsCache[id];
   if(!c) return;
+  if(_newOrderSelectedCustomerId && _newOrderSelectedCustomerId!==id){
+    _noResetPoints();
+    recalcNewOrderTotal();
+  }
   _newOrderSelectedCustomerId=id;
+  _newOrderSelectedCustomerLabel=c.email||c.phone||c.full_name||'';
   document.getElementById('no-cust-name').value=c.full_name||'';
   document.getElementById('no-cust-email').value=c.email||'';
   document.getElementById('no-cust-phone').value=c.phone||'';
@@ -3077,7 +3389,9 @@ function updateNewOrderCustStatus(){
   var el=document.getElementById('no-cust-status');
   var name=(document.getElementById('no-cust-name').value||'').trim();
   if(_newOrderSelectedCustomerId){
-    el.textContent='✓ Linked to existing customer';
+    el.innerHTML='✓ Linked to existing customer'
+      +(_newOrderSelectedCustomerLabel?' · '+esc(_newOrderSelectedCustomerLabel):'')
+      +' · <a href="#" onclick="unlinkNewOrderCustomer();return false;" style="color:#92400e;">Unlink</a>';
     el.style.color='#065f46';
     el.style.display='block';
   } else if(name.length>=2){
@@ -3342,6 +3656,27 @@ async function submitNewOrder(){
         .select('id').ilike('email',email).limit(1);
       if(byEmail && byEmail.length){
         custId=byEmail[0].id;
+      }
+    }
+    // Last check before a new account is made: a customer who already has
+    // one under this phone is asked about, because an order on a new
+    // account is an order the customer never sees in their portal.
+    if(!custId && _noPhoneKey(phone)){
+      var{data:byPhone}=await sb.from('shared_profiles')
+        .select('id,full_name,email,phone,role,permissions')
+        .ilike('phone','%'+_noPhoneKey(phone).slice(-4)+'%')
+        .limit(100);
+      var samePhone=(byPhone||[]).filter(function(c){
+        return _noPhoneKey(c.phone)===_noPhoneKey(phone)
+            && c.role!=='admin' && !isOperationStaff(c.permissions);
+      });
+      if(samePhone.length){
+        var who=samePhone[0];
+        var useIt=confirm('A customer already has this phone number:\n\n'
+          +(who.full_name||'(no name)')+'  '+(who.email||'')+'  '+(who.phone||'')
+          +'\n\nPut this order on their account so they see it in their portal?\n\n'
+          +'OK = use their account.  Cancel = make a new customer account.');
+        if(useIt) custId=who.id;
       }
     }
     if(!custId){

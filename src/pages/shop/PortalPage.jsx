@@ -17,38 +17,53 @@ export default function PortalPage() {
         <div className="portal-layout">
           {/* LEFT: Orders + History + Profile */}
           <div className="portal-left">
-            {/* Order tabs */}
-            <div style={css('display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:.5rem;')}>
-              <div style={css('display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;')}>
-                <a href="https://collect.mjmnursery.com" target="_blank" className="btn-book-collection">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
-                  {' '}Book Collection
-                </a>
-                <button className="portal-tab active" id="ptab-active" onClick={(e) => window.pShowOrderView('active', e.currentTarget)}>Active Orders</button>
-                <button className="portal-tab" id="ptab-history" onClick={(e) => window.pShowOrderView('history', e.currentTarget)}>History</button>
-                <button className="portal-tab" id="ptab-messages" onClick={(e) => window.pShowOrderView('messages', e.currentTarget)}>Messages</button>
-                <button className="portal-tab" id="ptab-profile" onClick={(e) => window.pShowOrderView('profile', e.currentTarget)}>Profile</button>
+            {/* Row 1 — full-width Book Seedling Collection CTA */}
+            <a href="https://collect.mjmnursery.com" target="_blank" className="btn-book-collection" style={css('display:flex;align-items:center;justify-content:center;gap:.5rem;width:100%;padding:.75rem 1rem;font-size:13px;margin-bottom:.8rem;')}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+              Book Seedling Collection
+            </a>
+
+            {/* Row 2 — top-level sections: My Order (default), My Case, My Profile.
+                Segmented-pill control: active chip gets a solid green
+                pill + white text; inactive chips are plain text sharing
+                the pale pill-rail background. */}
+            <div className="portal-tab-group" role="tablist" aria-label="Portal sections">
+              <button className="portal-tab active" id="ptab-myorder" role="tab" aria-selected="true" onClick={(e) => window.pShowOrderView('myorder', e.currentTarget)}>My Order</button>
+              <button className="portal-tab" id="ptab-messages" role="tab" aria-selected="false" onClick={(e) => window.pShowOrderView('messages', e.currentTarget)}>My Case</button>
+              <button className="portal-tab" id="ptab-profile" role="tab" aria-selected="false" onClick={(e) => window.pShowOrderView('profile', e.currentTarget)}>My Profile</button>
+            </div>
+
+            {/* My Order section — underline sub-tabs + search + list panel.
+                Active + History share one panel (#pp-orders); clicking a
+                sub-tab swaps the content, searching merges both sets. */}
+            <div id="pp-myorder-section">
+              <div className="pp-subtabs" role="tablist" aria-label="My Orders">
+                <button className="pp-subtab active" id="ptab-active" role="tab" aria-selected="true" onClick={(e) => window.pShowOrdersSubTab('active', e.currentTarget)}>Active Orders</button>
+                <button className="pp-subtab" id="ptab-history" role="tab" aria-selected="false" onClick={(e) => window.pShowOrdersSubTab('history', e.currentTarget)}>Order History</button>
               </div>
+              <div id="pp-search-wrap" style={css('margin-bottom:.8rem;')}>
+                <input
+                  type="text"
+                  id="pp-order-search"
+                  name="mjm-portal-search"
+                  autoComplete="off"
+                  inputMode="search"
+                  data-form-type="other"
+                  data-1p-ignore=""
+                  data-lpignore="true"
+                  placeholder="Search by order #, billing name, item..."
+                  onInput={() => window.pFilterOrders()}
+                  style={css("width:100%;padding:8px 12px;border:1.5px solid var(--green-pale);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;background:var(--cream);color:var(--text-dark);transition:border-color .15s;")}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--green-mid)'; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--green-pale)'; }}
+                />
+              </div>
+              <div id="pp-orders"></div>
+              {/* Legacy history panel — kept as an empty, hidden placeholder
+                  so no runtime that reaches for #pp-history by id crashes
+                  while the real content moves into #pp-orders. */}
+              <div id="pp-history" style={css('display:none;')}></div>
             </div>
-            <div id="pp-search-wrap" style={css('margin-bottom:.8rem;')}>
-              <input
-                type="text"
-                id="pp-order-search"
-                name="mjm-portal-search"
-                autoComplete="off"
-                inputMode="search"
-                data-form-type="other"
-                data-1p-ignore=""
-                data-lpignore="true"
-                placeholder="Search by order #, billing name, item..."
-                onInput={() => window.pFilterOrders()}
-                style={css("width:100%;padding:8px 12px;border:1.5px solid var(--green-pale);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;background:var(--cream);color:var(--text-dark);transition:border-color .15s;")}
-                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--green-mid)'; }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--green-pale)'; }}
-              />
-            </div>
-            <div id="pp-orders"></div>
-            <div id="pp-history" style={css('display:none;')}></div>
             {/* Messages the customer sent through Contact Us while logged in.
                 Rendered by pRenderMessages() in main.js. */}
             <div id="pp-messages" style={css('display:none;')}></div>

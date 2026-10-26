@@ -4,17 +4,45 @@
 //   supabase secrets set BILLPLZ_API_KEY=your-api-key
 //   supabase secrets set BILLPLZ_COLLECTION_ID=your-collection-id
 //   supabase secrets set BILLPLZ_SANDBOX=true   (set to "false" for production)
+//
+// THE AMOUNT IS THE ORDER'S, NEVER THE BROWSER'S. This used to bill whatever
+// `amount` the page sent, so anybody with the browser's developer tools could
+// pay RM 1 for any order. Now the caller must be signed in as the customer the
+// order belongs to, the order must be waiting for payment, and the amount is
+// read from salesweb_customer_orders.total — which place_order works out in
+// the database. An `amount` in the request body is ignored.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { billplzBaseUrl, toSen } from "../_shared/billplz.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Where Billplz may send the customer back to. Anything else falls back to
+// the shop's own return page, so a crafted request cannot turn the payment
+// page into a redirect to somebody else's site.
+const RETURN_ORIGINS = (Deno.env.get('SALESWEB_ORIGINS') ||
+  'https://www.mjmnursery.com,https://mjmnursery.com').split(',').map((s) => s.trim()).filter(Boolean)
+const DEFAULT_RETURN = 'https://www.mjmnursery.com/payment-callback.html'
+
+function safeReturnUrl(asked: unknown): string {
+  try {
+    const u = new URL(String(asked || ''))
+    if (RETURN_ORIGINS.includes(u.origin) && u.pathname.endsWith('/payment-callback.html')) return u.toString()
+  } catch (_) { /* not a URL */ }
+  return DEFAULT_RETURN
+}
+
+function json(payload: unknown, status: number) {
+  return new Response(JSON.stringify(payload), {
+    status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  })
+}
+
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -22,39 +50,43 @@ serve(async (req) => {
   try {
     const BILLPLZ_API_KEY = Deno.env.get('BILLPLZ_API_KEY') || ''
     const BILLPLZ_COLLECTION_ID = Deno.env.get('BILLPLZ_COLLECTION_ID') || ''
-    const BILLPLZ_SANDBOX = Deno.env.get('BILLPLZ_SANDBOX') !== 'false'
-
-    if (!BILLPLZ_API_KEY || !BILLPLZ_COLLECTION_ID) {
-      return new Response(
-        JSON.stringify({ error: 'Billplz not configured. API_KEY=' + (BILLPLZ_API_KEY ? 'set' : 'missing') + ', COLLECTION=' + (BILLPLZ_COLLECTION_ID ? 'set' : 'missing') }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    const { order_id, amount, email, name, phone, description, callback_url } = await req.json()
-
-    if (!order_id || !amount || !email || !name) {
-      return new Response(
-        JSON.stringify({ error: 'Missing required fields: order_id=' + !!order_id + ', amount=' + !!amount + ', email=' + !!email + ', name=' + !!name }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    // Billplz API base URL
-    const baseUrl = BILLPLZ_SANDBOX
-      ? 'https://www.billplz-sandbox.com/api/v3'
-      : 'https://www.billplz.com/api/v3'
-
-    // Webhook URL (server-to-server, Billplz calls this after payment)
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
-    const webhookUrl = supabaseUrl + '/functions/v1/billplz-webhook'
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || ''
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+    if (!BILLPLZ_API_KEY || !BILLPLZ_COLLECTION_ID || !supabaseUrl || !anonKey || !serviceKey) {
+      console.error('create-billplz-bill: a secret is missing')
+      return json({ error: 'Online payment is not available right now. Please choose offline payment.' }, 500)
+    }
 
-    // Redirect URL (browser redirect after payment)
-    const redirectUrl = callback_url || 'https://kibqjztozokohqmhqqqf.supabase.co/functions/v1/billplz-webhook'
+    // Who is asking — from their own login token, not from the body.
+    const authHeader = req.headers.get('Authorization') || ''
+    const asCaller = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } })
+    const { data: who } = await asCaller.auth.getUser()
+    const user = who && who.user
+    if (!user) return json({ error: 'Please sign in again before paying.' }, 401)
 
-    console.log('Creating Billplz bill:', { baseUrl, order_id, amount, email, name, webhookUrl, redirectUrl })
+    const body = await req.json().catch(() => ({}))
+    const order_id = String((body && body.order_id) || '')
+    if (!order_id) return json({ error: 'Missing order' }, 400)
 
-    // Build form data — Billplz API requires x-www-form-urlencoded
+    const sb = createClient(supabaseUrl, serviceKey)
+    const { data: order } = await sb
+      .from('salesweb_customer_orders')
+      .select('id, order_number, customer_id, customer_name, customer_email, status, total')
+      .eq('id', order_id)
+      .maybeSingle()
+    if (!order || order.customer_id !== user.id) return json({ error: 'Order not found' }, 404)
+    if (order.status !== 'Pending Payment') {
+      return json({ error: 'This order is not waiting for payment (it is ' + order.status + ').' }, 409)
+    }
+    const amountSen = toSen(order.total)
+    if (!(amountSen > 0)) return json({ error: 'This order has nothing to pay.' }, 409)
+
+    const email = order.customer_email || user.email || ''
+    if (!email) return json({ error: 'Your account has no email address for the receipt.' }, 400)
+    const name = String(order.customer_name || (body && body.name) || 'Customer').slice(0, 200)
+    const phone = String((body && body.phone) || '')
+
     const formBody = new URLSearchParams()
     formBody.append('collection_id', BILLPLZ_COLLECTION_ID)
     formBody.append('email', email)
@@ -62,57 +94,39 @@ serve(async (req) => {
     if (phone) {
       let cleanPhone = phone.replace(/[\s\-()]/g, '')
       if (cleanPhone.startsWith('+')) cleanPhone = cleanPhone.substring(1)
-      if (/^60\d{9,10}$/.test(cleanPhone)) {
-        formBody.append('mobile', cleanPhone)
-      }
+      if (/^60\d{9,10}$/.test(cleanPhone)) formBody.append('mobile', cleanPhone)
     }
     formBody.append('name', name)
-    formBody.append('amount', String(amount))
-    formBody.append('description', description || `Order ${order_id.substring(0, 8).toUpperCase()}`)
-    formBody.append('callback_url', webhookUrl)
-    formBody.append('redirect_url', redirectUrl)
+    formBody.append('amount', String(amountSen))
+    formBody.append('description', `MJM Nursery Order #${order.order_number || order_id.substring(0, 8).toUpperCase()}`)
+    formBody.append('callback_url', supabaseUrl + '/functions/v1/billplz-webhook')
+    formBody.append('redirect_url', safeReturnUrl(body && body.callback_url))
     formBody.append('reference_1_label', 'Order ID')
     formBody.append('reference_1', order_id)
-
-    // Create bill via Billplz API
-    const billRes = await fetch(`${baseUrl}/bills`, {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Basic ' + btoa(BILLPLZ_API_KEY + ':'),
-      },
-      body: formBody,
-    })
-
-    const billData = await billRes.json()
-
-    if (!billRes.ok) {
-      console.error('Billplz API error:', JSON.stringify(billData))
-      return new Response(
-        JSON.stringify({ error: billData.error?.message || billData.error || JSON.stringify(billData) }),
-        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+    if (order.order_number) {
+      formBody.append('reference_2_label', 'Order No')
+      formBody.append('reference_2', String(order.order_number))
     }
 
-    console.log('Billplz bill created:', billData.id, billData.url)
+    const billRes = await fetch(`${billplzBaseUrl()}/bills`, {
+      method: 'POST',
+      headers: { 'Authorization': 'Basic ' + btoa(BILLPLZ_API_KEY + ':') },
+      body: formBody,
+    })
+    const billData = await billRes.json().catch(() => ({}))
+    if (!billRes.ok) {
+      console.error('Billplz API error:', JSON.stringify(billData))
+      return json({ error: 'The payment gateway did not accept the bill. Please try again or choose offline payment.' }, 502)
+    }
 
-    // No timeline row is written here on purpose: a bill being CREATED
-    // is not a payment event — the customer may close the Billplz page
-    // without paying, in which case a "Payment Initiated" row would
-    // mislead admins reviewing the order. The billplz-webhook handler
-    // is the only writer for the actual outcome ("Paid" or "Payment
-    // Failed"), which is what admins want to see.
+    console.log('Billplz bill created:', billData.id, 'order', order_id, 'sen', amountSen)
 
-    // Return the payment URL
-    return new Response(
-      JSON.stringify({ url: billData.url, bill_id: billData.id }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
-
+    // No timeline row is written here on purpose: a bill being CREATED is not
+    // a payment event — the customer may close the Billplz page without
+    // paying. The webhook / verify are the only writers of the outcome.
+    return json({ url: billData.url, bill_id: billData.id, amount: amountSen / 100 }, 200)
   } catch (err) {
-    console.error('Edge function error:', err)
-    return new Response(
-      JSON.stringify({ error: err.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    console.error('create-billplz-bill error:', err)
+    return json({ error: 'Could not start the payment. Please try again.' }, 500)
   }
 })

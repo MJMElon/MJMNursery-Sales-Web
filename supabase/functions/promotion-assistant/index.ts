@@ -28,6 +28,7 @@
 
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { isSalesStaff } from "../_shared/caller.ts";
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
 const MODEL = Deno.env.get("ANTHROPIC_MODEL") ?? "claude-sonnet-4-6";
@@ -113,12 +114,20 @@ serve(async (req: Request) => {
     return json({ error: "ANTHROPIC_API_KEY not configured on the server" }, 500);
   }
 
+  // Sales Web staff only. With --no-verify-jwt and no check of its own this
+  // answered anybody on the internet, on the company's Anthropic bill.
+  if (!(await isSalesStaff(req))) return json({ error: "not allowed" }, 403);
+
   let body: any;
   try { body = await req.json(); }
   catch { return json({ error: "Invalid JSON" }, 400); }
 
   const messages = Array.isArray(body.messages) ? body.messages : [];
   if (!messages.length) return json({ error: "messages required" }, 400);
+  // A conversation is a few short turns. A ceiling keeps one session — or a
+  // stolen login — from running up the bill.
+  if (messages.length > 40) return json({ error: "conversation too long, start a new one" }, 400);
+  if (JSON.stringify(messages).length > 40000) return json({ error: "messages too long" }, 400);
 
   const systemWithCatalog = SYSTEM_PROMPT + buildCatalogContext(body.catalog);
 

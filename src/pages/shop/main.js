@@ -20,7 +20,7 @@
 // payment-proof.html and every sessionStorage key — is verbatim.
 import { supabase as sharedSupabaseClient, SUPABASE_URL as SHOP_SB_URL, SUPABASE_ANON_KEY as SHOP_SB_KEY } from '../../lib/supabase.js';
 import { createClient as shopCreateClient } from '@supabase/supabase-js';
-import { formatSealRanges } from '../../lib/sealRanges.js';
+import { formatSealRanges, SHOW_SEALS_ON_DO } from '../../lib/sealRanges.js';
 
 // Global mobile-menu close helper — inline onclicks in the mobile nav drawer
 // (Log In, My Account, Sign Out) call this. Defining it here, BEFORE the
@@ -777,7 +777,8 @@ export function initShopMain() {
   var popupQty = 1;
 
   function fmtRM(n) { return 'RM ' + n.toLocaleString('en-MY', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
-  function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+  // Quotes too, both kinds, so a value is safe inside any quoted attribute.
+  function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 
   // Product popup — read-only product detail (photo + description). Qty input
   // and Add-to-Cart now live on the main page card, not in the popup.
@@ -997,7 +998,7 @@ export function initShopMain() {
   // The form used to say "Message Sent!" and save nothing. It now goes to
   // salesweb_messages through salesweb_submit_message() (which validates,
   // rate-limits and hands back an MSG-00042 reference), then pokes the
-  // notify-new-message edge function to email the office. "Sent" is only
+  // message-notify edge function to email the office. "Sent" is only
   // shown once the database has the row; a failure keeps everything the
   // customer typed and says what went wrong.
   var CONTACT_PHOTO_MAX = 5 * 1024 * 1024;
@@ -1077,7 +1078,7 @@ export function initShopMain() {
     return Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10);
   }
 
-  function escContact(s){ var d=document.createElement('div'); d.textContent=s==null?'':String(s); return d.innerHTML; }
+  function escContact(s){ return esc(s==null?'':String(s)); }
 
   async function submitContactForm(e) {
     e.preventDefault();
@@ -1147,7 +1148,7 @@ export function initShopMain() {
       var row=Array.isArray(res.data)?res.data[0]:res.data;
 
       // Email to the office. Fire and forget — the message is already safe.
-      try{ client.functions.invoke('notify-new-message',{body:{id:row.id}}).catch(function(){}); }catch(_){}
+      try{ client.functions.invoke('message-notify',{body:{event:'new',id:row.id}}).catch(function(){}); }catch(_){}
 
       done(row && row.ref, signedIn);
     }catch(err){
@@ -1366,13 +1367,39 @@ export function initShopMain() {
   // full string for back-office cross-reference.
   function stripMonth(name){ return String(name||'').replace(/\s+—\s+.*$/, '').trim(); }
 
+  // Customer-facing status label — the admin side carries a longer
+  // vocabulary ("Pending Payment", "Ready for Collection", …) that
+  // reflects the full order lifecycle; the storefront collapses that
+  // down to one of six short words so the customer sees a chip they
+  // can scan in a second. Keep in sync with pBadge() below.
+  function pStatusLabel(s){
+    return {
+      'Pending Payment':'UNPAID',
+      'Partially Paid':'UNPAID',
+      'Paid':'PAID',
+      'Ready for Collection':'READY',
+      'Ready-to-Collect':'READY',
+      'Completed':'COMPLETED',
+      'Order Completed':'COMPLETED',
+      'Cancelled':'CANCELLED',
+      'Refunded':'REFUNDED'
+    }[s] || String(s||'').toUpperCase();
+  }
   function pBadge(s){return{
-    'Paid':'p-badge-green','Order Confirmed':'p-badge-green',
+    // UNPAID → yellow (Pending Payment, Partially Paid)
     'Pending Payment':'p-badge-amber',
-    'Ready for Collection':'p-badge-teal','Ready-to-Collect':'p-badge-teal',
+    'Partially Paid':'p-badge-amber',
+    // PAID → blue, REFUNDED → blue (both "money settled" states)
+    'Paid':'p-badge-blue','Order Confirmed':'p-badge-blue',
+    'Refunded':'p-badge-blue',
+    // READY → orange
+    'Ready for Collection':'p-badge-orange','Ready-to-Collect':'p-badge-orange',
+    // Legacy admin label kept so a mid-pack order doesn't fall through
     'Collecting':'p-badge-orange',
-    'Completed':'p-badge-grey','Order Completed':'p-badge-grey',
-    'Cancelled':'p-badge-red','Refunded':'p-badge-red'
+    // COMPLETED → green
+    'Completed':'p-badge-green','Order Completed':'p-badge-green',
+    // CANCELLED → red
+    'Cancelled':'p-badge-red'
   }[s]||'p-badge-grey';}
 
   // Terminal statuses live in Order History: Completed, Cancelled, Refunded.
@@ -1520,8 +1547,19 @@ export function initShopMain() {
     try{pRenderPointsActivity();}catch(e){console.error('points activity:',e);}
     try{loadBillingFromDb().then(function(){renderBillingEntries();}).catch(function(){loadBillingFromStorage();renderBillingEntries();});}catch(e){loadBillingFromStorage();renderBillingEntries();}
 
+    // Restore the last-selected top-level section. Legacy stored
+    // values ('active' / 'history') map to the My Order section with
+    // the matching sub-tab preselected — handled inside pShowOrderView.
     var lastTab=sessionStorage.getItem('mjm_portal_tab');
-    if(lastTab){var btn=document.getElementById('ptab-'+lastTab);if(btn)pShowOrderView(lastTab,btn);}
+    if(lastTab){
+      if (lastTab === 'active' || lastTab === 'history'){
+        window._portalOrdersView = lastTab;
+        pShowOrderView('myorder', document.getElementById('ptab-myorder'));
+      } else {
+        var btn=document.getElementById('ptab-'+lastTab);
+        if(btn) pShowOrderView(lastTab,btn);
+      }
+    }
   }
 
   async function loadCustomerOrders(){
@@ -1657,15 +1695,52 @@ export function initShopMain() {
   }
 
   function pShowOrderView(view,btn){
+    // Normalise legacy callers that still pass 'active' / 'history'
+    // as the top-level view — those are now sub-tabs of "My Order".
+    var subTab = null;
+    if (view === 'active' || view === 'history'){
+      subTab = view;
+      view = 'myorder';
+    }
+    // Top-level tabs: My Order / Messages / Profile.
     document.querySelectorAll('#page-portal .portal-tab').forEach(function(b){b.classList.remove('active');});
-    if(btn)btn.classList.add('active');
-    document.getElementById('pp-orders').style.display=view==='active'?'block':'none';
-    document.getElementById('pp-history').style.display=view==='history'?'block':'none';
-    document.getElementById('pp-profile').style.display=view==='profile'?'block':'none';
-    var msgEl=document.getElementById('pp-messages'); if(msgEl) msgEl.style.display=view==='messages'?'block':'none';
-    var sw=document.getElementById('pp-search-wrap'); if(sw) sw.style.display=view==='messages'?'none':'';
-    if(view==='messages') pRenderMessages();
-    sessionStorage.setItem('mjm_portal_tab',view);
+    if (btn && btn.classList.contains('portal-tab')) btn.classList.add('active');
+    // Fallback: if a stored sub-tab mapping came in, light up the
+    // My Order top tab so the UI stays consistent.
+    if (view === 'myorder'){
+      var moBtn = document.getElementById('ptab-myorder');
+      if (moBtn) moBtn.classList.add('active');
+    }
+    var moSection = document.getElementById('pp-myorder-section');
+    if (moSection) moSection.style.display = view === 'myorder' ? 'block' : 'none';
+    document.getElementById('pp-profile').style.display = view === 'profile' ? 'block' : 'none';
+    var msgEl = document.getElementById('pp-messages'); if (msgEl) msgEl.style.display = view === 'messages' ? 'block' : 'none';
+    if (view === 'messages') pRenderMessages();
+    if (view === 'myorder'){
+      // Default to Active sub-tab on first open; or honour the one
+      // the legacy caller explicitly asked for.
+      var want = subTab || window._portalOrdersView || 'active';
+      pShowOrdersSubTab(want, document.getElementById('ptab-'+want));
+    }
+    sessionStorage.setItem('mjm_portal_tab', view);
+  }
+
+  // Switch between the Active Orders / Order History sub-tabs under
+  // My Order. Underline-tab visual via the .pp-subtab[.active] CSS
+  // class. Rerenders the shared #pp-orders panel.
+  function pShowOrdersSubTab(sub, btn){
+    if (sub !== 'active' && sub !== 'history') sub = 'active';
+    window._portalOrdersView = sub;
+    document.querySelectorAll('#page-portal .pp-subtab').forEach(function(b){
+      b.classList.remove('active');
+      b.setAttribute('aria-selected', 'false');
+    });
+    var target = btn || document.getElementById('ptab-'+sub);
+    if (target){
+      target.classList.add('active');
+      target.setAttribute('aria-selected', 'true');
+    }
+    pRenderOrders();
   }
 
   // ── MY MESSAGES ──
@@ -1715,7 +1790,7 @@ export function initShopMain() {
         return;
       }
       var badge={'New':'p-badge-amber','In Progress':'p-badge-teal','Resolved':'p-badge-green','Closed':'p-badge-grey'};
-      var label={'New':'Received','In Progress':'In Progress','Resolved':'Resolved','Closed':'Closed'};
+      var label={'New':'Received','In Progress':'In Progress','Resolved':'Solved','Closed':'Closed'};
       var fd=function(d){ return d?new Date(d).toLocaleDateString('en-MY',{day:'2-digit',month:'short',year:'numeric'}):''; };
       host.innerHTML=newBtn+rows.map(function(m){
         var who='';
@@ -1746,39 +1821,56 @@ export function initShopMain() {
     setTimeout(function(){t.style.opacity='0';t.style.transform='translateX(-50%) translateY(80px)';},3000);
   }
 
-  // Orders (active only — left side)
+  // One shared renderer for Active Orders + Order History. Reads
+  //   window._portalOrdersView   — 'active' | 'history' (default 'active')
+  //   pp-order-search            — search box
+  // Rules:
+  //   • Search text present → render BOTH active + history that match
+  //     (so the user doesn't have to click the "other" tab to find
+  //     an older match), newest first.
+  //   • Search empty → render only the active tab's set.
+  // Writes into #pp-orders; #pp-history is a hidden placeholder now.
   function pRenderOrders(){
     // Final safety net: if the input still contains autofilled noise (the user's
     // email, or whitespace from a paste), treat it as no filter at all. Browser
     // autofill into a "search by order #" box is virtually always wrong.
     var q=(document.getElementById('pp-order-search').value||'').trim().toLowerCase();
     if(q.indexOf('@')>=0) q='';
-    var recent=P_ORDERS.filter(function(o){return !pIsOrderDone(o);});
-    if(q)recent=recent.filter(function(o){return pOrderMatchSearch(o,q);});
-    var html='';
-    if(recent.length){recent.forEach(function(o){html+=pOrderCard(o);});}
-    else if(q){html='<div class="p-card" style="text-align:center;padding:1.5rem;font-size:13px;color:var(--text-light);">No matching orders found.</div>';}
-    else{html='<div class="p-card" style="text-align:center;padding:2.5rem 1.5rem;"><div style="font-size:2rem;margin-bottom:.6rem;">📦</div><div style="font-family:\'Cormorant Garamond\',serif;font-size:1.1rem;color:var(--text-dark);margin-bottom:.4rem;">No Active Orders</div><div style="font-size:12px;color:var(--text-light);line-height:1.5;">You don\'t have any active orders at the moment.<br>Browse our shop to place your first order.</div><button onclick="showPage(\'home\')" class="p-btn" style="margin-top:1rem;">Browse Shop</button></div>';}
-    document.getElementById('pp-orders').innerHTML=html;
+    var view = window._portalOrdersView || 'active';
+
+    var list;
+    if (q){
+      // Combined search across both sets, newest first.
+      list = P_ORDERS.slice().filter(function(o){ return pOrderMatchSearch(o,q); });
+      list.sort(function(a,b){
+        var ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        var tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return tb - ta;
+      });
+    } else if (view === 'history'){
+      list = P_ORDERS.filter(pIsOrderDone);
+    } else {
+      list = P_ORDERS.filter(function(o){ return !pIsOrderDone(o); });
+    }
+
+    var html = '';
+    if (list.length){
+      list.forEach(function(o){ html += pOrderCard(o); });
+    } else if (q){
+      html = '<div class="p-card" style="text-align:center;padding:1.5rem;font-size:13px;color:var(--text-light);">No matching orders found.</div>';
+    } else if (view === 'history'){
+      html = '<div class="p-card" style="text-align:center;padding:2.5rem 1.5rem;"><div style="font-size:2rem;margin-bottom:.6rem;">📋</div><div style="font-family:\'Cormorant Garamond\',serif;font-size:1.1rem;color:var(--text-dark);margin-bottom:.4rem;">No Order History</div><div style="font-size:12px;color:var(--text-light);line-height:1.5;">Your completed orders will appear here.</div></div>';
+    } else {
+      html = '<div class="p-card" style="text-align:center;padding:2.5rem 1.5rem;"><div style="font-size:2rem;margin-bottom:.6rem;">📦</div><div style="font-family:\'Cormorant Garamond\',serif;font-size:1.1rem;color:var(--text-dark);margin-bottom:.4rem;">No Active Orders</div><div style="font-size:12px;color:var(--text-light);line-height:1.5;">You don\'t have any active orders at the moment.<br>Browse our shop to place your first order.</div><button onclick="showPage(\'home\')" class="p-btn" style="margin-top:1rem;">Browse Shop</button></div>';
+    }
+    document.getElementById('pp-orders').innerHTML = html;
     pStartEInvoiceCountdowns();
   }
 
-  // History (left side — separate panel)
-  function pRenderHistory(){
-    // Final safety net: if the input still contains autofilled noise (the user's
-    // email, or whitespace from a paste), treat it as no filter at all. Browser
-    // autofill into a "search by order #" box is virtually always wrong.
-    var q=(document.getElementById('pp-order-search').value||'').trim().toLowerCase();
-    if(q.indexOf('@')>=0) q='';
-    var hist=P_ORDERS.filter(pIsOrderDone);
-    if(q)hist=hist.filter(function(o){return pOrderMatchSearch(o,q);});
-    var html='';
-    if(hist.length){hist.forEach(function(o){html+=pOrderCard(o);});}
-    else if(q){html='<div class="p-card" style="text-align:center;padding:1.5rem;font-size:13px;color:var(--text-light);">No matching orders found.</div>';}
-    else{html='<div class="p-card" style="text-align:center;padding:2.5rem 1.5rem;"><div style="font-size:2rem;margin-bottom:.6rem;">📋</div><div style="font-family:\'Cormorant Garamond\',serif;font-size:1.1rem;color:var(--text-dark);margin-bottom:.4rem;">No Order History</div><div style="font-size:12px;color:var(--text-light);line-height:1.5;">Your completed orders will appear here.</div></div>';}
-    document.getElementById('pp-history').innerHTML=html;
-    pStartEInvoiceCountdowns();
-  }
+  // Legacy entry point — Active + History share one renderer now, so
+  // this is just an alias that redraws the current panel. Kept so any
+  // place that calls pRenderHistory() still works.
+  function pRenderHistory(){ pRenderOrders(); }
 
   function pOrderMatchSearch(o,q){
     return o.id.toLowerCase().includes(q)||
@@ -1790,24 +1882,24 @@ export function initShopMain() {
 
   function pFilterOrders(){
     pRenderOrders();
-    pRenderHistory();
   }
 
   function pOrderCard(o){
     var isComp=o.status==='Completed' || o.status==='Order Completed';
     var isPending=o.status==='Pending Payment';
 
-    // Items list — handle multiple items
+    // Items list — handle multiple items. Each row is now a single
+    // right-aligned line "Item name × qty", per spec. Long product
+    // names clip with ellipsis so the row stays on one line.
     var itemsHtml='';
     if(o.items&&o.items.length){
       o.items.forEach(function(it){
-        itemsHtml+='<div style="display:flex;justify-content:space-between;align-items:center;padding:.25rem 0;font-size:12px;border-bottom:1px solid #f5f5f0;">'+
-          '<span style="color:var(--text-dark);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(stripMonth(it.product_name))+'</span>'+
-          '<span style="color:var(--text-mid);white-space:nowrap;margin-left:.5rem;">x '+it.quantity.toLocaleString()+'</span>'+
+        itemsHtml+='<div style="padding:.25rem 0;font-size:12px;border-bottom:1px solid #f5f5f0;text-align:right;color:var(--text-dark);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+
+          esc(stripMonth(it.product_name))+'<span style="color:var(--text-mid);margin-left:.4rem;">× '+it.quantity.toLocaleString()+'</span>'+
         '</div>';
       });
     } else {
-      itemsHtml='<div style="font-size:12px;color:var(--text-mid);">'+esc(o.variety)+'</div>';
+      itemsHtml='<div style="font-size:12px;color:var(--text-mid);text-align:right;">'+esc(o.variety)+'</div>';
     }
 
     // Action button — fullId / id are UUIDs but escape defensively for the JS
@@ -1816,20 +1908,42 @@ export function initShopMain() {
     var idJs     = String(o.id     || '').replace(/[\\'"<>]/g, '');
     var actionHtml='';
     if(isPending){
-      actionHtml='<button class="p-btn" style="background:var(--gold);color:var(--green-dark);font-size:11px;padding:.4rem .8rem;" onclick="event.stopPropagation();goPayOrder(\''+fullIdJs+'\','+o.total+')">Pay Now / Upload Payment</button>';
+      actionHtml='<button class="p-btn" style="background:var(--gold);color:var(--green-dark);font-size:11px;padding:.4rem .8rem;display:inline-flex;align-items:center;gap:.4rem;font-weight:700;letter-spacing:.06em;" onclick="event.stopPropagation();goPayOrder(\''+fullIdJs+'\','+o.total+')">'+
+        /* Credit-card glyph — a universal "pay" marker. Inherits
+           currentColor so it tracks the button's green-dark text. */
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;">'+
+          '<rect x="2" y="5" width="20" height="14" rx="2.5"/>'+
+          '<line x1="2" y1="10" x2="22" y2="10"/>'+
+          '<line x1="6" y1="15" x2="10" y2="15"/>'+
+        '</svg>'+
+        'PAY NOW'+
+      '</button>';
     } else if(isComp){
       actionHtml=pRatings[o.id]?'<span style="font-size:11px;color:var(--gold);">'+('⭐'.repeat(pRatings[o.id]))+' Reviewed</span>':'<button class="p-btn" onclick="event.stopPropagation();pOpenRating(\''+idJs+'\')">⭐ Review</button>';
     }
 
-    return '<div class="p-order" style="cursor:pointer;" onclick="openOrderDetail(\''+idJs+'\')">'+
+    // The card itself is no longer clickable — only the explicit
+    // "See Details" link opens the order modal. Removes the
+    // accidental-tap problem where any drag or text-select on the card
+    // dropped the customer into the modal.
+    //
+    // Layout: a top strip with the STATUS badge (left) and "See Details"
+    // link (right, borderless, right-aligned per spec); below it the
+    // order number + ordered date on their own row. The Collection
+    // line is intentionally dropped — collection state belongs in the
+    // detail modal, not on the summary card.
+    return '<div class="p-order">'+
+      '<div class="p-order-status-strip">'+
+        '<span class="p-badge '+pBadge(o.status)+'">'+esc(pStatusLabel(o.status))+'</span>'+
+        '<button type="button" class="p-see-details" onclick="openOrderDetail(\''+idJs+'\')">See Details ›</button>'+
+      '</div>'+
       '<div class="p-order-head">'+
-        '<div><div class="p-order-id">#'+esc(o.id)+'</div><div class="p-order-date">Ordered '+esc(o.orderDate)+'</div></div>'+
-        '<span class="p-badge '+pBadge(o.status)+'">'+esc(o.status)+'</span>'+
+        '<div class="p-order-id" title="Click to copy or highlight the order number">#'+esc(o.id)+'</div>'+
+        '<div class="p-order-date">Ordered '+esc(o.orderDate)+'</div>'+
       '</div>'+
       '<div class="p-order-body">'+
-        '<div class="p-order-row"><span class="p-order-row-l">Bill To</span><span class="p-order-row-v">'+esc(o.billingName)+'</span></div>'+
-        '<div style="padding:.4rem 0;"><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.3rem;">Items</div>'+itemsHtml+'</div>'+
-        '<div class="p-order-row"><span class="p-order-row-l">Collection</span><span class="p-order-row-v">'+esc(o.collectionStatus)+'</span></div>'+
+        '<div style="padding:.4rem 0;"><div class="p-field-label">Billing Name</div><div style="font-size:12px;color:var(--text-dark);text-align:right;font-weight:600;">'+esc(o.billingName)+'</div></div>'+
+        '<div style="padding:.4rem 0;"><div class="p-field-label">Items</div>'+itemsHtml+'</div>'+
       '</div>'+
       // DOs section
       (o.dos&&o.dos.length?
@@ -2004,7 +2118,7 @@ export function initShopMain() {
   // [{start,end,qty}]). Older DOs and DOs with no seals carry none, and
   // then nothing is drawn.
   function _doSealsLine(d,style){
-    var rs=Array.isArray(d&&d.seal_ranges)?d.seal_ranges:[];
+    var rs=SHOW_SEALS_ON_DO&&Array.isArray(d&&d.seal_ranges)?d.seal_ranges:[];
     if(!rs.length)return'';
     return '<div style="font-size:11px;color:var(--text-mid);'+(style||'')+'">Seals: <strong style="font-variant-numeric:tabular-nums;">'+esc(formatSealRanges(rs))+'</strong>'+(d.seal_qty?' ('+(parseInt(d.seal_qty)||0).toLocaleString()+')':'')+'</div>';
   }
@@ -2592,11 +2706,10 @@ export function initShopMain() {
     if(!url){return;}
     document.getElementById('p-file-viewer-title').textContent = name || 'File';
     var dl = document.getElementById('p-file-viewer-dl');
-    dl.href = url;
-    // download attribute is only honoured for same-origin URLs but it
-    // doesn't hurt to set it — the link still works as a plain new-tab
-    // fallback for cross-origin storage URLs.
-    dl.setAttribute('download', name || '');
+    // Store the target on the button so pDownloadFile can read it
+    // without rebinding onclick every time.
+    dl.setAttribute('data-url', url);
+    dl.setAttribute('data-name', name || '');
     var body = document.getElementById('p-file-viewer-body');
     var lowerName = String(name||'').toLowerCase();
     var lowerType = String(type||'').toLowerCase();
@@ -2628,6 +2741,44 @@ export function initShopMain() {
     document.getElementById('p-file-viewer-body').innerHTML = '';
   }
 
+  // Force a true download, not a new tab. Supabase storage URLs are
+  // cross-origin, so <a download> is ignored by the browser (the file
+  // just opens in a new tab). Fetch as a blob and trigger the save
+  // via Object URL — works for images, PDFs, docs, anything.
+  async function pDownloadFile(){
+    var btn = document.getElementById('p-file-viewer-dl');
+    if (!btn) return;
+    var url  = btn.getAttribute('data-url') || '';
+    var name = btn.getAttribute('data-name') || 'download';
+    if (!url) return;
+    var orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Preparing…';
+    try {
+      var res = await fetch(url, { credentials: 'omit' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var blob = await res.blob();
+      var objectUrl = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Revoke after the browser has had a tick to kick the save off.
+      setTimeout(function(){ try { URL.revokeObjectURL(objectUrl); } catch(_){} }, 1500);
+    } catch (e) {
+      // Fallback: cross-origin fetch may be blocked (e.g. signed URL
+      // expired, CORS misconfig). Open in a new tab as a last resort
+      // so the file is still reachable.
+      try { window.open(url, '_blank', 'noopener'); } catch(_){}
+      showPortalToast('Download failed — opened in a new tab instead.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
+  }
+
   function openOrderDetail(ordNum){
     var o=P_ORDERS.find(function(x){return x.id===ordNum;});
     if(!o)return;
@@ -2643,7 +2794,7 @@ export function initShopMain() {
                 : dlKind==='receipt'  ? '🧾 Receipt'
                 : '📄 Download Order';
     h+='<div style="background:var(--cream);border-radius:12px;padding:1rem;margin-bottom:.8rem;">';
-    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;"><span style="font-family:\'Cormorant Garamond\',serif;font-size:1.1rem;font-weight:600;">Order #'+o.id+'</span><span class="p-badge '+pBadge(o.status)+'" style="font-size:11px;">'+o.status+'</span></div>';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;"><span style="font-family:\'DM Sans\',sans-serif;font-size:1.1rem;font-weight:700;letter-spacing:.02em;color:var(--text-dark);">Order #'+o.id+'</span><span class="p-badge '+pBadge(o.status)+'" style="font-size:11px;">'+pStatusLabel(o.status)+'</span></div>';
     h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;">';
     h+='<div style="font-size:12px;color:var(--text-mid);">'+o.orderDate+'</div>';
     h+='<button onclick="downloadOrder(\''+idJsDl+'\')" style="background:#fff;border:1.5px solid var(--green-pale);color:var(--green-dark);padding:.35rem .75rem;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:.3rem;transition:all .15s;" onmouseover="this.style.background=\'var(--green-dark)\';this.style.color=\'#fff\';this.style.borderColor=\'var(--green-dark)\';" onmouseout="this.style.background=\'#fff\';this.style.color=\'var(--green-dark)\';this.style.borderColor=\'var(--green-pale)\';">'+dlLabel+'</button>';
@@ -2916,15 +3067,18 @@ export function initShopMain() {
 
     var steps=[];
     if(stampCancelled){
-      steps.push({label:'Order Placed',note:'Order placed by customer',date:stampPlaced,done:true});
+      steps.push({label:'Order Placed',note:'',date:stampPlaced,done:true});
       steps.push({label:'Order Cancelled',note:'This order was cancelled',date:stampCancelled,done:true,isCancelled:true});
     } else {
-      steps.push({label:'Order Placed',note:'Order placed by customer',date:stampPlaced,done:true});
+      steps.push({label:'Order Placed',note:'',date:stampPlaced,done:true});
       if(!isPaidOrBeyond){
         // Not yet paid — the only next action is to complete payment.
         steps.push({label:'Awaiting Payment',note:'Complete your payment to confirm this order.',done:false});
       } else {
-        steps.push({label:'Payment Confirmed',note:o.paymentMethod||'Payment received',date:stampPaid,done:true});
+        // Dropped the "Offline / Online Payment Method" subtitle — the
+        // step label is self-explanatory and the method is already
+        // visible in the Payment row of Billing Details.
+        steps.push({label:'Payment Confirmed',note:'',date:stampPaid,done:true});
         if(stampPoints || pointsCount>0){
           var pNote = pointsCount>0 ? (pointsCount+' loyalty points credited') : 'Loyalty points credited';
           steps.push({label:'Points Issued',note:pNote,date:stampPoints,done:true});
@@ -3066,11 +3220,11 @@ export function initShopMain() {
 
     var docTitle, docNo, docDate, partyHeading, totalLabel, winTitle;
     if(kind==='proforma'){
-      docTitle='PROFORMA INVOICE';  docNo='PI No: MJMPI/#'+esc(o.id);
+      docTitle='PROFORMA INVOICE';  docNo='Proforma Invoice Number: MJMPI/'+esc(o.id);
       docDate=fmtDate(o.createdAt); partyHeading='BILLING DETAILS';
       totalLabel='Total';           winTitle='Proforma Invoice MJMPI-'+o.id;
     } else if(kind==='receipt'){
-      docTitle='RECEIPT';           docNo='Receipt No: MJMRC/#'+esc(o.id);
+      docTitle='RECEIPT';           docNo='Receipt No: MJMRC/'+esc(o.id);
       docDate=fmtDate(o.amountPaidAt||o.createdAt); partyHeading='RECEIVED FROM';
       totalLabel='Amount Paid';     winTitle='Receipt MJMRC-'+o.id;
     } else {
@@ -3165,13 +3319,23 @@ export function initShopMain() {
 
     var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+esc(winTitle)+'</title>'+
       '<style>'+
-        'body{font-family:Georgia,"Times New Roman",serif;color:#1A2E1B;max-width:700px;margin:26px auto;padding:0 24px;line-height:1.45;}'+
+        'html,body{height:100%;}'+
+        /* Flex column with min-height = viewport so the disclaimer can
+           anchor to the very bottom of the page via margin-top:auto on
+           its parent. Keeps the layout centred and tidy for short
+           documents without pushing content down for long ones. */
+        'body{font-family:Arial,Helvetica,sans-serif;color:#1A2E1B;max-width:700px;margin:26px auto;padding:0 24px;line-height:1.45;min-height:calc(100vh - 52px);display:flex;flex-direction:column;box-sizing:border-box;}'+
         '.co-name{font-size:20px;font-weight:700;}'+
         '.co-reg{font-size:12px;font-weight:700;margin:1px 0 4px;}'+
         '.co-line{font-size:10.5px;color:#444;}'+
-        '.doc-title{font-family:Georgia,serif;font-size:23px;font-weight:700;color:#38684A;letter-spacing:.5px;}'+
+        '.doc-title{font-family:Arial,Helvetica,sans-serif;font-size:23px;font-weight:700;color:#38684A;letter-spacing:.5px;}'+
         '.doc-meta{font-size:12px;font-weight:600;margin-top:3px;}'+
         '.sect{font-size:11.5px;font-weight:700;color:#38684A;letter-spacing:.05em;margin:28px 0 4px;}'+
+        /* Extra air between the party block (BILLING DETAILS /
+           RECEIVED FROM) and the ITEMS table, per spec. First .sect
+           keeps its default top margin; the "items-sect" variant adds
+           the breathing room only where it's actually wanted. */
+        '.items-sect{margin-top:56px;}'+
         '.prow{display:flex;justify-content:space-between;gap:16px;padding:7px 2px;border-bottom:1px solid #DDD;font-size:13px;}'+
         '.plbl{color:#555;white-space:nowrap;}'+
         '.pval{font-weight:700;text-align:right;}'+
@@ -3190,8 +3354,11 @@ export function initShopMain() {
         '.paybox-b{font-size:12.5px;color:#38684A;line-height:1.7;}'+
         '.paybox-b strong{color:#1A2E1B;}'+
         '.paybox-ref{margin-top:10px;padding-top:10px;border-top:1px dashed #38684A;color:#1A2E1B;font-size:12px;}'+
-        '.foot{margin-top:44px;text-align:center;font-size:11px;font-style:italic;color:#666;}'+
-        '@media print{body{margin:0;padding:0 18px;}.no-print{display:none !important;}}'+
+        /* margin-top:auto pushes the disclaimer to the bottom of the
+           flex body; padding keeps a visible gap from the content
+           above when the page is actually full. */
+        '.foot{margin-top:auto;padding-top:44px;text-align:center;font-size:11px;font-style:italic;color:#666;}'+
+        '@media print{body{margin:0;padding:0 18px;min-height:calc(100vh - 0px);}.no-print{display:none !important;}}'+
       '</style></head><body>'+
 
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;">'+
@@ -3213,7 +3380,7 @@ export function initShopMain() {
       '<div class="sect">'+partyHeading+'</div>'+
       party +
 
-      '<div class="sect">ITEMS</div>'+
+      '<div class="sect items-sect">ITEMS</div>'+
       '<table><thead><tr><th>Product</th><th class="r">Price</th><th class="r">Qty</th><th class="r">Subtotal</th></tr></thead>'+
       '<tbody>'+itemsHtml+'</tbody></table>'+
       (totRows ? '<table class="totals"><tbody>'+totRows+'</tbody></table>' : '')+
@@ -3222,12 +3389,12 @@ export function initShopMain() {
       payBox +
 
       '<div class="foot">This document is computer generated and does not require a signature.</div>'+
-      '<div class="no-print" style="text-align:center;margin-top:24px;"><button onclick="window.print()" style="padding:10px 22px;background:#2D4A30;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">Print / Save as PDF</button></div>'+
+      '<div class="no-print" style="text-align:center;margin-top:24px;"><button onclick="window.print()" style="padding:10px 22px;background:#2D4A30;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">Save &amp; Print</button></div>'+
       '</body></html>';
 
     // Opens in a new tab (no window-features string) and does NOT auto-print
     // — the customer reads the document first and uses the on-page
-    // "Print / Save as PDF" button when they actually want a copy.
+    // "Save & Print" button when they actually want a copy.
     var w = window.open('','_blank');
     if(!w){ showPortalToast('Please allow pop-ups to download the document'); return; }
     w.document.open();
@@ -3473,7 +3640,19 @@ export function initShopMain() {
       var sign = r.change>=0 ? '+' : '−';
       var amt  = Math.abs(r.change).toLocaleString();
       var color = r.change>=0 ? 'var(--green-mid)' : '#b45309';
-      var typeLabel = r.type==='Earned' ? '⭐ Earned' : (r.type==='Redeemed' ? '🎁 Redeemed' : '✏️ Adjusted');
+      // Inline SVG sprout for Earned rows (replaces the ⭐ emoji) —
+      // same conceptual language as the rest of the brand. Strokes
+      // use currentColor so a span wrapper lets us set it to the
+      // brand green and keep the row's amount colour independent.
+      var seedlingSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;flex:none;">'+
+        '<path d="M7 20h10"/>'+
+        '<path d="M10 20c5.5-2.5.8-6.4 3-10"/>'+
+        '<path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"/>'+
+        '<path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"/>'+
+      '</svg>';
+      var typeLabel = r.type==='Earned'
+        ? '<span style="color:var(--green-mid);display:inline-flex;align-items:center;gap:.35rem;">'+seedlingSvg+'Earned</span>'
+        : (r.type==='Redeemed' ? '🎁 Redeemed' : '✏️ Adjusted');
       var orderRef = r.order_id && orderMap[r.order_id] ? '<div style="font-size:10px;color:var(--text-light);">Order '+orderMap[r.order_id]+'</div>' : '';
       return '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:.5rem 0;border-bottom:1px solid #e8ede8;font-size:12px;">'+
           '<div><div style="font-weight:600;color:var(--text-dark);">'+typeLabel+'</div>'+orderRef+
@@ -3523,6 +3702,7 @@ export function initShopMain() {
   //  CHECKOUT LOGIN (inline)
   // ═══════════════════════════════════════
   var clIsSignUp = false;
+  var clOtpIsSignup = false;      // the code box is asking for a signup confirmation code
   var clInputType = 'phone';        // 'phone' or 'email' — driven by active tab
   var clLoginContext = 'nav';       // 'nav' or 'checkout'
   var clOtpChannel = 'whatsapp';    // phone codes go by WhatsApp (send-whatsapp-otp)
@@ -3555,7 +3735,12 @@ export function initShopMain() {
     });
     // Default to phone tab
     clSwitchMode('email');
-    // Update subtitle
+    // Update hero copy. Title resets to "Welcome" since openLoginModal
+    // always lands on the sign-in view; sign-up has its own copy
+    // ("Hello" / "Don't have an account? Sign up now!") applied by
+    // clToggleSignup when the customer flips modes.
+    var titleEl = document.getElementById('lm-title');
+    if (titleEl) titleEl.textContent = 'Welcome';
     var subEl = document.getElementById('lm-sub');
     if (subEl) subEl.textContent = context === 'checkout'
       ? 'Sign in to complete your order'
@@ -3576,6 +3761,7 @@ export function initShopMain() {
     try {
       var pend = JSON.parse(sessionStorage.getItem('mjm_pending_otp') || 'null');
       if (pend && pend.identity && (Date.now() - pend.ts) < 3600000) {
+        clOtpIsSignup = !!pend.signup;
         clSwitchMode(pend.isPhone ? 'phone' : 'email');
         var idEl = document.getElementById(pend.isPhone ? 'cl-phone' : 'cl-identity');
         if (idEl) idEl.value = pend.identity;
@@ -3634,6 +3820,18 @@ export function initShopMain() {
       document.getElementById('cl-btn-login').textContent = clIsSignUp ? 'Create Account' : 'Sign In';
       document.getElementById('cl-btn-toggle').textContent = clIsSignUp ? 'Back to Sign In' : 'Create Account';
     }
+    // Flip the hero copy so the two modes read differently at a glance:
+    //   Sign In     → "Welcome" / "Sign in to your account" (or the
+    //                  checkout-flavoured subtitle if we're mid-checkout)
+    //   Create Acc. → "Hello"   / "Don't have an account? Sign up now!"
+    var titleEl = document.getElementById('lm-title');
+    var subEl   = document.getElementById('lm-sub');
+    if (titleEl) titleEl.textContent = clIsSignUp ? 'Hello' : 'Welcome';
+    if (subEl) {
+      subEl.textContent = clIsSignUp
+        ? "Don't have an account? Sign up now!"
+        : (clLoginContext === 'checkout' ? 'Sign in to complete your order' : 'Sign in to your account');
+    }
   }
 
   function clShowStatus(msg, type) { var el = document.getElementById('cl-status'); el.textContent = msg; el.className = 'cl-status ' + type; }
@@ -3689,28 +3887,45 @@ export function initShopMain() {
       if (!name) { clShowStatus('Please enter your full name.', 'error'); return; }
       if (pw.length < 6) { clShowStatus('Password must be at least 6 characters.', 'error'); return; }
       clShowStatus('Creating account...', 'success');
-      var { data: signUpData, error } = await _sb.auth.signUp({ email: identity, password: pw, options: { data: { full_name: name, user_type: 'customer' } } });
-      if (error) {
-        if (error.message.toLowerCase().includes('database')) {
-          var { data: retryData, error: retryErr } = await _sb.auth.signUp({ email: identity, password: pw, options: { data: { full_name: name, user_type: 'customer' } } });
-          if (retryErr) { clShowStatus(retryErr.message, 'error'); return; }
-          if (retryData && retryData.user) {
-            await _sb.from('shared_profiles').upsert({ id: retryData.user.id, email: identity, full_name: name, role: 'customer', user_type: 'customer' }, { onConflict: 'id' });
-          }
-        } else {
-          clShowStatus(error.message, 'error'); return;
-        }
-      } else if (signUpData && signUpData.user) {
-        await _sb.from('shared_profiles').upsert({ id: signUpData.user.id, email: identity, full_name: name, role: 'customer', user_type: 'customer' }, { onConflict: 'id' });
+      // Confirm email is ON for the project, so this makes the account and
+      // emails a code. The account is a customer from the first moment: the
+      // signup trigger reads user_type from this metadata.
+      var { data: signUpData, error } = await _sb.auth.signUp({ email: identity, password: pw, options: {
+        data: { full_name: name, user_type: 'customer' },
+        emailRedirectTo: window.location.origin + '/auth.html'
+      } });
+      if (error) { clShowStatus(error.message, 'error'); return; }
+      // An address that already has a confirmed account comes back with no
+      // identities and no email is sent. Say so rather than wait for a code.
+      if (signUpData && signUpData.user && Array.isArray(signUpData.user.identities) && signUpData.user.identities.length === 0) {
+        clShowStatus('This email already has an account. Please sign in, or use Forgot password.', 'error');
+        return;
       }
-      clShowStatus('Account created! You can now sign in.', 'success');
-      clToggleSignup('email');
+      if (signUpData && signUpData.session) { await clPostLogin(signUpData.session); return; }
+      clAwaitSignupCode(identity);
       return;
     }
     clShowStatus('Signing in...', 'success');
     var { data, error } = await _sb.auth.signInWithPassword({ email: identity, password: pw });
     if (error) { clShowStatus(error.message, 'error'); return; }
     await clPostLogin(data.session);
+  }
+
+  // After an email signup: the same code box the email-code login uses,
+  // asking for the code from the confirmation email. clVerifyOTP checks it
+  // as a signup code, which confirms the address and signs them in.
+  function clAwaitSignupCode(identity) {
+    clOtpIsSignup = true;
+    var row = document.getElementById('cl-otp-row');
+    if (row) row.classList.add('show');
+    var code = document.getElementById('cl-otp-code');
+    if (code) { code.value = ''; setTimeout(function(){ code.focus(); }, 50); }
+    clShowStatus('Almost done. We emailed a code to ' + identity + ' — enter it below to confirm your email. (You can also click the link in that email.)', 'success');
+    try {
+      sessionStorage.setItem('mjm_pending_otp', JSON.stringify({
+        identity: identity, channel: 'email', isPhone: false, signup: true, ts: Date.now()
+      }));
+    } catch (e) {}
   }
 
   // Send OTP via SMS, WhatsApp, or Email.
@@ -3758,21 +3973,19 @@ export function initShopMain() {
     var origLabel = clickedBtn ? clickedBtn.textContent : '';
     if (clickedBtn) clickedBtn.textContent = 'Sending...';
 
-    // user_type:'customer' goes on EVERY code request, not only Sign Up.
-    // A code sent from the Sign In tab to an address with no login creates
-    // one, and without the tag the office trigger (handle_new_user) files
-    // it as user_type='system' -- staff -- so the customer could order but
-    // never appeared in the admin Customer List. Supabase only applies this
-    // metadata when it CREATES a login, so an existing account, staff or
-    // customer, is never changed by it.
+    var opts;
+    // The metadata is read only when the code CREATES the account, and then
+    // it makes the account a customer. Without it a first-time code login
+    // was filed as a system account: hidden from the customer list, and
+    // counted as staff by the AI system database.
     var meta = { user_type: 'customer' };
     if (clIsSignUp && signupName) meta.full_name = signupName;
-    var opts;
     if (isPhone) {
       opts = { phone: identity, options: { channel: channel, data: meta } };
     } else {
       opts = { email: identity, options: { data: meta } };
     }
+    clOtpIsSignup = false;
 
     var { error } = await _sb.auth.signInWithOtp(opts);
     if (error) {
@@ -3827,21 +4040,28 @@ export function initShopMain() {
     // For Supabase verifyOtp, the type is 'sms' for both SMS and WhatsApp channels.
     var opts = isPhone
       ? { phone: identity, token: otp, type: 'sms' }
-      : { email: identity, token: otp, type: 'email' };
+      : { email: identity, token: otp, type: clOtpIsSignup ? 'signup' : 'email' };
     var { data, error } = await _sb.auth.verifyOtp(opts);
+    if (error && !isPhone && clOtpIsSignup) {
+      // Newer Supabase accepts a signup code under the plain email type too.
+      var retry = await _sb.auth.verifyOtp({ email: identity, token: otp, type: 'email' });
+      if (!retry.error) { data = retry.data; error = null; }
+    }
     if (error) { clShowStatus(error.message, 'error'); return; }
+    clOtpIsSignup = false;
     // Code consumed — forget the pending-OTP marker.
     try { sessionStorage.removeItem('mjm_pending_otp'); } catch (e) {}
     // For first-time phone signups, ensure profile row exists with full_name
     if (isPhone && data && data.user) {
       var fullName = data.user.user_metadata?.full_name || '';
       var phoneVal = data.user.phone || identity;
+      // Name and phone only. Whether this is a customer was decided when the
+      // account was made, and a staff member signing in to the shop by phone
+      // must not be turned into one.
       await _sb.from('shared_profiles').upsert({
         id: data.user.id,
         phone: phoneVal,
-        full_name: fullName || phoneVal,
-        role: 'customer',
-        user_type: 'customer'
+        full_name: fullName || phoneVal
       }, { onConflict: 'id' });
     }
     await clPostLogin(data.session);
@@ -3902,10 +4122,15 @@ export function initShopMain() {
   }
   function setLoggedOutUi(){
     var set = function(id, disp){ var el = document.getElementById(id); if (!el) return; el.style.display = disp; };
-    set('nav-login-link', 'inline');
+    // Login links are rendered as inline-flex so the icon + label stay
+    // on one row with the right gap — bringing them back as plain
+    // 'inline' here collapsed the layout and the SVG icon rendered
+    // double-wide, so re-show them with the same flex display they had
+    // at mount time.
+    set('nav-login-link', 'inline-flex');
     set('nav-myaccount',  'none');
     set('nav-signout',    'none');
-    set('mob-login-link', 'inline');
+    set('mob-login-link', 'inline-flex');
     set('mob-myaccount',  'none');
     set('mob-signout',    'none');
   }
@@ -4064,11 +4289,11 @@ export function initShopMain() {
       var typeLabel=e.type==='personal'?'Personal':'Company';
       var details='';
       if(e.type==='personal'){
-        details=(e.ic?'I/C: '+e.ic:'')+(e.tin?' · TIN: '+e.tin:'')+(e.mpob?'<br>MPOB: '+e.mpob:'');
+        details=(e.ic?'I/C: '+esc(e.ic):'')+(e.tin?' · TIN: '+esc(e.tin):'')+(e.mpob?'<br>MPOB: '+esc(e.mpob):'');
       } else {
-        details=(e.reg?'Reg: '+e.reg:'')+(e.tin?' · TIN: '+e.tin:'')+(e.mpob?'<br>MPOB: '+e.mpob:'')+(e.contact?'<br>Contact: '+e.contact:'')+(e.contactPhone?' · '+e.contactPhone:'');
+        details=(e.reg?'Reg: '+esc(e.reg):'')+(e.tin?' · TIN: '+esc(e.tin):'')+(e.mpob?'<br>MPOB: '+esc(e.mpob):'')+(e.contact?'<br>Contact: '+esc(e.contact):'')+(e.contactPhone?' · '+esc(e.contactPhone):'');
       }
-      return '<div class="p-billing-card"><div style="position:absolute;top:.7rem;right:.7rem;display:flex;gap:.4rem;"><button class="p-billing-edit" onclick="editBillingEntry('+e.id+')" title="Edit">Edit</button><button class="p-billing-del" onclick="deleteBillingEntry('+e.id+')" title="Remove">✕</button></div><div class="p-billing-type">'+icon+' '+typeLabel+'</div><div class="p-billing-name">'+e.name+'</div><div class="p-billing-detail">'+details+'</div></div>';
+      return '<div class="p-billing-card"><div style="position:absolute;top:.7rem;right:.7rem;display:flex;gap:.4rem;"><button class="p-billing-edit" onclick="editBillingEntry('+e.id+')" title="Edit">Edit</button><button class="p-billing-del" onclick="deleteBillingEntry('+e.id+')" title="Remove">✕</button></div><div class="p-billing-type">'+icon+' '+typeLabel+'</div><div class="p-billing-name">'+esc(e.name)+'</div><div class="p-billing-detail">'+details+'</div></div>';
     }).join('');
   }
 
@@ -4137,12 +4362,12 @@ export function initShopMain() {
     // cart (generated cart rows + footer)
     removeCartItem, changeCartQty, setCartQty, proceedToCheckout,
     // portal (static tabs + generated order cards / detail modal)
-    pShowOrderView, pFilterOrders, saveProfileDetails, toggleCollapse,
+    pShowOrderView, pShowOrdersSubTab, pFilterOrders, saveProfileDetails, toggleCollapse,
     pRenderWaLink, pSendWaLink, pVerifyWaLink,
     showPw, hidePw,
     goPayOrder, openOrderDetail, downloadOrder, pCancelOrder,
     pOpenRating, pSetRating, pSubmitRating,
-    pViewFile, pCloseFileViewer,
+    pViewFile, pCloseFileViewer, pDownloadFile,
     pEditBooking, pCloseBookingEdit, pSaveBookingEdit,
     pBePrevMonth, pBeNextMonth, pBeSelectDate,
     pShareBookingWhatsApp, pTogglePointsActivity,

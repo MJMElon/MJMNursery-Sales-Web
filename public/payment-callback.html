@@ -171,8 +171,29 @@ async function verifyServerSide(){
   }
 }
 
+// Money arrived but the server would not call the order paid — the amount
+// was not the order total, or the order was no longer waiting. The office
+// has a note on the order; the customer must not be told to pay again.
+function renderReview(message){
+  var el=document.createElement('div');
+  el.className='msg';
+  el.textContent=message||'Your payment was received and is being checked by our team.';
+  document.getElementById('result').innerHTML=
+    '<div class="icon">🔎</div>'+
+    '<div class="title">Payment Received — Being Checked</div>';
+  document.getElementById('result').appendChild(el);
+  var a=document.createElement('a');
+  a.href='index.html'; a.className='btn btn-primary'; a.textContent='Go to My Account';
+  a.onclick=function(){ sessionStorage.setItem('mjm_last_page','portal'); return true; };
+  document.getElementById('result').appendChild(a);
+}
+
 (async function(){
   var result=await verifyServerSide();
+  if(result && result.review){
+    renderReview(result.message);
+    return;
+  }
   if(!result.paid){
     renderPending();
     return;

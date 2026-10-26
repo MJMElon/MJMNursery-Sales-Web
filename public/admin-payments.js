@@ -23,6 +23,14 @@
 
 var PAYMENTS_VIEW = 'awaiting';   // 'awaiting' | 'partial' | 'credit' | 'einvoice'
 
+// E-Invoice Pending tab lower bound. Orders placed BEFORE this date
+// are not surfaced here, so the historical backlog isn't retroactively
+// tagged when the widened rule goes live. Change this date if the
+// cutover is ever shifted. Local midnight so a Malaysian admin seeing
+// "19 Oct 2026" in their UI matches rows filtered by created_at.
+var EINV_PENDING_SINCE = '2026-10-19T00:00:00+08:00';
+var EINV_PENDING_SINCE_MS = new Date(EINV_PENDING_SINCE).getTime();
+
 function setPaymentView(view){
   PAYMENTS_VIEW = ['awaiting','partial','credit','einvoice'].indexOf(view) >= 0 ? view : 'awaiting';
   document.querySelectorAll('[data-payment-view]').forEach(function(el){
@@ -52,8 +60,23 @@ async function loadPayments(){
 
   var query = sb.from('salesweb_customer_orders').select('*').order('created_at', {ascending:false});
   if (PAYMENTS_VIEW === 'einvoice'){
-    // E-Invoice tab: customer has requested but accounts hasn't uploaded yet.
-    query = query.not('einvoice_requested_at','is',null).is('einvoice_uploaded_at', null);
+    // E-Invoice tab: every order that still owes an E-Invoice upload —
+    // customer-requested, company billing, or ≥RM10k. Excludes
+    // Cancelled/Refunded (no invoice needed) and anything already
+    // uploaded (einvoice_uploaded_at IS NULL). PostgREST OR filter
+    // syntax: comma-separated, each term is "col.op.val". The
+    // billing_type heuristic also catches legacy rows that filled in
+    // a Tax ID without a billing_type column.
+    //
+    // Cutoff: only orders placed from the EINV_PENDING_SINCE date
+    // forward are surfaced. The admin team doesn't want historical
+    // backlog retroactively tagged — the queue starts fresh from
+    // the day the widened rule went live.
+    query = query
+      .is('einvoice_uploaded_at', null)
+      .not('status','in','("Cancelled","Refunded")')
+      .gte('created_at', EINV_PENDING_SINCE)
+      .or('einvoice_requested_at.not.is.null,billing_type.eq.company,total.gte.10000');
   } else if (PAYMENTS_VIEW === 'partial'){
     // Partially Paid tab: filtered client-side after we sum
     // salesweb_order_payments per order (amount_paid is a snapshot that
@@ -146,6 +169,24 @@ async function loadPayments(){
     });
     renderCreditNoteTable(creditRows);
   } else if (PAYMENTS_VIEW === 'einvoice') {
+    // Belt-and-braces: the server-side filter already excludes
+    // Cancelled / Refunded via .not('status','in',…), but a stale
+    // PostgREST cache or a dual-write trigger timing window could in
+    // principle leak a cancelled row through. Re-filter client-side
+    // against BOTH the legacy status column and the split
+    // order_status column so a cancelled order (however it got that
+    // way) can never surface in the E-Invoice Pending queue.
+    orders = orders.filter(function(o){
+      if (!o) return false;
+      if (o.deleted_at || o.archived_at) return false;
+      var _s   = o.status || '';
+      var _ost = o.order_status || '';
+      var _pst = o.payment_status || '';
+      if (_s   === 'Cancelled' || _s   === 'Refunded') return false;
+      if (_ost === 'Cancelled' || _ost === 'Refunded') return false;
+      if (_pst === 'Refunded')                         return false;
+      return true;
+    });
     renderEInvoiceTable(orders);
   } else if (PAYMENTS_VIEW === 'partial') {
     // Sum salesweb_order_payments per order — one query, then bucket
@@ -196,18 +237,41 @@ async function renderPaymentStats(){
   // tables. Fallbacks below keep the widest set of columns that the
   // schema actually has.
   var res = await sb.from('salesweb_customer_orders')
-    .select('id,status,total,amount_paid,updated_at,deleted_at,archived_at,einvoice_requested_at,einvoice_uploaded_at,credit_note_flagged_at,credit_note_issued_at');
+    .select('id,status,order_status,payment_status,total,amount_paid,created_at,updated_at,deleted_at,archived_at,billing_type,billing_tax_id,einvoice_requested_at,einvoice_uploaded_at,credit_note_flagged_at,credit_note_issued_at');
   if (res.error && /credit_note_|does not exist/i.test(res.error.message||'')){
     res = await sb.from('salesweb_customer_orders')
-      .select('id,status,total,amount_paid,updated_at,deleted_at,archived_at,einvoice_requested_at,einvoice_uploaded_at');
+      .select('id,status,order_status,payment_status,total,amount_paid,created_at,updated_at,deleted_at,archived_at,billing_type,billing_tax_id,einvoice_requested_at,einvoice_uploaded_at');
   }
-  if (res.error && /einvoice_requested_at|does not exist/i.test(res.error.message||'')){
-    res = await sb.from('salesweb_customer_orders').select('id,status,total,amount_paid,updated_at,deleted_at,archived_at');
+  if (res.error && /order_status|payment_status|billing_type|einvoice_requested_at|does not exist/i.test(res.error.message||'')){
+    res = await sb.from('salesweb_customer_orders').select('id,status,total,amount_paid,created_at,updated_at,deleted_at,archived_at');
   }
   var all = (res.data || []).filter(function(o){ return !o.deleted_at && !o.archived_at; });
 
   var awaiting = all.filter(function(o){ return o.status==='Pending Payment'; });
-  var einvReqs = all.filter(function(o){ return o.einvoice_requested_at && !o.einvoice_uploaded_at; });
+  // Mirror the loadPayments einvoice filter — every order that still
+  // owes an E-Invoice upload, whatever the trigger, AND placed from
+  // the EINV_PENDING_SINCE cutoff onward (historical backlog isn't
+  // retroactively tagged). The "no billing_type but has a Tax ID"
+  // heuristic matches the admin modal. Also skips Cancelled /
+  // Refunded on both the legacy status column AND the split
+  // order_status / payment_status columns, so the chip count can
+  // never drift from the tab list.
+  var einvReqs = all.filter(function(o){
+    if (o.einvoice_uploaded_at) return false;
+    var _s   = o.status || '';
+    var _ost = o.order_status || '';
+    var _pst = o.payment_status || '';
+    if (_s   === 'Cancelled' || _s   === 'Refunded') return false;
+    if (_ost === 'Cancelled' || _ost === 'Refunded') return false;
+    if (_pst === 'Refunded')                         return false;
+    if (!o.created_at) return false;
+    if (new Date(o.created_at).getTime() < EINV_PENDING_SINCE_MS) return false;
+    if (o.einvoice_requested_at) return true;
+    if (o.billing_type === 'company') return true;
+    if (!o.billing_type && !!o.billing_tax_id) return true;
+    if ((Number(o.total)||0) >= 10000) return true;
+    return false;
+  });
   var paidNow  = all.filter(function(o){ return ['Paid','Ready for Collection','Completed'].indexOf(o.status) >= 0; });
 
   // Partially Paid — sum the per-order payments ledger so cases where
@@ -462,7 +526,7 @@ function renderCreditNoteTable(orders){
 function renderEInvoiceTable(orders){
   if (!orders.length){
     document.getElementById('payments-table').innerHTML =
-      '<div class="loading">No E-Invoice requests waiting.</div>';
+      '<div class="loading">No E-Invoice uploads pending.</div>';
     return;
   }
   var pageSize = 50;
@@ -470,27 +534,32 @@ function renderEInvoiceTable(orders){
   if (!window._paymentsPageEi || window._paymentsPageEi < 1) window._paymentsPageEi = 1;
   if (window._paymentsPageEi > totalPages) window._paymentsPageEi = 1;
   var pageOrders = orders.slice((window._paymentsPageEi - 1) * pageSize, window._paymentsPageEi * pageSize);
+  // Replaced "Days Left" with "Reason" — the tab is no longer limited
+  // to customer requests, so the 5-day countdown no longer applies to
+  // every row. Reason tells the admin WHY this order is in the list:
+  //   • Customer requested
+  //   • Company billing
+  //   • Order ≥ RM10k
+  // Multiple reasons are joined with " · " so the picture is complete.
   var html = '<table class="data-table"><thead><tr>'+
-    '<th>Order</th><th>Billing Name</th><th>TIN</th><th>Requested</th><th>Total</th><th>Days Left</th><th>Action</th>'+
+    '<th>Order</th><th>Billing Name</th><th>TIN</th><th>Status</th><th>Reason</th><th>Total</th><th>Action</th>'+
     '</tr></thead><tbody>';
-  var now = Date.now();
   pageOrders.forEach(function(o){
     var shortId = o.order_number || (o.id||'').substring(0,8).toUpperCase();
     var idJs    = String(o.id||'').replace(/[\\'"<>]/g,'');
-    // 5-day request window is per-customer policy; here we surface how
-    // long the accountant has left before the request is considered
-    // stale (informational — nothing enforces it server-side yet).
-    var reqTs   = o.einvoice_requested_at ? new Date(o.einvoice_requested_at).getTime() : now;
-    var msLeft  = (reqTs + 5*24*60*60*1000) - now;
-    var days    = Math.ceil(msLeft / (24*60*60*1000));
-    var daysCls = days <= 1 ? 'color:#b91c1c;font-weight:600;' : (days <= 2 ? 'color:#b45309;font-weight:600;' : 'color:var(--ink3);');
+    var reasons = [];
+    if (o.einvoice_requested_at) reasons.push('Customer requested');
+    var _isCompany = (o.billing_type === 'company') || (!o.billing_type && !!o.billing_tax_id);
+    if (_isCompany) reasons.push('Company billing');
+    if ((Number(o.total)||0) >= 10000) reasons.push('≥ RM 10k');
+    var reasonTxt = reasons.length ? reasons.join(' · ') : 'E-Invoice required';
     html += '<tr style="cursor:pointer;" onclick="openEInvoiceReview(\''+idJs+'\')">'+
       '<td><strong>'+esc(shortId)+'</strong></td>'+
       '<td>'+esc(o.billing_name||o.customer_name||'—')+'</td>'+
       '<td>'+esc(o.billing_tax_id||'—')+'</td>'+
-      '<td>'+fmtDate(o.einvoice_requested_at)+'</td>'+
+      '<td><span class="badge '+(typeof orderBadgeCls === 'function' ? orderBadgeCls(o.status) : 'badge-grey')+'" style="font-size:10px;">'+esc(o.status||'—')+'</span></td>'+
+      '<td style="color:var(--ink3);font-size:12px;">'+esc(reasonTxt)+'</td>'+
       '<td><strong>RM '+(o.total||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2})+'</strong></td>'+
-      '<td style="'+daysCls+'">'+(days>0?(days+' day'+(days===1?'':'s')):'expired')+'</td>'+
       '<td>'+
         '<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();openEInvoiceReview(\''+idJs+'\')">Open</button> '+
         '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();uploadEInvoiceFromPayments(\''+idJs+'\')">📤 Upload E-Invoice</button>'+
@@ -515,14 +584,38 @@ async function openPaymentDetail(orderId){
   body.innerHTML = '<div class="loading">Loading…</div>';
   body.setAttribute('data-order-id', orderId);
 
-  var [{data: order}, {data: items}, {data: attachments}, {data: timeline}, {data: bills}, {data: payments}] = await Promise.all([
+  // Credit bills + the per-order payment ledger are gated by RLS that
+  // admin profiles don't always satisfy directly, so direct SELECTs can
+  // come back empty even though the rows exist. admin-orders.js already
+  // routes through the SECURITY DEFINER RPCs list_credit_bills /
+  // list_order_payments for that reason — do the same here so Payment
+  // Review and Order View always see the same bill-paid state and the
+  // same per-bill payment entries. Fall back to direct SELECT for
+  // Supabase instances that haven't run order_read_rpcs.sql yet.
+  var [{data: order}, {data: items}, {data: attachments}, {data: timeline}] = await Promise.all([
     sb.from('salesweb_customer_orders').select('*').eq('id', orderId).single(),
     sb.from('salesweb_order_items').select('*').eq('order_id', orderId),
     sb.from('salesweb_order_attachments').select('*').eq('order_id', orderId).order('created_at', {ascending: false}),
-    sb.from('salesweb_order_timeline').select('*').eq('order_id', orderId).order('created_at', {ascending: false}),
-    sb.from('salesweb_credit_bills').select('*').eq('order_id', orderId).order('bill_date', {ascending: true}),
-    sb.from('salesweb_order_payments').select('*').eq('order_id', orderId)
+    sb.from('salesweb_order_timeline').select('*').eq('order_id', orderId).order('created_at', {ascending: false})
   ]);
+
+  var bills = [];
+  var rpcBills = await sb.rpc('list_credit_bills', { p_order_id: orderId });
+  if (!rpcBills.error) {
+    bills = rpcBills.data || [];
+  } else {
+    var r = await sb.from('salesweb_credit_bills').select('*').eq('order_id', orderId).order('bill_date', {ascending: true});
+    bills = r.data || [];
+  }
+
+  var payments = [];
+  var rpcPays = await sb.rpc('list_order_payments', { p_order_id: orderId });
+  if (!rpcPays.error) {
+    payments = rpcPays.data || [];
+  } else {
+    var r2 = await sb.from('salesweb_order_payments').select('*').eq('order_id', orderId);
+    payments = r2.data || [];
+  }
 
   if (!order){ body.innerHTML = '<div class="loading">Order not found.</div>'; return; }
 
@@ -650,10 +743,10 @@ function renderPaymentReview(order, items, attachments, timeline, bills, payment
           var attCell = '<span style="color:var(--ink4);">—</span>';
           var rowClick = '', rowStyle = 'background:#fafafa;';
           if (hasAtt){
-            var u = String(p.attachment_url).replace(/'/g,'%27');
-            var n = String(p.attachment_name||'document').replace(/'/g,'\\\'');
+            var u = jsArg(safeUrl(p.attachment_url));
+            var n = jsArg(p.attachment_name||'document');
             attCell = '<span style="color:var(--green);">📎 '+esc(p.attachment_name||'document')+'</span>';
-            rowClick = ' onclick="openAttachmentPreview(\''+u+'\',\''+n+'\',\'\');"';
+            rowClick = ' onclick="openAttachmentPreview('+u+','+n+',&quot;&quot;);"';
             rowStyle += 'cursor:pointer;';
           }
           billsRowsHtml += '<tr style="'+rowStyle+'"'+rowClick+'>'+
@@ -675,10 +768,10 @@ function renderPaymentReview(order, items, attachments, timeline, bills, payment
           var attCell = '<span style="color:var(--ink4);">—</span>';
           var rowClick = '', rowStyle = 'background:#fff7ed;';
           if (hasAtt){
-            var u = String(p.attachment_url).replace(/'/g,'%27');
-            var n = String(p.attachment_name||'document').replace(/'/g,'\\\'');
+            var u = jsArg(safeUrl(p.attachment_url));
+            var n = jsArg(p.attachment_name||'document');
             attCell = '<span style="color:var(--green);">📎 '+esc(p.attachment_name||'document')+'</span>';
-            rowClick = ' onclick="openAttachmentPreview(\''+u+'\',\''+n+'\',\'\');"';
+            rowClick = ' onclick="openAttachmentPreview('+u+','+n+',&quot;&quot;);"';
             rowStyle += 'cursor:pointer;';
           }
           billsRowsHtml += '<tr style="'+rowStyle+'"'+rowClick+'>'+
@@ -718,20 +811,75 @@ function renderPaymentReview(order, items, attachments, timeline, bills, payment
     ? attachments.map(function(a){
         var attIdJs = String(a.id||'').replace(/[\\'"<>]/g,'');
         return '<div style="display:flex;justify-content:space-between;align-items:center;gap:.4rem;padding:.4rem .6rem;border:1px solid var(--border);border-radius:8px;margin-bottom:.3rem;font-size:12px;">'+
-                 '<a href="'+esc(a.file_url)+'" target="_blank" rel="noopener" style="color:var(--ink2);text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📎 '+esc(a.file_name||'file')+'</a>'+
+                 '<a href="'+esc(safeUrl(a.file_url))+'" target="_blank" rel="noopener" style="color:var(--ink2);text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📎 '+esc(a.file_name||'file')+'</a>'+
                  '<span style="color:var(--ink4);font-size:11px;white-space:nowrap;">'+fmtDate(a.created_at)+'</span>'+
                  '<button class="btn btn-outline btn-sm" style="font-size:10px;padding:2px 6px;color:var(--red);border-color:var(--red);" onclick="deletePaymentAttachment(\''+attIdJs+'\',\''+idJs+'\')" title="Delete attachment (removes file + row)">✕</button>'+
                '</div>';
       }).join('')
     : '<div style="color:var(--ink4);font-size:12px;">No documents uploaded yet.</div>';
 
-  // ── E-Invoice status inside the modal ──
-  var einvHtml = '';
-  if (order.einvoice_uploaded_at && order.einvoice_url){
-    einvHtml = '<div style="margin-top:.3rem;color:#15803d;font-size:12px;">✓ E-Invoice issued — <a href="'+esc(order.einvoice_url)+'" target="_blank" rel="noopener" style="color:#15803d;text-decoration:underline;">View</a></div>';
-  } else if (order.einvoice_requested_at){
-    einvHtml = '<div style="margin-top:.3rem;color:#b45309;font-size:12px;">⏳ E-Invoice requested — awaiting upload.</div>';
+  // ── E-Invoice section — single source of truth lives on the order's
+  //    einvoice_* columns. Rendered on EVERY order so admins have one
+  //    obvious place to upload / replace / remove from Payments, same
+  //    contract as the strip in the order modal. The card's framing
+  //    changes with the state (Issued / Requested / Auto-required /
+  //    Not requested yet) but the Upload action is always one click
+  //    away.
+  var _isCompanyPV = (order.billing_type === 'company') || (!order.billing_type && !!order.billing_tax_id);
+  var _isHiValuePV = (Number(order.total) || 0) >= 10000;
+  var _autoIssuePV = _isCompanyPV || _isHiValuePV;
+  var _einvUp      = order.einvoice_uploaded_at && order.einvoice_url;
+  var _einvReq     = !!order.einvoice_requested_at && !_einvUp;
+  var einvCardHtml = '';
+  if (_einvUp){
+    einvCardHtml = ''+
+      '<div style="margin-top:1.2rem;padding:.9rem 1rem;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem;">'+
+          '<div style="font-weight:600;font-size:13px;color:#15803d;">E-Invoice · Issued</div>'+
+          '<span style="font-size:11px;color:var(--ink3);">'+fmtDate(order.einvoice_uploaded_at)+'</span>'+
+        '</div>'+
+        '<div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">'+
+          '<a href="'+esc(safeUrl(order.einvoice_url))+'" target="_blank" rel="noopener" style="color:#15803d;text-decoration:underline;font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📄 '+esc(order.einvoice_name||'E-Invoice')+'</a>'+
+          '<button class="btn btn-outline btn-sm" style="font-size:11px;" onclick="uploadEInvoiceFromPayments(\''+idJs+'\')">Replace</button>'+
+          '<button class="btn btn-outline btn-sm" style="font-size:11px;color:var(--red);border-color:var(--red);" onclick="removeEInvoiceFromPayments(\''+idJs+'\')">Remove</button>'+
+        '</div>'+
+      '</div>';
+  } else {
+    // Figure out the state framing so the card header reads the way
+    // the admin would describe this order to a colleague.
+    var _tone, _title, _label;
+    if (_einvReq){
+      _tone  = { bg:'#fffbeb', border:'#fde68a', title:'#92400e', body:'#78350f' };
+      _title = 'Requested';
+      _label = 'Requested by customer · awaiting upload';
+    } else if (_autoIssuePV){
+      _tone  = { bg:'#fffbeb', border:'#fde68a', title:'#92400e', body:'#78350f' };
+      _title = 'Pending';
+      _label = _isCompanyPV ? 'Company order · E-Invoice required'
+                            : 'Order ≥ RM 10k · E-Invoice required';
+    } else {
+      // Personal <RM10k, no explicit request — still show the Upload
+      // action so an admin can proactively issue one (or when the
+      // customer asks offline).
+      _tone  = { bg:'#f8f8f6', border:'#e5e7eb', title:'var(--ink2)', body:'var(--ink3)' };
+      _title = 'Not yet issued';
+      _label = 'Upload only if the customer asks for an E-Invoice.';
+    }
+    einvCardHtml = ''+
+      '<div style="margin-top:1.2rem;padding:.9rem 1rem;background:'+_tone.bg+';border:1px solid '+_tone.border+';border-radius:10px;">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.4rem;">'+
+          '<div>'+
+            '<div style="font-weight:600;font-size:13px;color:'+_tone.title+';">E-Invoice · '+_title+'</div>'+
+            '<div style="font-size:11px;color:'+_tone.body+';margin-top:.15rem;">'+esc(_label)+'</div>'+
+          '</div>'+
+          '<button class="btn btn-primary btn-sm" style="font-size:11px;" onclick="uploadEInvoiceFromPayments(\''+idJs+'\')">📄 Upload E-Invoice</button>'+
+        '</div>'+
+      '</div>';
   }
+
+  // Legacy slot — keep harmlessly empty since the E-Invoice detail now
+  // lives in its own card above. Removed from the Order block (Row 1).
+  var einvHtml = '';
 
   var timelineHtml = timeline.length
     ? timeline.slice(0,8).map(function(t){
@@ -801,6 +949,10 @@ function renderPaymentReview(order, items, attachments, timeline, bills, payment
     // Row 4 — Credit bills (credit only)
     creditHtml +
 
+    // Row 4a — E-Invoice (single source of truth; same action set
+    // as the order modal strip, so Payments and Orders stay linked)
+    einvCardHtml +
+
     // Row 5 — Documents (bidirectional with order Attached Documents)
     '<div style="margin-top:1.2rem;">'+
       '<div class="mp-section-title">Documents</div>'+
@@ -808,10 +960,8 @@ function renderPaymentReview(order, items, attachments, timeline, bills, payment
       '<div style="margin-top:.6rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">'+
         '<input type="file" id="pay-attach-input" multiple style="font-size:12px;">'+
         '<button class="btn btn-primary btn-sm" onclick="uploadPaymentAttachments(\''+idJs+'\')">📤 Upload</button>'+
-        ((order.einvoice_requested_at && !order.einvoice_uploaded_at) ?
-          '<button class="btn btn-outline btn-sm" style="border-color:#7c5cbf;color:#7c5cbf;" onclick="uploadEInvoiceFromPayments(\''+idJs+'\')">📄 Upload E-Invoice (mark done)</button>' : '')+
       '</div>'+
-      '<div style="font-size:11px;color:var(--ink4);margin-top:.4rem;">Uploads are attached to the customer order and shown under Attached Documents.</div>'+
+      '<div style="font-size:11px;color:var(--ink4);margin-top:.4rem;">Uploads are attached to the customer order and shown under Attached Documents. For E-Invoices, use the dedicated section above so the customer\'s "E-Invoice issued" chip updates too.</div>'+
     '</div>'+
 
     // Row 6 — Internal notes
@@ -899,52 +1049,54 @@ window.uploadPaymentAttachments = uploadPaymentAttachments;
 //   1. Uploads the PDF to storage
 //   2. Calls mark_einvoice_uploaded RPC (stamps einvoice_uploaded_at
 //      + einvoice_url + einvoice_name on the order row)
-// After it returns we also drop a row into salesweb_order_attachments
-// so the customer sees the E-Invoice in their Attached Documents list.
+//
+// The E-Invoice is stored ONCE — on the order's einvoice_* columns.
+// No mirror into salesweb_order_attachments: both Payments and Orders
+// surfaces read from the same columns, so there's one source of truth
+// and deleting the file in one place removes it everywhere.
 async function uploadEInvoiceFromPayments(orderId){
   if (typeof window.openEInvoiceUpload !== 'function'){
     toast('E-Invoice uploader not available on this page','error');
     return;
   }
-  // openEInvoiceUpload opens a file picker + updates the order row.
-  // When it finishes, refresh the payment list + re-open the modal.
   var beforeUp = Date.now();
   window.openEInvoiceUpload(orderId);
-  // Poll for the row change so we can mirror it into attachments +
-  // refresh the UI once the upload lands. Timeout after 90s.
+  // Poll the order row and refresh the Payments modal once the
+  // einvoice_uploaded_at stamp lands (indicates the picker completed).
+  // Timeout after 90s so an abandoned picker doesn't leak the interval.
   var deadline = Date.now() + 90000;
-  var mirrored = false;
   var interval = setInterval(async function(){
     if (Date.now() > deadline){ clearInterval(interval); return; }
     var { data: fresh } = await sb.from('salesweb_customer_orders')
-      .select('einvoice_url,einvoice_name,einvoice_uploaded_at')
-      .eq('id', orderId).maybeSingle();
+      .select('einvoice_uploaded_at').eq('id', orderId).maybeSingle();
     if (!fresh || !fresh.einvoice_uploaded_at) return;
     var ts = new Date(fresh.einvoice_uploaded_at).getTime();
     if (ts < beforeUp) return;   // pre-existing upload; not the one we just kicked off
     clearInterval(interval);
-    if (!mirrored){
-      mirrored = true;
-      var session = await sb.auth.getSession();
-      var user = session?.data?.session?.user?.email || 'accountant';
-      // Best-effort mirror. Ignore duplicate errors — the E-Invoice row
-      // already lives on the order via einvoice_url so this is only a
-      // convenience for the Attached Documents strip.
-      try {
-        await sb.from('salesweb_order_attachments').insert([{
-          order_id: orderId,
-          file_name: fresh.einvoice_name || 'E-Invoice.pdf',
-          file_url:  fresh.einvoice_url,
-          file_type: 'application/pdf',
-          uploaded_by: user
-        }]);
-      } catch(_){ /* ignore */ }
-    }
     loadPayments();
     openPaymentDetail(orderId);
   }, 1500);
 }
 window.uploadEInvoiceFromPayments = uploadEInvoiceFromPayments;
+
+// Delegate E-Invoice removal to the admin-orders handler so both
+// surfaces share one implementation (null the three einvoice_*
+// columns + re-queue einvoice_requested_at + clean up storage).
+// After it finishes, refresh the Payments list + the modal.
+async function removeEInvoiceFromPayments(orderId){
+  if (typeof window.removeEInvoice !== 'function'){
+    toast('E-Invoice remove not available on this page','error');
+    return;
+  }
+  // removeEInvoice (admin-orders.js) handles its own confirm +
+  // calls viewOrder() when done. We can't suppress that cleanly, but
+  // the orders modal won't be open from Payments, so it's a no-op in
+  // the common case. After a short delay to let the async DB work
+  // settle, re-render the Payment Review modal with fresh data.
+  await window.removeEInvoice(orderId);
+  setTimeout(function(){ loadPayments(); openPaymentDetail(orderId); }, 400);
+}
+window.removeEInvoiceFromPayments = removeEInvoiceFromPayments;
 
 // ═══════════════════════════════════════
 //  MUTATIONS — mark paid / unpaid

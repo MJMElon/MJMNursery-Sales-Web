@@ -262,7 +262,7 @@ export default function Admin() {
                   </aside>
                 {/* MESSAGES — Contact Us enquiries & complaints (public/admin-messages.js) */}
                 <div className="tab-content" id="tab-messages">
-                  <div className="main-header"><div className="main-title">Messages</div><button className="btn btn-outline" onClick={(e) => { window.openMessageSettings(); }}>⚙ Settings</button></div>
+                  <div className="main-header"><div className="main-title">Messages</div><button className="msg-gear-btn" title="Settings" aria-label="Messages settings" onClick={(e) => { window.openMessageSettings(); }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg></button></div>
                   <div className="stats-grid" id="message-stats" />
                   <div className="card">
                     <div className="filter-bar">
@@ -274,12 +274,14 @@ export default function Admin() {
                         </select>
                       </div>
                     <div className="filter-bar" style={{ marginTop: '-.3rem' }}>
+                      <div className="chip-rail">
                       <button className="filter-chip active" data-msg-view="open" onClick={(e) => { window.setMessageView('open'); }}>Open <span className="chip-count" id="msg-count-open" data-color="amber"></span></button>
                       <button className="filter-chip" data-msg-view="New" onClick={(e) => { window.setMessageView('New'); }}>New <span className="chip-count" id="msg-count-new" data-color="amber"></span></button>
                       <button className="filter-chip" data-msg-view="In Progress" onClick={(e) => { window.setMessageView('In Progress'); }}>In Progress</button>
-                      <button className="filter-chip" data-msg-view="Resolved" onClick={(e) => { window.setMessageView('Resolved'); }}>Resolved</button>
+                      <button className="filter-chip" data-msg-view="Resolved" onClick={(e) => { window.setMessageView('Resolved'); }}>Solved</button>
                       <button className="filter-chip" data-msg-view="Closed" onClick={(e) => { window.setMessageView('Closed'); }}>Closed</button>
                       <button className="filter-chip" data-msg-view="all" onClick={(e) => { window.setMessageView('all'); }}>All</button>
+                      </div>
                       </div>
                     <div id="messages-count" style={{ display: 'flex', justifyContent: 'flex-end', fontSize: '12px', color: 'var(--ink3)', marginBottom: '.4rem' }} />
                     <div id="messages-table"><div className="loading">Loading messages...</div></div>
@@ -294,11 +296,13 @@ export default function Admin() {
                       <input className="filter-input" id="seal-search" placeholder="Search seal number, customer, AL, DO..." onInput={(e) => { window.sealSearchChanged(); }} />
                       </div>
                     <div className="filter-bar" style={{ marginTop: '-.3rem' }}>
+                      <div className="chip-rail">
                       <button className="filter-chip active" data-seal-status="" onClick={(e) => { window.setSealStatus(''); }}>All</button>
                       <button className="filter-chip" data-seal-status="in_stock" onClick={(e) => { window.setSealStatus('in_stock'); }}>In stock <span className="chip-count" id="seal-count-in_stock"></span></button>
                       <button className="filter-chip" data-seal-status="pending" onClick={(e) => { window.setSealStatus('pending'); }}>Pending collection <span className="chip-count" id="seal-count-pending" data-color="amber"></span></button>
                       <button className="filter-chip" data-seal-status="scanned" onClick={(e) => { window.setSealStatus('scanned'); }}>Scanned <span className="chip-count" id="seal-count-scanned" data-color="blue"></span></button>
                       <button className="filter-chip" data-seal-status="collected" onClick={(e) => { window.setSealStatus('collected'); }}>Collected <span className="chip-count" id="seal-count-collected"></span></button>
+                      </div>
                       </div>
                     <div id="seal-count" style={{ display: 'flex', justifyContent: 'flex-end', fontSize: '12px', color: 'var(--ink3)', marginBottom: '.4rem' }} />
                     <div id="seal-table"><div className="loading">Loading seals...</div></div>
@@ -396,10 +400,12 @@ export default function Admin() {
                   <div className="card">
                     <div className="filter-bar">
                       <input className="filter-input" id="payment-search" placeholder="Search order number or customer..." onInput={(e) => { window.loadPayments(); }} />
+                      <div className="chip-rail">
                       <button className="filter-chip active" data-payment-view="awaiting" onClick={(e) => { window.setPaymentView('awaiting'); }}>Awaiting Verification <span className="chip-count" id="pv-count-awaiting" data-color="amber"></span></button>
                       <button className="filter-chip" data-payment-view="partial" onClick={(e) => { window.setPaymentView('partial'); }}>Partially Paid <span className="chip-count" id="pv-count-partial" data-color="blue"></span></button>
                       <button className="filter-chip" data-payment-view="credit" onClick={(e) => { window.setPaymentView('credit'); }}>Credit Note <span className="chip-count" id="pv-count-credit" data-color="orange"></span></button>
-                      <button className="filter-chip" data-payment-view="einvoice" onClick={(e) => { window.setPaymentView('einvoice'); }}>E-Invoice Requests <span className="chip-count" id="pv-count-einvoice" data-color="purple"></span></button>
+                      <button className="filter-chip" data-payment-view="einvoice" onClick={(e) => { window.setPaymentView('einvoice'); }}>E-Invoice Pending <span className="chip-count" id="pv-count-einvoice" data-color="purple"></span></button>
+                      </div>
                       </div>
                     <div id="payments-table"><div className="loading">Loading payments...</div></div>
                     </div>
@@ -433,11 +439,13 @@ export default function Admin() {
                       </div>
                     </div>
                   <div className="filter-bar" style={{ marginBottom: '1rem' }}>
+                    <div className="chip-rail">
                     <button className="filter-chip active" data-promo-status="" onClick={(e) => { window.setPromoFilter(''); }}>All</button>
                     <button className="filter-chip" data-promo-status="live" onClick={(e) => { window.setPromoFilter('live'); }}>Live</button>
                     <button className="filter-chip" data-promo-status="scheduled" onClick={(e) => { window.setPromoFilter('scheduled'); }}>Scheduled</button>
                     <button className="filter-chip" data-promo-status="draft" onClick={(e) => { window.setPromoFilter('draft'); }}>Drafts</button>
                     <button className="filter-chip" data-promo-status="ended" onClick={(e) => { window.setPromoFilter('ended'); }}>Ended</button>
+                    </div>
                     </div>
                   <div className="card"><div id="promos-table"><div className="loading">Loading promotions...</div></div></div>
                   </div>
@@ -454,12 +462,14 @@ export default function Admin() {
                   <div className="card">
                     <div className="filter-bar">
                       <input className="filter-input" id="coupon-search" placeholder="Search code or name..." onInput={(e) => { window.loadCoupons(); }} />
+                      <div className="chip-rail">
                       <button className="filter-chip active" data-coupon-status="" onClick={(e) => { window.setCouponFilter(''); }}>All</button>
                       <button className="filter-chip" data-coupon-status="active" onClick={(e) => { window.setCouponFilter('active'); }}>Active</button>
                       <button className="filter-chip" data-coupon-status="scheduled" onClick={(e) => { window.setCouponFilter('scheduled'); }}>Scheduled</button>
                       <button className="filter-chip" data-coupon-status="expired" onClick={(e) => { window.setCouponFilter('expired'); }}>Expired</button>
                       <button className="filter-chip" data-coupon-status="exhausted" onClick={(e) => { window.setCouponFilter('exhausted'); }}>Exhausted</button>
                       <button className="filter-chip" data-coupon-status="inactive" onClick={(e) => { window.setCouponFilter('inactive'); }}>Inactive</button>
+                      </div>
                       </div>
                     <div id="coupons-table"><div className="loading">Loading coupons...</div></div>
                     </div>
@@ -627,7 +637,7 @@ export default function Admin() {
                 </div>
               </div>
             {/* ORDER DETAIL MODAL */}
-            <div className="modal-overlay" id="modal-order" style={{ zIndex: '250' }}><div className="modal" style={{ maxWidth: '750px' }}><div className="modal-head"><h2 id="mo-title">Order Details</h2><button className="modal-close" onClick={(e) => { closeModal('modal-order'); }}>✕</button></div><div className="modal-body" id="mo-body" style={{ maxHeight: '75vh', overflowY: 'auto' }} /><div className="modal-foot" id="mo-foot" /></div></div>
+            <div className="modal-overlay" id="modal-order" style={{ zIndex: '250' }}><div className="modal" style={{ maxWidth: '750px' }}><div className="modal-head"><h2 id="mo-title">Order Details</h2><button className="modal-close" onClick={(e) => { closeModal('modal-order'); if (typeof window.loadOrders === 'function') window.loadOrders(); }}>✕</button></div><div className="modal-body" id="mo-body" style={{ maxHeight: '75vh', overflowY: 'auto' }} /><div className="modal-foot" id="mo-foot" /></div></div>
             {/* ATTACHMENT PREVIEW (floating viewer for order documents — avoids tab-jumping) */}
             <div className="modal-overlay" id="modal-att-preview" style={{ zIndex: '260' }}><div className="modal" style={{ maxWidth: '900px' }}>
                 <div className="modal-head">
@@ -1143,8 +1153,8 @@ export default function Admin() {
                   </div>
                 </div></div>
             {/* MESSAGE DETAIL + MESSAGE SETTINGS (public/admin-messages.js) */}
-            <div className="modal-overlay" id="modal-message" style={{ zIndex: '255' }}><div className="modal msg-modal"><div className="modal-head"><h2 id="mmsg-title">Message</h2><button className="modal-close" onClick={(e) => { window.closeMessageModal(); }}>✕</button></div><div className="modal-body" id="mmsg-body" style={{ maxHeight: '74vh', overflowY: 'auto', background: 'var(--bg)' }} /><div className="modal-foot" id="mmsg-foot" /></div></div>
-            <div className="modal-overlay" id="modal-message-settings" style={{ zIndex: '260' }}><div className="modal" style={{ maxWidth: '620px' }}><div className="modal-head"><h2>Messages — Settings</h2><button className="modal-close" onClick={(e) => { closeModal('modal-message-settings'); }}>✕</button></div><div className="modal-body" id="mms-body" style={{ maxHeight: '78vh', overflowY: 'auto' }} /></div></div>
+            <div className="modal-overlay" id="modal-message" style={{ zIndex: '255' }}><div className="modal msg-modal"><div className="modal-head"><h2 id="mmsg-title">Message</h2><div id="mmsg-status-slot" className="msg-status-slot" /><button className="modal-close" onClick={(e) => { window.closeMessageModal(); }}>✕</button></div><div className="modal-body" id="mmsg-body" style={{ maxHeight: '74vh', overflowY: 'auto', background: 'var(--bg)' }} /><div className="modal-foot" id="mmsg-foot" /></div></div>
+            <div className="modal-overlay" id="modal-message-settings" style={{ zIndex: '260' }}><div className="modal" style={{ maxWidth: '860px' }}><div className="modal-head"><h2>Messages Settings</h2><button className="modal-close" onClick={(e) => { window.closeMessageSettings(); }}>✕</button></div><div className="modal-body" id="mms-body" style={{ height: '62vh', overflowY: 'auto' }} /><div className="modal-foot" id="mms-foot" style={{ alignItems: 'center' }} /></div></div>
             {/* TOAST */}
             <div className="toast" id="toast" />
             

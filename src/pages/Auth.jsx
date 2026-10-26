@@ -19,6 +19,8 @@ export default function Auth() {
   const [otpCode, setOtpCode] = useState('');
   const [recPassword, setRecPassword] = useState('');
   const [otpRowShown, setOtpRowShown] = useState(false);
+  // true while the code box is asking for the code from the signup email
+  const [otpIsSignup, setOtpIsSignup] = useState(false);
   const [otpBtn, setOtpBtn] = useState({ disabled: false, label: 'Send OTP Code' });
   const [hint, setHint] = useState({ kind: 'none' }); // none | phone | email | suggest | corrected
 
@@ -120,20 +122,26 @@ export default function Auth() {
       if (!name) { showStatus('Please enter your full name.', 'error'); return; }
       if (password.length < 6) { showStatus('Password must be at least 6 characters.', 'error'); return; }
       showStatus('Creating account...', 'success');
-      const { data: signUpData, error } = await supabase.auth.signUp({ email: id, password, options: { data: { full_name: name, user_type: 'customer' } } });
-      if (error) {
-        if (error.message.toLowerCase().includes('database')) {
-          const { data: retryData, error: retryErr } = await supabase.auth.signUp({ email: id, password, options: { data: { full_name: name, user_type: 'customer' } } });
-          if (retryErr) { showStatus(retryErr.message, 'error'); return; }
-          if (retryData && retryData.user) {
-            await supabase.from('shared_profiles').upsert({ id: retryData.user.id, email: id, full_name: name, role: 'customer', user_type: 'customer' }, { onConflict: 'id' });
-          }
-        } else { showStatus(error.message, 'error'); return; }
-      } else if (signUpData && signUpData.user) {
-        await supabase.from('shared_profiles').upsert({ id: signUpData.user.id, email: id, full_name: name, role: 'customer', user_type: 'customer' }, { onConflict: 'id' });
+      // Confirm email is ON for the project, so this makes the account and
+      // emails a code. user_type in the metadata makes it a customer from the
+      // first moment (the signup trigger reads it).
+      const { data: signUpData, error } = await supabase.auth.signUp({ email: id, password, options: {
+        data: { full_name: name, user_type: 'customer' },
+        emailRedirectTo: window.location.origin + '/auth.html',
+      } });
+      if (error) { showStatus(error.message, 'error'); return; }
+      // An address that already has a confirmed account comes back with no
+      // identities and no email is sent.
+      if (signUpData?.user && Array.isArray(signUpData.user.identities) && signUpData.user.identities.length === 0) {
+        showStatus('This email already has an account. Please sign in, or use Forgot password.', 'error');
+        return;
       }
-      showStatus('Account created! You can now sign in.', 'success');
-      setIsSignUp(false);
+      if (signUpData?.session) { await handlePostLogin(signUpData.session); return; }
+      setOtpIsSignup(true);
+      setOtpCode('');
+      setOtpRowShown(true);
+      setTimeout(() => otpInputRef.current?.focus(), 0);
+      showStatus('Almost done. We emailed a code to ' + id + ' — enter it below to confirm your email. (You can also click the link in that email.)', 'success');
       return;
     }
 
@@ -161,6 +169,7 @@ export default function Auth() {
     const opts = inputTypeRef.current === 'phone'
       ? { phone: toE164(id), options: { ...options, channel: 'whatsapp' } }
       : { email: id, options };
+    setOtpIsSignup(false);
     const { error } = await supabase.auth.signInWithOtp(opts);
 
     if (error) {
@@ -195,10 +204,16 @@ export default function Auth() {
     showStatus('Verifying...', 'success');
     const opts = inputTypeRef.current === 'phone'
       ? { phone: toE164(id), token: otp, type: 'sms' }
-      : { email: id, token: otp, type: 'email' };
+      : { email: id, token: otp, type: otpIsSignup ? 'signup' : 'email' };
 
-    const { data, error } = await supabase.auth.verifyOtp(opts);
+    let { data, error } = await supabase.auth.verifyOtp(opts);
+    if (error && otpIsSignup && inputTypeRef.current !== 'phone') {
+      // Newer Supabase accepts a signup code under the plain email type too.
+      const retry = await supabase.auth.verifyOtp({ email: id, token: otp, type: 'email' });
+      if (!retry.error) { data = retry.data; error = null; }
+    }
     if (error) { showStatus(error.message, 'error'); return; }
+    setOtpIsSignup(false);
     await handlePostLogin(data.session);
   }
 
@@ -341,7 +356,7 @@ export default function Auth() {
                   onChange={e => setOtpCode(e.target.value)}
                   onKeyDown={onEnter(verifyOTP)}
                 />
-                <button className="otp-verify-btn" onClick={verifyOTP}>Login with OTP</button>
+                <button className="otp-verify-btn" onClick={verifyOTP}>{otpIsSignup ? 'Confirm Email' : 'Login with OTP'}</button>
               </div>
             </div>
 

@@ -328,7 +328,7 @@ export default function Admin() {
                   </div>
                 {/* CUSTOMERS */}
                 <div className="tab-content" id="tab-customers">
-                  <div className="main-header"><div className="main-title">Manage Customers</div><button className="btn btn-primary" onClick={(e) => { window.openAddCustomer(); }}>+ Add Customer</button></div>
+                  <div className="main-header"><div className="main-title">Manage Customers</div><div style={{ display: 'flex', gap: '.5rem' }}><button className="btn btn-outline" onClick={(e) => { window.openLinkPhones(); }} title="Make the phone on each customer account its WhatsApp login">Link phones to WhatsApp login</button><button className="btn btn-primary" onClick={(e) => { window.openAddCustomer(); }}>+ Add Customer</button></div></div>
                   <div style={{ display: 'flex', gap: '.4rem', marginBottom: '1rem' }}>
                     <button className="btn btn-primary btn-sm" id="cust-subtab-list" onClick={(e) => { window.showCustSubTab('list'); }} style={{ fontSize: '11px' }}>Customer List</button>
                     <button className="btn btn-outline btn-sm" id="cust-subtab-groups" onClick={(e) => { window.showCustSubTab('groups'); }} style={{ fontSize: '11px' }}>Groups</button>
@@ -1005,6 +1005,8 @@ export default function Admin() {
             <div className="modal-overlay" id="modal-customer"><div className="modal" style={{ maxWidth: '900px' }}><div className="modal-head"><h2 id="mcu-title">Customer Profile</h2><button className="modal-close" onClick={(e) => { closeModal('modal-customer'); }}>✕</button></div><div className="modal-body" id="mcu-body" style={{ maxHeight: '80vh', overflowY: 'auto' }} /></div></div>
             {/* CUSTOMER POINTS LEDGER MODAL — opened on top of modal-customer (z=260) via openCustomerPointsLedger() */}
             <div className="modal-overlay" id="modal-customer-points" style={{ zIndex: '260' }}><div className="modal" style={{ maxWidth: '760px' }}><div className="modal-head"><h2 id="cpts-title">Customer Points</h2><button className="modal-close" onClick={(e) => { closeModal('modal-customer-points'); }}>✕</button></div><div className="modal-body" id="cpts-body" style={{ maxHeight: '76vh', overflowY: 'auto' }} /></div></div>
+            {/* LINK PHONES TO WHATSAPP LOGIN — preview then apply, via openLinkPhones() in admin-customers.js */}
+            <div className="modal-overlay" id="modal-link-phones" style={{ zIndex: '255' }}><div className="modal" style={{ maxWidth: '760px' }}><div className="modal-head"><h2>Link phones to WhatsApp login</h2><button className="modal-close" onClick={(e) => { closeModal('modal-link-phones'); }}>✕</button></div><div className="modal-body" id="lp-body" style={{ maxHeight: '76vh', overflowY: 'auto', padding: '1.2rem' }} /></div></div>
             {/* ADD CUSTOMER MODAL */}
             <div className="modal-overlay" id="modal-add-customer" style={{ zIndex: '255' }}><div className="modal" style={{ maxWidth: '480px' }}>
                 <div className="modal-head"><h2>+ Add Customer</h2><button className="modal-close" onClick={(e) => { closeModal('modal-add-customer'); }}>✕</button></div>

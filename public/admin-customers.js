@@ -423,6 +423,69 @@ function custAvatar(nameOrEmail){
 //  clobbered) + a shared_profiles row tagged as a customer. Same pattern
 //  as the admin "+ Add Order" walk-in customer creation.
 // ═══════════════════════════════════════
+// ═══════════════════════════════════════
+//  LINK PHONES TO WHATSAPP LOGIN
+//  The phone typed on a customer account is only a profile field: signing in
+//  on the shop's WhatsApp tab with it used to open a second, empty login.
+//  The link-profile-phones Edge Function makes it the account's own WhatsApp
+//  login. Preview first (changes nothing), then link on confirm. Its rules
+//  (supabase/functions/link-profile-phones/lib.ts) only link a number nothing
+//  is in doubt about, and list the rest with the reason.
+//  A typed number was never proved: a mistyped one would let the owner of
+//  that wrong number sign in. That is why the list is shown before linking.
+// ═══════════════════════════════════════
+var _lpPreview = null;
+function _lpRows(rows, withReason){
+  if(!rows.length) return '<div style="color:var(--ink4);font-size:12px;padding:.4rem 0;">None</div>';
+  var h='<table class="data-table"><thead><tr><th>Name</th><th>Email</th><th>Phone typed</th><th>Login number</th>'+(withReason?'<th>Why not</th>':'')+'</tr></thead><tbody>';
+  rows.forEach(function(r){
+    h+='<tr><td>'+esc(r.name||'—')+'</td><td>'+esc(r.email||'—')+'</td><td>'+esc(r.typed||'')+'</td><td>'+(r.phone?'+'+esc(r.phone):'—')+'</td>'+(withReason?'<td style="color:#92400e;">'+esc(r.reason||'')+'</td>':'')+'</tr>';
+  });
+  return h+'</tbody></table>';
+}
+async function openLinkPhones(){
+  openModal('modal-link-phones');
+  var body=document.getElementById('lp-body');
+  body.innerHTML='<div class="loading">Checking every customer account…</div>';
+  var r=await sb.functions.invoke('link-profile-phones',{ body:{ apply:false } });
+  if(r.error || !r.data || r.data.error){
+    body.innerHTML='<div class="loading" style="color:#dc2626;">Could not check: '+esc((r.data&&r.data.error)||(r.error&&r.error.message)||'no answer')+'. Is the link-profile-phones function deployed?</div>';
+    return;
+  }
+  _lpPreview=r.data;
+  var n=r.data.linked.length, m=r.data.skipped.length;
+  body.innerHTML=
+    '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:.7rem 1rem;font-size:12px;margin-bottom:1rem;">'+
+      'Each number below becomes that customer\'s WhatsApp login, so the WhatsApp tab on the shop opens their existing account. '+
+      'These numbers were typed, never proved: <b>check them</b>. A wrong number would let its owner sign in to that account.'+
+    '</div>'+
+    '<div style="font-size:12px;font-weight:700;margin-bottom:.4rem;">Will be linked ('+n+')</div>'+_lpRows(r.data.linked,false)+
+    '<div style="font-size:12px;font-weight:700;margin:1rem 0 .4rem;">Left as they are ('+m+')</div>'+_lpRows(r.data.skipped,true)+
+    '<div style="text-align:right;margin-top:1rem;">'+
+      (n?'<button class="btn btn-primary" id="lp-apply" onclick="applyLinkPhones()">Link '+n+' account'+(n===1?'':'s')+'</button>':'<span style="font-size:12px;color:var(--ink4);">Nothing to link.</span>')+
+    '</div>';
+}
+async function applyLinkPhones(){
+  if(!_lpPreview || !_lpPreview.linked.length) return;
+  if(!confirm('Make the phone number the WhatsApp login for '+_lpPreview.linked.length+' customer account(s)?'))return;
+  var btn=document.getElementById('lp-apply'); if(btn){ btn.disabled=true; btn.textContent='Linking…'; }
+  var r=await sb.functions.invoke('link-profile-phones',{ body:{ apply:true } });
+  var body=document.getElementById('lp-body');
+  if(r.error || !r.data || r.data.error){
+    toast('Error: '+((r.data&&r.data.error)||(r.error&&r.error.message)||'no answer'),'error');
+    if(btn){ btn.disabled=false; btn.textContent='Try again'; }
+    return;
+  }
+  _lpPreview=null;
+  body.innerHTML=
+    '<div style="font-size:12px;font-weight:700;margin-bottom:.4rem;color:#059669;">Linked ('+r.data.linked.length+')</div>'+_lpRows(r.data.linked,false)+
+    (r.data.failed.length?'<div style="font-size:12px;font-weight:700;margin:1rem 0 .4rem;color:#dc2626;">Supabase refused ('+r.data.failed.length+')</div>'+_lpRows(r.data.failed,true):'');
+  toast('Linked '+r.data.linked.length+' account(s)');
+  loadCustomers();
+}
+window.openLinkPhones = openLinkPhones;
+window.applyLinkPhones = applyLinkPhones;
+
 function openAddCustomer(){
   document.getElementById('ac-name').value='';
   document.getElementById('ac-email').value='';

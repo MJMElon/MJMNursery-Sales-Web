@@ -12,8 +12,9 @@
         WhatsApp number each one uses.
      2. Assign & Notify emails the PIC the case, and the customer who will
         contact them and from which number (edge function
-        message-notify). WhatsApp copies follow once the WhatsApp
-        Business number is connected.
+        message-notify), and sends the customer the same on WhatsApp
+        from the nursery number (edge function whatsapp, set up on the
+        WhatsApp tab).
      3. The PIC contacts the customer from their OWN WhatsApp (the
         "WhatsApp customer" button), and records what happened as a
         note. Notes are never shown to the customer.
@@ -36,7 +37,8 @@ var MSG_CURRENT = null;         // the message open in the modal
 var MSG_PHOTO_BUCKET = 'contact-message-photos';
 
 // Malaysian numbers as WhatsApp wants them: digits only, country code
-// first. Same rule as waNumber() in supabase/functions/message-notify
+// first. Same rule as waNumber() in supabase/functions/message-notify and
+// supabase/functions/whatsapp
 // and pWaNumber() in the storefront — change all three.
 function waNumber(raw) {
   var d = String(raw || '').replace(/\D/g, '');
@@ -374,6 +376,13 @@ async function renderMessageDetail() {
     }).join('');
   var greeting = 'Hi ' + m.name + ', this is ' + (m.assigned_name || 'MJM Nursery') + ' from MJM Nursery regarding your case ' + m.ref + ' (' + m.subject + ').';
   var lastEmail = events.filter(function (e) { return e.kind === 'email'; }).slice(-1)[0];
+  // What happened to the customer WhatsApp on the last Assign & Notify.
+  var waLine = '';
+  var byHand = waCust && m.assigned_name ? ' <a href="https://wa.me/' + waCust + '?text=' + encodeURIComponent('Hi ' + m.name + ', thank you for contacting MJM Nursery. Your case ' + m.ref + ' has been assigned to ' + m.assigned_name + ', who will contact you on WhatsApp' + (m.assigned_phone ? ' from +' + waNumber(m.assigned_phone) : '') + ' shortly.') + '" target="_blank" rel="noopener">Send it by hand</a>' : '';
+  if (m.wa_status === 'sent') waLine = '<div class="msg-wa msg-wa-ok">✓ WhatsApp sent to the customer (' + msgWhen(m.wa_sent_at) + ')</div>';
+  else if (m.wa_status === 'not_configured') waLine = '<div class="msg-wa msg-wa-warn">WhatsApp is not connected yet, so the customer was not messaged on WhatsApp.' + byHand + '</div>';
+  else if (m.wa_status === 'disabled') waLine = '<div class="msg-wa msg-wa-warn">The case assigned WhatsApp is switched off on the WhatsApp tab.' + byHand + '</div>';
+  else if (m.wa_status === 'failed') waLine = '<div class="msg-wa msg-wa-err">WhatsApp to the customer failed: ' + esc(m.wa_detail || '') + '.' + byHand + '</div>';
 
   var row = function (k, v) { return '<div class="msg-kv"><span>' + k + '</span><div>' + v + '</div></div>'; };
 
@@ -425,6 +434,7 @@ async function renderMessageDetail() {
           (MSG_HANDLERS_ERR ? '<div style="font-size:11px;color:var(--red);margin-top:.3rem;">Could not load the list of staff: ' + esc(MSG_HANDLERS_ERR) + '</div>'
             : MSG_HANDLERS.length ? '' : '<div style="font-size:11px;color:var(--ink4);margin-top:.3rem;">Nobody on the list yet. Add people in ⚙ on the Messages tab.</div>') +
           (lastEmail ? '<div class="msg-wa ' + (/Not emailed:/.test(lastEmail.body) ? 'msg-wa-warn' : 'msg-wa-ok') + '">' + esc(lastEmail.body) + ' <span style="opacity:.7;">(' + msgWhen(lastEmail.created_at) + ')</span></div>' : '') +
+          waLine +
         '</div>' +
         // ④ Timeline
         '<div class="msg-card">' +
@@ -503,6 +513,29 @@ async function msgNotify(event) {
   }
 }
 
+// The customer WhatsApp, through the whatsapp edge function. The function
+// records the outcome on the case (wa_status), which the line under
+// Assigned To shows, so only a real failure needs a toast here.
+async function msgWhatsapp() {
+  var m = MSG_CURRENT; if (!m) return;
+  try {
+    var r = await sb.functions.invoke('whatsapp', { body: { action: 'send_case', id: m.id } });
+    if (r.error) {
+      var ctx = r.error.context;
+      if (ctx && ctx.status === 404) { toast('WhatsApp not sent: the whatsapp function is not in Supabase yet', 'error'); return; }
+      var msg = r.error.message || 'failed';
+      if (ctx && typeof ctx.json === 'function') { try { var j = await ctx.json(); if (j && j.error) msg = j.error; } catch (e) {} }
+      toast('WhatsApp not sent: ' + msg, 'error');
+      return;
+    }
+    var d = r.data || {};
+    if (d.ok) toast('Customer notified on WhatsApp');
+    else if (!d.not_configured && !d.disabled) toast('WhatsApp not sent: ' + (d.error || 'failed'), 'error');
+  } catch (e) {
+    toast('WhatsApp not sent: ' + (e.message || e), 'error');
+  }
+}
+
 // ③ Assign & Notify: assign (or notify again), then email the PIC and the
 // customer. Picking nobody unassigns and sends nothing.
 async function sendMessageCase() {
@@ -514,6 +547,7 @@ async function sendMessageCase() {
     if (!confirm('Notify ' + m.assigned_name + ' and the customer about ' + m.ref + ' again?')) return;
     btn.disabled = true; btn.textContent = 'Sending…';
     await msgNotify('assigned');
+    await msgWhatsapp();
     await reloadCurrentMessage();
     return;
   }
@@ -532,7 +566,7 @@ async function sendMessageCase() {
   btn.disabled = true; btn.textContent = h ? 'Sending…' : 'Saving…';
   var r = await sb.from('salesweb_messages').update(upd).eq('id', m.id);
   if (r.error) { toast('Error: ' + r.error.message, 'error'); msgHandlerChanged(); return; }
-  if (h) { toast('Assigned to ' + h.name); await msgNotify('assigned'); }
+  if (h) { toast('Assigned to ' + h.name); await msgNotify('assigned'); await msgWhatsapp(); }
   else toast('Unassigned');
   await reloadCurrentMessage();
 }

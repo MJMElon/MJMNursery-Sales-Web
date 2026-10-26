@@ -29,6 +29,7 @@ var SW_TAB_DEFS = [
   { key: 'products',   label: 'Products' },
   { key: 'payments',   label: 'Payments' },
   { key: 'messages',   label: 'Messages' },
+  { key: 'whatsapp',   label: 'WhatsApp' },
   { key: 'seal',       label: 'Seal Management' },
   { key: 'promos',     label: 'Promotions' },
   { key: 'coupons',    label: 'Coupons' },

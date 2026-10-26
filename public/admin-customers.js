@@ -168,6 +168,13 @@ async function loadCustomers(){
   console.log('[loadCustomers]',swCusts.length,'rows after staff filter');
   if(rejected.length) console.log('[loadCustomers] rejected as staff:',rejected);
 
+  // A search can match an account that exists but is NOT a customer row --
+  // marked user_type='system' (staff). That is how a shop login created by
+  // an email code used to land: it could order, it opened from Manage
+  // Orders, and searching for it here said "No customers match". Name those
+  // accounts under the list instead of saying nothing.
+  var hiddenHtml = await custHiddenMatchesHtml(q, swCusts);
+
   // Orders → Has-Paid flag, Total Spent, paid-order COUNT, and outstanding
   // credit per customer (all excluding soft-deleted orders).
   var{data:orderRows}=await sb.from('salesweb_customer_orders')
@@ -246,7 +253,7 @@ async function loadCustomers(){
     } else {
       emptyMsg = 'No customers — all '+rawRowCount+' profiles look like staff. Check sign-up flow is writing role/user_type=customer.';
     }
-    document.getElementById('customers-table').innerHTML='<div class="loading">'+emptyMsg+'</div>';
+    document.getElementById('customers-table').innerHTML=hiddenHtml+'<div class="loading">'+emptyMsg+'</div>';
     return;
   }
 
@@ -292,8 +299,55 @@ async function loadCustomers(){
   if(typeof window.mjmRenderPagination === 'function'){
     html += window.mjmRenderPagination(window._customersPage, totalPages, 'changeCustomersPage', custs.length, pageSize);
   }
-  document.getElementById('customers-table').innerHTML=html;
+  document.getElementById('customers-table').innerHTML=hiddenHtml+html;
 }
+
+// Accounts matching the search box that are not on the Customer List.
+// Staff (office permissions or an admin role) are named and left alone;
+// anybody else gets a button to move them back onto the list.
+async function custHiddenMatchesHtml(q, listed){
+  if(!q) return '';
+  // PostgREST .or() syntax: a comma or bracket in the term would split it.
+  var term=q.replace(/[,()%*\\]/g,' ').trim();
+  if(!term) return '';
+  var res=await sb.from('shared_profiles')
+    .select('id,email,full_name,role,user_type,permissions')
+    .or('full_name.ilike.%'+term+'%,email.ilike.%'+term+'%')
+    .limit(20);
+  if(res.error || !res.data) return '';
+  var shown={}; (listed||[]).forEach(function(c){ shown[c.id]=1; });
+  var hits=res.data.filter(function(p){ return !shown[p.id]; });
+  if(!hits.length) return '';
+  var rows=hits.map(function(p){
+    var staff=isOperationStaff(p.permissions) || (p.role && p.role!=='customer');
+    var who='<b>'+esc(p.full_name||'—')+'</b> · '+esc(p.email||'no email');
+    var why=staff
+      ? '<span style="color:var(--ink4);">has office access ('+esc(p.role||'staff permissions')+') — left off on purpose</span>'
+      : '<span style="color:var(--ink4);">marked as staff ('+esc(p.user_type||'no type')+')</span> '+
+        '<button class="btn btn-outline btn-sm" style="margin-left:.4rem;" onclick="restoreAsCustomer(\''+p.id+'\')">Move to customer list</button>';
+    return '<div style="padding:.35rem 0;font-size:13px;">'+who+' — '+why+'</div>';
+  }).join('');
+  return '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:.7rem 1rem;margin-bottom:1rem;">'+
+    '<div style="font-size:11px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.3rem;">'+
+    hits.length+' matching account'+(hits.length===1?' is':'s are')+' not on the customer list</div>'+rows+'</div>';
+}
+
+// The reverse of hideAsStaff(). Refuses an account with office access --
+// the list leaves those off deliberately, and moving one would put a staff
+// member in front of the customer filters.
+async function restoreAsCustomer(id){
+  var{data:p,error:e1}=await sb.from('shared_profiles').select('email,role,permissions').eq('id',id).maybeSingle();
+  if(e1||!p){ toast('Error: '+(e1?e1.message:'account not found'),'error'); return; }
+  if(isOperationStaff(p.permissions) || (p.role && p.role!=='customer')){
+    toast('This account has office access, so it stays off the customer list.','error'); return;
+  }
+  if(!confirm('Move '+(p.email||'this account')+' to the customer list?'))return;
+  var{error}=await sb.from('shared_profiles').update({user_type:'customer',role:'customer'}).eq('id',id);
+  if(error){ toast('Error: '+error.message,'error'); return; }
+  toast('Moved to the customer list');
+  loadCustomers();
+}
+window.restoreAsCustomer = restoreAsCustomer;
 
 function changeCustomersPage(n){
   window._customersPage = Math.max(1, Number(n)||1);
@@ -369,6 +423,69 @@ function custAvatar(nameOrEmail){
 //  clobbered) + a shared_profiles row tagged as a customer. Same pattern
 //  as the admin "+ Add Order" walk-in customer creation.
 // ═══════════════════════════════════════
+// ═══════════════════════════════════════
+//  LINK PHONES TO WHATSAPP LOGIN
+//  The phone typed on a customer account is only a profile field: signing in
+//  on the shop's WhatsApp tab with it used to open a second, empty login.
+//  The link-profile-phones Edge Function makes it the account's own WhatsApp
+//  login. Preview first (changes nothing), then link on confirm. Its rules
+//  (supabase/functions/link-profile-phones/lib.ts) only link a number nothing
+//  is in doubt about, and list the rest with the reason.
+//  A typed number was never proved: a mistyped one would let the owner of
+//  that wrong number sign in. That is why the list is shown before linking.
+// ═══════════════════════════════════════
+var _lpPreview = null;
+function _lpRows(rows, withReason){
+  if(!rows.length) return '<div style="color:var(--ink4);font-size:12px;padding:.4rem 0;">None</div>';
+  var h='<table class="data-table"><thead><tr><th>Name</th><th>Email</th><th>Phone typed</th><th>Login number</th>'+(withReason?'<th>Why not</th>':'')+'</tr></thead><tbody>';
+  rows.forEach(function(r){
+    h+='<tr><td>'+esc(r.name||'—')+'</td><td>'+esc(r.email||'—')+'</td><td>'+esc(r.typed||'')+'</td><td>'+(r.phone?'+'+esc(r.phone):'—')+'</td>'+(withReason?'<td style="color:#92400e;">'+esc(r.reason||'')+'</td>':'')+'</tr>';
+  });
+  return h+'</tbody></table>';
+}
+async function openLinkPhones(){
+  openModal('modal-link-phones');
+  var body=document.getElementById('lp-body');
+  body.innerHTML='<div class="loading">Checking every customer account…</div>';
+  var r=await sb.functions.invoke('link-profile-phones',{ body:{ apply:false } });
+  if(r.error || !r.data || r.data.error){
+    body.innerHTML='<div class="loading" style="color:#dc2626;">Could not check: '+esc((r.data&&r.data.error)||(r.error&&r.error.message)||'no answer')+'. Is the link-profile-phones function deployed?</div>';
+    return;
+  }
+  _lpPreview=r.data;
+  var n=r.data.linked.length, m=r.data.skipped.length;
+  body.innerHTML=
+    '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:.7rem 1rem;font-size:12px;margin-bottom:1rem;">'+
+      'Each number below becomes that customer\'s WhatsApp login, so the WhatsApp tab on the shop opens their existing account. '+
+      'These numbers were typed, never proved: <b>check them</b>. A wrong number would let its owner sign in to that account.'+
+    '</div>'+
+    '<div style="font-size:12px;font-weight:700;margin-bottom:.4rem;">Will be linked ('+n+')</div>'+_lpRows(r.data.linked,false)+
+    '<div style="font-size:12px;font-weight:700;margin:1rem 0 .4rem;">Left as they are ('+m+')</div>'+_lpRows(r.data.skipped,true)+
+    '<div style="text-align:right;margin-top:1rem;">'+
+      (n?'<button class="btn btn-primary" id="lp-apply" onclick="applyLinkPhones()">Link '+n+' account'+(n===1?'':'s')+'</button>':'<span style="font-size:12px;color:var(--ink4);">Nothing to link.</span>')+
+    '</div>';
+}
+async function applyLinkPhones(){
+  if(!_lpPreview || !_lpPreview.linked.length) return;
+  if(!confirm('Make the phone number the WhatsApp login for '+_lpPreview.linked.length+' customer account(s)?'))return;
+  var btn=document.getElementById('lp-apply'); if(btn){ btn.disabled=true; btn.textContent='Linking…'; }
+  var r=await sb.functions.invoke('link-profile-phones',{ body:{ apply:true } });
+  var body=document.getElementById('lp-body');
+  if(r.error || !r.data || r.data.error){
+    toast('Error: '+((r.data&&r.data.error)||(r.error&&r.error.message)||'no answer'),'error');
+    if(btn){ btn.disabled=false; btn.textContent='Try again'; }
+    return;
+  }
+  _lpPreview=null;
+  body.innerHTML=
+    '<div style="font-size:12px;font-weight:700;margin-bottom:.4rem;color:#059669;">Linked ('+r.data.linked.length+')</div>'+_lpRows(r.data.linked,false)+
+    (r.data.failed.length?'<div style="font-size:12px;font-weight:700;margin:1rem 0 .4rem;color:#dc2626;">Supabase refused ('+r.data.failed.length+')</div>'+_lpRows(r.data.failed,true):'');
+  toast('Linked '+r.data.linked.length+' account(s)');
+  loadCustomers();
+}
+window.openLinkPhones = openLinkPhones;
+window.applyLinkPhones = applyLinkPhones;
+
 function openAddCustomer(){
   document.getElementById('ac-name').value='';
   document.getElementById('ac-email').value='';

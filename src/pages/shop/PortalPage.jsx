@@ -75,7 +75,21 @@ export default function PortalPage() {
                   <div style={css('display:grid;grid-template-columns:1fr 1fr;gap:.8rem;')}>
                     <div className="p-field" style={css('grid-column:1/-1;')}><label>Full Name</label><input type="text" id="pf-name2" /></div>
                     <div className="p-field"><label>Email Address</label><input type="email" id="pf-email2" readOnly /></div>
-                    <div className="p-field"><label>Phone Number</label><input type="tel" id="pf-phone2" /></div>
+                    <div className="p-field"><label>Phone Number</label><input type="tel" id="pf-phone2" onInput={() => window.pRenderWaLink()} /></div>
+                  </div>
+                  {/* WhatsApp login link. The phone above is only a profile
+                      field; this ties it to the LOGIN, proved by a WhatsApp
+                      code, so a WhatsApp sign-in reaches this same account.
+                      Driven by pRenderWaLink / pSendWaLink / pVerifyWaLink. */}
+                  <div id="pf-wa-link" style={css('margin-top:.6rem;font-size:12px;color:var(--text-mid);display:none;')}>
+                    <div style={css('display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;')}>
+                      <span id="pf-wa-status"></span>
+                      <button className="p-btn" id="pf-wa-btn" onClick={() => window.pSendWaLink()}>Use this number for WhatsApp login</button>
+                    </div>
+                    <div id="pf-wa-code-row" style={css('display:none;gap:.5rem;margin-top:.5rem;align-items:center;flex-wrap:wrap;')}>
+                      <input type="text" id="pf-wa-code" placeholder="Code from WhatsApp" maxLength="8" inputMode="numeric" autoComplete="one-time-code" style={css('background:var(--cream);border:1px solid var(--green-pale);border-radius:8px;padding:.45rem .7rem;font-size:13px;width:11rem;font-family:inherit;')} />
+                      <button className="p-save-btn" onClick={() => window.pVerifyWaLink()}>Confirm</button>
+                    </div>
                   </div>
                   <div style={css('text-align:right;margin-top:.8rem;')}>
                     <button className="p-save-btn" onClick={() => window.saveProfileDetails()}>Save</button>

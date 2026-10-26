@@ -1429,6 +1429,76 @@ export function initShopMain() {
       }
       showPortalToast('Account details saved');
     }catch(e){showPortalToast('Error saving: '+e.message);}
+    pRenderWaLink();
+  }
+
+  // ── WhatsApp login link (My Account) ──
+  // The Phone Number field is a PROFILE field (shared_profiles.phone) and
+  // Supabase Auth has never heard of it. A customer who signed up by email
+  // and then signs in with a WhatsApp code to that number gets a SECOND,
+  // empty login: no orders, no points, a duplicate on Manage Customers.
+  // So the number is tied to the login itself with auth.updateUser({phone}),
+  // proved by a code sent through the same Send SMS Hook (so it arrives on
+  // WhatsApp) and confirmed with verifyOtp type 'phone_change'. Typed phone
+  // numbers are never copied into the login unproved: a typo would hand the
+  // account to whoever owns the mistyped number.
+  var pWaLinkPhone = '';
+  function pDigits(v){ return String(v||'').replace(/\D/g,''); }
+  async function pRenderWaLink(){
+    var box=document.getElementById('pf-wa-link'); if(!box) return;
+    var want=clNormalisePhone(((document.getElementById('pf-phone2')||{}).value||'').trim());
+    if(!want){ box.style.display='none'; return; }
+    var linked='';
+    try{ var s=await _sb.auth.getSession(); linked=(s && s.data && s.data.session && s.data.session.user && s.data.session.user.phone)||''; }catch(e){}
+    var st=document.getElementById('pf-wa-status'), btn=document.getElementById('pf-wa-btn');
+    box.style.display='block';
+    if(linked && pDigits(linked)===pDigits(want)){
+      st.textContent='✓ WhatsApp login is linked to this number';
+      st.style.color='var(--green-dark)';
+      btn.style.display='none';
+      document.getElementById('pf-wa-code-row').style.display='none';
+    } else {
+      st.textContent=linked
+        ? 'WhatsApp login uses +'+pDigits(linked)+', not this number.'
+        : 'This number cannot sign in by WhatsApp yet.';
+      st.style.color='';
+      btn.style.display='';
+    }
+  }
+  async function pSendWaLink(){
+    var want=clNormalisePhone(((document.getElementById('pf-phone2')||{}).value||'').trim());
+    if(!want){ showPortalToast('Enter your phone number first'); return; }
+    var btn=document.getElementById('pf-wa-btn'); btn.disabled=true; btn.textContent='Sending...';
+    try{
+      var r=await _sb.auth.updateUser({ phone: want });
+      if(r.error) throw r.error;
+      pWaLinkPhone=want;
+      document.getElementById('pf-wa-code-row').style.display='flex';
+      document.getElementById('pf-wa-code').focus();
+      showPortalToast('Code sent to your WhatsApp');
+    }catch(e){
+      var msg=String((e&&e.message)||e);
+      showPortalToast(/already|registered|exists/i.test(msg)
+        ? 'This number already has its own account. Contact us to combine them.'
+        : 'Could not send the code: '+msg);
+    }finally{
+      btn.disabled=false; btn.textContent='Use this number for WhatsApp login';
+    }
+  }
+  async function pVerifyWaLink(){
+    var code=((document.getElementById('pf-wa-code')||{}).value||'').trim();
+    if(!pWaLinkPhone||!code){ showPortalToast('Enter the code from WhatsApp'); return; }
+    try{
+      var r=await _sb.auth.verifyOtp({ phone: pWaLinkPhone, token: code, type: 'phone_change' });
+      if(r.error) throw r.error;
+      var uid=r.data && r.data.user && r.data.user.id;
+      if(uid) await _sb.from('shared_profiles').update({ phone: pWaLinkPhone }).eq('id',uid);
+      document.getElementById('pf-phone2').value=pWaLinkPhone;
+      document.getElementById('pf-wa-code').value='';
+      pWaLinkPhone='';
+      showPortalToast('WhatsApp login linked ✅');
+      pRenderWaLink();
+    }catch(e){ showPortalToast('Could not confirm: '+((e&&e.message)||e)); }
   }
 
   async function initPortal(){
@@ -1448,6 +1518,7 @@ export function initShopMain() {
         if(prof&&prof.phone){document.getElementById('pf-phone2').value=prof.phone;}
       }
     }catch(e){console.error('Phone load:',e);}
+    pRenderWaLink();
 
     // Load real orders from database
     await loadCustomerOrders();
@@ -3634,7 +3705,7 @@ export function initShopMain() {
   var clOtpIsSignup = false;      // the code box is asking for a signup confirmation code
   var clInputType = 'phone';        // 'phone' or 'email' — driven by active tab
   var clLoginContext = 'nav';       // 'nav' or 'checkout'
-  var clOtpChannel = 'sms';         // 'sms' or 'whatsapp' — for phone OTP
+  var clOtpChannel = 'whatsapp';    // phone codes go by WhatsApp (send-whatsapp-otp)
 
   function openLoginModal(context) {
     // Login needs supabase-js for auth.signInWithPassword etc — kick off the
@@ -3860,7 +3931,7 @@ export function initShopMain() {
   // Send OTP via SMS, WhatsApp, or Email.
   //   channel: 'sms' | 'whatsapp' | 'email'
   async function clSendOTP(channel) {
-    channel = channel || (clInputType === 'phone' ? 'sms' : 'email');
+    channel = channel || (clInputType === 'phone' ? 'whatsapp' : 'email');
     clOtpChannel = channel;
     var isPhone = channel === 'sms' || channel === 'whatsapp';
 
@@ -3879,6 +3950,20 @@ export function initShopMain() {
       var nameEl = document.getElementById(isPhone ? 'cl-signup-name-phone' : 'cl-signup-name');
       signupName = nameEl ? nameEl.value.trim() : '';
       if (!signupName) { clShowStatus('Please enter your full name.', 'error'); return; }
+    }
+
+    // A number typed into an EMAIL account's profile is not a login. Sending
+    // a code to it here would make a second, empty account, so say where the
+    // account is instead. phone_on_email_account() answers true/false only.
+    // Fails OPEN: no answer means carry on and send the code.
+    if (isPhone) {
+      try {
+        var hint = await _sb.rpc('phone_on_email_account', { p_phone: identity });
+        if (hint && hint.data === true) {
+          clShowStatus('This number is on an account that signs in by email. Sign in with your email once, then link the number under My Account.', 'error');
+          return;
+        }
+      } catch (e) {}
     }
 
     // Disable the channel button for this transaction
@@ -3909,7 +3994,7 @@ export function initShopMain() {
       if (clickedBtn) clickedBtn.textContent = origLabel;
       return;
     }
-    var destLabel = channel === 'whatsapp' ? 'WhatsApp message sent to ' : channel === 'sms' ? 'SMS sent to ' : 'Code sent to ';
+    var destLabel = channel === 'whatsapp' ? 'Code sent to your WhatsApp at ' : channel === 'sms' ? 'SMS sent to ' : 'Code sent to ';
     clShowStatus(destLabel + identity, 'success');
 
     // Show the right OTP row + focus
@@ -3950,7 +4035,7 @@ export function initShopMain() {
     var otp = (isPhone
       ? document.getElementById('cl-otp-code-phone').value
       : document.getElementById('cl-otp-code').value).trim();
-    if (!identity || !otp) { clShowStatus('Please enter the 8-digit code.', 'error'); return; }
+    if (!identity || !otp) { clShowStatus(isPhone ? 'Please enter the code from WhatsApp.' : 'Please enter the 8-digit code.', 'error'); return; }
     clShowStatus('Verifying...', 'success');
     // For Supabase verifyOtp, the type is 'sms' for both SMS and WhatsApp channels.
     var opts = isPhone
@@ -4001,7 +4086,7 @@ export function initShopMain() {
     if (e.target.id === 'cl-otp-code') clVerifyOTP('email');
     else if (e.target.id === 'cl-otp-code-phone') clVerifyOTP('phone');
     else if (e.target.id === 'cl-identity' || e.target.id === 'cl-password') clLoginPassword();
-    else if (e.target.id === 'cl-phone') clSendOTP('sms');
+    else if (e.target.id === 'cl-phone') clSendOTP('whatsapp');
   });
 
   // Sign out
@@ -4278,6 +4363,7 @@ export function initShopMain() {
     removeCartItem, changeCartQty, setCartQty, proceedToCheckout,
     // portal (static tabs + generated order cards / detail modal)
     pShowOrderView, pShowOrdersSubTab, pFilterOrders, saveProfileDetails, toggleCollapse,
+    pRenderWaLink, pSendWaLink, pVerifyWaLink,
     showPw, hidePw,
     goPayOrder, openOrderDetail, downloadOrder, pCancelOrder,
     pOpenRating, pSetRating, pSubmitRating,

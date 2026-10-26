@@ -2534,6 +2534,18 @@ async function renderItemsEditMode(orderId){
   var{data:items}=await sb.from('salesweb_order_items').select('*').eq('order_id',orderId).order('id');
   items=items||[];
   window._editItems=items.map(function(it){return{id:it.id,product_id:it.product_id||null,product_name:it.product_name||'',unit_price:Number(it.unit_price)||0,quantity:Number(it.quantity)||0,_action:'keep'};});
+  // Preload the published-products list so each row renders the same
+  // product-picker dropdown the admin new-order flow uses (name, price
+  // and remaining stock in one go), with a "Custom (free text)" option
+  // kept at the bottom so one-off items are still typable. Falls back
+  // to an empty list if the fetch fails — the dropdown still renders,
+  // just with only the Custom option.
+  try{
+    var r=await sb.from('salesweb_products')
+      .select('id,name,price,stock_qty,sell_month,sell_year')
+      .eq('is_published',true).order('name');
+    window._editProducts=(r&&r.data)||[];
+  }catch(e){ window._editProducts=[]; }
   drawItemsEditTable(orderId);
 }
 
@@ -2541,6 +2553,21 @@ function drawItemsEditTable(orderId){
   var all=window._editItems||[];
   var rows=all.filter(function(r){return r._action!=='delete';});
   var subtotalNow=rows.reduce(function(s,r){return s+(Number(r.unit_price)||0)*(Number(r.quantity)||0);},0);
+  var products=window._editProducts||[];
+  // Build the product <select> once; row renderers reuse it with their
+  // own selected value stamped in. Including stock + price in each
+  // option label is the whole reason the admin asked for this picker
+  // on the edit flow.
+  function buildProductOpts(currentId, isCustom){
+    var opts='<option value="">— Select product —</option>';
+    products.forEach(function(p){
+      var sel=(currentId && String(currentId)===String(p.id))?' selected':'';
+      var hint=' (RM '+fmtMYR(p.price)+(p.stock_qty!=null?' · '+p.stock_qty+' avail':'')+')';
+      opts+='<option value="'+esc(p.id)+'"'+sel+'>'+esc(p.name)+hint+'</option>';
+    });
+    opts+='<option value="__custom__"'+(isCustom?' selected':'')+'>— Custom (free text) —</option>';
+    return opts;
+  }
   var html='<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:.5rem .7rem;font-size:11px;color:#92400e;margin-bottom:.5rem;">⚠️ Editing items will recalculate the order total (discount and coupon are preserved). Click <strong>Save Changes</strong> when done.</div>';
   html+='<table class="data-table"><thead><tr><th>Product</th><th style="text-align:right;width:110px;">Price (RM)</th><th style="text-align:right;width:80px;">Qty</th><th style="text-align:right;width:100px;">Subtotal</th><th style="width:40px;"></th></tr></thead><tbody>';
   if(!rows.length){
@@ -2549,8 +2576,17 @@ function drawItemsEditTable(orderId){
   rows.forEach(function(r){
     var idx=all.indexOf(r);
     var rowSub=(Number(r.unit_price)||0)*(Number(r.quantity)||0);
+    // Row-level product cell: dropdown on top; name input below. If a
+    // catalogue product is picked, the name is readonly (fed by the
+    // picker); if "Custom" is picked, the admin types in the name
+    // directly. Mirrors the new-order flow for consistency.
+    var isCustom=!r.product_id && (r.product_name||'').length>0;
+    var opts=buildProductOpts(r.product_id, isCustom);
+    var nameInput=r.product_id
+      ? '<input class="form-input" type="text" value="'+esc(r.product_name||'')+'" readonly style="background:#f8fafc;color:#475569;font-size:12px;padding:4px 8px;margin-top:.3rem;width:100%;">'
+      : '<input class="form-input" type="text" value="'+esc(r.product_name||'')+'" placeholder="Item name" oninput="updateEditItem('+idx+',\'product_name\',this.value)" style="font-size:12px;padding:4px 8px;margin-top:.3rem;width:100%;">';
     html+='<tr>';
-    html+='<td><input class="form-input" type="text" value="'+esc(r.product_name)+'" oninput="updateEditItem('+idx+',\'product_name\',this.value)" style="font-size:12px;padding:4px 8px;width:100%;"></td>';
+    html+='<td><select class="form-input" onchange="onEditItemProductSelect('+idx+',this.value,\''+orderId+'\')" style="font-size:12px;padding:4px 8px;width:100%;">'+opts+'</select>'+nameInput+'</td>';
     html+='<td style="text-align:right;"><input class="form-input" type="number" step="0.01" min="0" value="'+r.unit_price+'" oninput="updateEditItemNum('+idx+',\'unit_price\',this.value,\''+orderId+'\')" style="font-size:12px;padding:4px 8px;text-align:right;width:100%;"></td>';
     html+='<td style="text-align:right;"><input class="form-input" type="number" min="0" step="1" value="'+r.quantity+'" oninput="updateEditItemNum('+idx+',\'quantity\',this.value,\''+orderId+'\')" style="font-size:12px;padding:4px 8px;text-align:right;width:100%;"></td>';
     html+='<td style="text-align:right;font-weight:600;font-size:12px;">RM '+fmtMYR(rowSub)+'</td>';
@@ -2558,9 +2594,13 @@ function drawItemsEditTable(orderId){
     html+='</tr>';
   });
   html+='</tbody></table>';
-  // Add new row
+  // Add new row — product picker drives name + price (and both can be
+  // overridden before +Add Item). Custom row flips the picker to the
+  // "Custom (free text)" option and reveals a plain name field.
+  var newRowOpts=buildProductOpts(null, false);
   html+='<div style="display:flex;gap:.4rem;margin-top:.6rem;align-items:center;flex-wrap:wrap;background:var(--bg);padding:.5rem;border-radius:8px;">';
-  html+='<input class="form-input" id="mo-new-item-name" placeholder="Product name" style="flex:1;min-width:160px;font-size:12px;padding:6px 10px;">';
+  html+='<select class="form-input" id="mo-new-item-select" onchange="onNewEditRowProductSelect(this.value)" style="flex:1;min-width:200px;font-size:12px;padding:6px 10px;">'+newRowOpts+'</select>';
+  html+='<input class="form-input" id="mo-new-item-name" placeholder="Product name (custom)" style="flex:1;min-width:160px;font-size:12px;padding:6px 10px;display:none;">';
   html+='<input class="form-input" id="mo-new-item-price" type="number" step="0.01" min="0" placeholder="Price" style="width:90px;font-size:12px;padding:6px 10px;">';
   html+='<input class="form-input" id="mo-new-item-qty" type="number" min="1" step="1" value="1" style="width:60px;font-size:12px;padding:6px 10px;">';
   html+='<button class="btn btn-outline btn-sm" onclick="addEditItem(\''+orderId+'\')" style="font-size:11px;">+ Add Item</button>';
@@ -2580,6 +2620,62 @@ function updateEditItem(idx,field,value){
   window._editItems[idx][field]=value;
   if(window._editItems[idx]._action==='keep')window._editItems[idx]._action='update';
 }
+
+// Catalogue picker for an EXISTING row in Edit Items. Mirrors
+// onNewOrderProductSelect but writes into window._editItems, flags
+// the row as "update" so saveOrderItems persists it, then redraws
+// the table so the name field flips between readonly (catalogue
+// product) and editable (Custom free-text).
+function onEditItemProductSelect(idx, value, orderId){
+  var it=window._editItems && window._editItems[idx];
+  if(!it) return;
+  if(value==='__custom__'){
+    it.product_id=null;
+    it.product_name='';
+  } else if(value){
+    var p=(window._editProducts||[]).find(function(x){return String(x.id)===String(value);});
+    if(p){
+      it.product_id=p.id;
+      it.product_name=p.name;
+      it.unit_price=Number(p.price)||0;
+    }
+  } else {
+    it.product_id=null;
+    it.product_name='';
+  }
+  if(it._action==='keep') it._action='update';
+  drawItemsEditTable(orderId);
+}
+window.onEditItemProductSelect = onEditItemProductSelect;
+
+// Catalogue picker for the NEW ROW footer in Edit Items. Fills the
+// price input + a hidden-until-needed name input (shown only when the
+// admin picks "Custom"). On "Custom" the name field is revealed; the
+// Price input is left for the admin to type manually.
+function onNewEditRowProductSelect(value){
+  var nameEl=document.getElementById('mo-new-item-name');
+  var priceEl=document.getElementById('mo-new-item-price');
+  if(!nameEl || !priceEl) return;
+  if(value==='__custom__'){
+    nameEl.style.display='';
+    nameEl.value='';
+    nameEl.focus();
+    priceEl.value='';
+    return;
+  }
+  if(!value){
+    nameEl.style.display='none';
+    nameEl.value='';
+    priceEl.value='';
+    return;
+  }
+  var p=(window._editProducts||[]).find(function(x){return String(x.id)===String(value);});
+  if(!p) return;
+  nameEl.style.display='none';
+  nameEl.value=p.name;
+  priceEl.value=Number(p.price)||0;
+}
+window.onNewEditRowProductSelect = onNewEditRowProductSelect;
 
 function updateEditItemNum(idx,field,value,orderId){
   if(!window._editItems||!window._editItems[idx])return;
@@ -2613,16 +2709,29 @@ function removeEditItem(idx,orderId){
 }
 
 function addEditItem(orderId){
+  var selEl=document.getElementById('mo-new-item-select');
   var nameEl=document.getElementById('mo-new-item-name');
   var priceEl=document.getElementById('mo-new-item-price');
   var qtyEl=document.getElementById('mo-new-item-qty');
-  var name=(nameEl.value||'').trim();
+  var selValue=(selEl && selEl.value) || '';
+  var isCustom = (selValue === '__custom__') || (!selValue);
+  // Catalogue pick → carry the product_id so stock accounting + the
+  // product-name hint on the receipt / portal all work the same as a
+  // customer-placed order. Custom → leave product_id null, use the
+  // typed name verbatim.
+  var product_id=null, name='';
+  if (!isCustom){
+    var p=(window._editProducts||[]).find(function(x){return String(x.id)===String(selValue);});
+    if(p){ product_id=p.id; name=p.name; }
+  } else {
+    name=(nameEl && nameEl.value || '').trim();
+  }
   var price=parseFloat(priceEl.value)||0;
   var qty=parseInt(qtyEl.value)||0;
-  if(!name){toast('Enter product name','error');return;}
+  if(!name){toast('Pick a product or type a custom name','error');return;}
   if(qty<=0){toast('Quantity must be > 0','error');return;}
   window._editItems=window._editItems||[];
-  window._editItems.push({id:null,product_id:null,product_name:name,unit_price:price,quantity:qty,_action:'add'});
+  window._editItems.push({id:null,product_id:product_id,product_name:name,unit_price:price,quantity:qty,_action:'add'});
   drawItemsEditTable(orderId);
 }
 

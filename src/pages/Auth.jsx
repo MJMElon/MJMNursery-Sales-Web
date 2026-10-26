@@ -6,7 +6,7 @@ import '../styles/auth.css';
 const LOGO = 'https://cdn.store-assets.com/s/1408881/f/16655641.png';
 
 // Login page — React port of the original auth.html. Behaviour is kept
-// identical: password / OTP (email or SMS) / signup / forgot-password /
+// identical: password / OTP (email or WhatsApp) / signup / forgot-password /
 // recovery flows, email typo suggestions, and the same post-login routing
 // via shared_profiles.permissions.modules.salesweb.
 export default function Auth() {
@@ -34,12 +34,23 @@ export default function Auth() {
 
   const showStatus = (msg, type) => setStatus({ msg, type });
 
+  // Malaysian number to E.164, the shape Supabase stores a phone login in.
+  // Same rule as clNormalisePhone() in src/pages/shop/main.js -- change both.
+  function toE164(raw) {
+    const v = String(raw || '').replace(/[\s\-()]/g, '');
+    if (!v) return '';
+    if (v.startsWith('+')) return v;
+    if (v.startsWith('0')) return '+60' + v.substring(1);
+    if (/^\d{10,}$/.test(v)) return '+' + v;
+    return v;
+  }
+
   function detectInputType(val) {
     typoAcceptedRef.current = false;
     if (val.startsWith('+') || /^\d{8,}$/.test(val)) {
       inputTypeRef.current = 'phone';
       setHint({ kind: 'phone' });
-      setOtpBtn(b => ({ ...b, label: b.disabled ? b.label : 'Send SMS OTP' }));
+      setOtpBtn(b => ({ ...b, label: b.disabled ? b.label : 'Send WhatsApp Code' }));
     } else if (val.includes('@')) {
       inputTypeRef.current = 'email';
       const suggestion = checkEmailTypo(val);
@@ -148,21 +159,26 @@ export default function Auth() {
 
     setOtpBtn({ disabled: true, label: 'Sending...' });
 
-    // The metadata is read only when the code CREATES the account, and then
-    // makes it a customer. Without it a first-time code login was filed as a
-    // system account, hidden from the customer list.
-    const meta = { data: { user_type: 'customer' } };
-    const opts = inputTypeRef.current === 'phone' ? { phone: id, options: meta } : { email: id, options: meta };
+    // Tag the login as a customer: if this address has no login yet, the
+    // code creates one, and untagged the office trigger files it as staff
+    // (user_type='system'), off the admin Customer List. Supabase only
+    // applies this metadata on CREATE, so existing accounts are untouched.
+    const options = { data: { user_type: 'customer' } };
+    // A phone code goes on WhatsApp (send-whatsapp-otp, via the Send SMS
+    // Hook). Supabase wants the number as +60..., not as typed.
+    const opts = inputTypeRef.current === 'phone'
+      ? { phone: toE164(id), options: { ...options, channel: 'whatsapp' } }
+      : { email: id, options };
     setOtpIsSignup(false);
     const { error } = await supabase.auth.signInWithOtp(opts);
 
     if (error) {
       showStatus(error.message, 'error');
-      setOtpBtn({ disabled: false, label: inputTypeRef.current === 'phone' ? 'Send SMS OTP' : 'Send Email OTP' });
+      setOtpBtn({ disabled: false, label: inputTypeRef.current === 'phone' ? 'Send WhatsApp Code' : 'Send Email OTP' });
       return;
     }
 
-    showStatus(inputTypeRef.current === 'phone' ? 'SMS sent to ' + id : 'Code sent to ' + id, 'success');
+    showStatus(inputTypeRef.current === 'phone' ? 'Code sent to your WhatsApp at ' + id : 'Code sent to ' + id, 'success');
     setOtpRowShown(true);
     setTimeout(() => otpInputRef.current?.focus(), 0);
 
@@ -173,7 +189,7 @@ export default function Auth() {
       cd--;
       if (cd <= 0) {
         clearInterval(countdownRef.current);
-        setOtpBtn({ disabled: false, label: inputTypeRef.current === 'phone' ? 'Resend SMS' : 'Resend Code' });
+        setOtpBtn({ disabled: false, label: 'Resend Code' });
       } else {
         setOtpBtn({ disabled: true, label: 'Resend (' + cd + ')' });
       }
@@ -183,11 +199,11 @@ export default function Auth() {
   async function verifyOTP() {
     const id = identity.trim();
     const otp = otpCode.trim();
-    if (!id || !otp) { showStatus('Please enter the 8-digit code.', 'error'); return; }
+    if (!id || !otp) { showStatus(inputTypeRef.current === 'phone' ? 'Please enter the code from WhatsApp.' : 'Please enter the 8-digit code.', 'error'); return; }
 
     showStatus('Verifying...', 'success');
     const opts = inputTypeRef.current === 'phone'
-      ? { phone: id, token: otp, type: 'sms' }
+      ? { phone: toE164(id), token: otp, type: 'sms' }
       : { email: id, token: otp, type: otpIsSignup ? 'signup' : 'email' };
 
     let { data, error } = await supabase.auth.verifyOtp(opts);
@@ -290,7 +306,7 @@ export default function Auth() {
                 onKeyDown={onEnter(loginWithPassword)}
               />
               <div className="input-hint" style={hint.kind === 'suggest' ? { color: '#fca5a5' } : hint.kind === 'corrected' ? { color: '#86efac' } : undefined}>
-                {hint.kind === 'phone' && <>☎ Phone detected — OTP will be sent via SMS</>}
+                {hint.kind === 'phone' && <>💬 Phone detected — the code will be sent on WhatsApp</>}
                 {hint.kind === 'email' && <>✉ Email detected — OTP will be sent to your inbox</>}
                 {hint.kind === 'corrected' && <>✅ Email corrected!</>}
                 {hint.kind === 'suggest' && (

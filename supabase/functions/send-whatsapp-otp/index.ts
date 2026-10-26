@@ -21,7 +21,7 @@
 //   supabase secrets set SEND_SMS_HOOK_SECRET='v1,whsec_...'
 //
 // WHATSAPP_TOKEN and WHATSAPP_PHONE_NUMBER_ID are the same two secrets
-// send-case-whatsapp reads: one number, one token, for both.
+// the whatsapp function reads: one number, one token, for both.
 //
 // The template must be category AUTHENTICATION with a Copy code button.
 // Meta writes its wording; the only variable is the code.

@@ -2,7 +2,7 @@
 // I/O, so this file can be tested on its own (tests/whatsapp_otp_hook.mjs).
 
 // Malaysian numbers as WhatsApp wants them: digits only, country code first.
-// Same rule as waNumber() in ../send-case-whatsapp/index.ts and
+// Same rule as waNumber() in ../whatsapp/index.ts and
 // public/admin-messages.js — change all three.
 export function waNumber(raw: string | null | undefined): string {
   const d = String(raw || '').replace(/\D/g, '')

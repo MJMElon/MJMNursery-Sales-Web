@@ -402,3 +402,31 @@ input,select,textarea,button{font-family:inherit;}
   .msg-mile-label{font-size:11px;}
   .msg-mile-when,.msg-mile-who{font-size:10px;}
 }
+
+/* ── WhatsApp tab (public/admin-whatsapp.js) ─────────────────────── */
+.wa-card-head{display:flex;justify-content:space-between;align-items:center;gap:.6rem;margin-bottom:.6rem;}
+.wa-hint{font-size:12px;color:var(--ink3);line-height:1.5;margin-bottom:.7rem;}
+.wa-event{display:grid;grid-template-columns:1fr 300px;gap:1rem;padding:.9rem 0;border-top:1px solid var(--border);}
+.wa-event-soon{grid-template-columns:1fr;opacity:.65;}
+.wa-event-main{display:flex;flex-direction:column;gap:.3rem;min-width:0;}
+.wa-event-ctl{display:flex;flex-direction:column;gap:.45rem;min-width:0;}
+.wa-event-ctl select{width:100%;}
+#tab-whatsapp .card{min-width:0;overflow-wrap:anywhere;}
+.wa-switch{display:flex;align-items:center;gap:.45rem;font-size:13px;font-weight:600;cursor:pointer;}
+.wa-switch input{width:16px;height:16px;accent-color:#25d366;}
+.wa-phone{background:#efeae2;border-radius:10px;padding:.8rem;}
+.wa-bubble{background:#fff;border-radius:8px;border-top-left-radius:0;padding:.55rem .7rem;font-size:13px;line-height:1.5;color:#111;box-shadow:0 1px 1px rgba(0,0,0,.08);max-width:460px;margin-top:.4rem;white-space:normal;word-wrap:break-word;}
+.wa-phone .wa-bubble{margin-top:0;}
+.wa-bubble-sm{font-size:12px;background:#f0fdf4;border:1px solid #bbf7d0;box-shadow:none;}
+.wa-bubble-foot{font-size:11px;color:#667781;margin-top:.35rem;}
+.wa-unknown{background:var(--red-light);color:#b91c1c;border-radius:3px;padding:0 2px;}
+.wa-tpl{padding:.8rem 0;border-top:1px solid var(--border);}
+.wa-tpl-head{display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;}
+.wa-chips{display:flex;flex-wrap:wrap;gap:.35rem;margin-bottom:.4rem;}
+.wa-chip{border:1px solid #86efac;background:#f0fdf4;color:#15803d;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;cursor:pointer;}
+.wa-chip:hover{background:#dcfce7;}
+.wa-two{display:grid;grid-template-columns:1fr 180px;gap:.8rem;}
+@media (max-width:768px){
+  .wa-event{grid-template-columns:1fr;}
+  .wa-two{grid-template-columns:1fr;}
+}

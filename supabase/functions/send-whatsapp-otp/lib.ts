@@ -78,6 +78,21 @@ export function otpMessage(to: string, otp: string, template: string, lang: stri
   }
 }
 
+// Which number the code goes to. A sign-in code is for the login's own
+// phone (user.phone). A code that LINKS a number to an existing login
+// (auth.updateUser({ phone }), sms_type 'phone_change') is for the NEW
+// number, which Supabase sends as user.new_phone while user.phone is still
+// empty or the old one. Reading only user.phone refused every link with a
+// 400 that the customer saw as "cannot send the code".
+export function hookPhone(payload: {
+  user?: { phone?: string | null; new_phone?: string | null }
+  sms?: { sms_type?: string | null }
+}): string {
+  const u = payload.user || {}
+  if (payload.sms?.sms_type === 'phone_change' && u.new_phone) return u.new_phone
+  return u.phone || u.new_phone || ''
+}
+
 // What Supabase Auth expects back when a hook fails: it shows the message
 // to the customer instead of saying the code was sent.
 export function hookError(message: string, httpCode = 500) {

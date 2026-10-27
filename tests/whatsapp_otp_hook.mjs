@@ -3,7 +3,7 @@
 // signature check (the only thing standing between the function URL and a
 // paid WhatsApp message) and the Graph API body Meta expects.
 import { createHmac } from 'node:crypto'
-import { verifyHook, otpMessage, waNumber, hookError } from '../supabase/functions/send-whatsapp-otp/lib.ts'
+import { verifyHook, otpMessage, waNumber, hookError, hookPhone } from '../supabase/functions/send-whatsapp-otp/lib.ts'
 
 let fail = 0
 const ok = (c, m) => { console.log((c ? 'ok   ' : 'FAIL ') + m); if (!c) fail++ }
@@ -36,6 +36,11 @@ ok(m.template.components[0].type === 'body' && m.template.components[0].paramete
 const btn = m.template.components[1]
 ok(btn.type === 'button' && btn.sub_type === 'url' && btn.index === '0' && btn.parameters[0].text === '482913', 'code on the Copy code button')
 ok(hookError('x').error.http_code === 500 && hookError('x', 401).error.http_code === 401, 'hook error shape')
+
+ok(hookPhone({ user: { phone: '60123456789' }, sms: { sms_type: 'sms' } }) === '60123456789', 'sign-in code goes to user.phone')
+ok(hookPhone({ user: { phone: '', new_phone: '601116063043' }, sms: { sms_type: 'phone_change' } }) === '601116063043', 'link code goes to user.new_phone')
+ok(hookPhone({ user: { phone: '60123456789', new_phone: '601116063043' }, sms: { sms_type: 'phone_change' } }) === '601116063043', 'changing number: code goes to the NEW number')
+ok(hookPhone({ user: {}, sms: {} }) === '', 'no number at all gives nothing')
 
 console.log(fail ? `\n${fail} FAILED` : '\nall passed')
 process.exit(fail ? 1 : 0)

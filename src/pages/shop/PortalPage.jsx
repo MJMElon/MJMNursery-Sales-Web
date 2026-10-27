@@ -82,7 +82,7 @@ export default function PortalPage() {
                   <div style={css('display:grid;grid-template-columns:1fr 1fr;gap:.8rem;')}>
                     <div className="p-field" style={css('grid-column:1/-1;')}><label>Full Name</label><input type="text" id="pf-name2" /></div>
                     <div className="p-field"><label>Email Address</label><input type="email" id="pf-email2" readOnly /></div>
-                    <div className="p-field"><label>Phone Number <span style={css('text-transform:none;letter-spacing:0;font-weight:500;')}>(60 12-3456789)</span></label><input type="tel" id="pf-phone2" placeholder="60 12-3456789" inputMode="tel" onInput={() => window.pRenderWaLink()} />
+                    <div className="p-field"><label>Phone Number <span style={css('text-transform:none;letter-spacing:0;font-weight:500;')}>(60 12-3456789)</span></label><input type="tel" id="pf-phone2" inputMode="tel" onInput={() => window.pRenderWaLink()} />
                       {/* WhatsApp login link, right under the phone box. The
                           phone is only a profile field; this ties it to the
                           LOGIN, proved by a WhatsApp code, so a WhatsApp

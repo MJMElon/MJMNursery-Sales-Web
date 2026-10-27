@@ -26,7 +26,7 @@
 // The template must be category AUTHENTICATION with a Copy code button.
 // Meta writes its wording; the only variable is the code.
 
-import { hookError, otpMessage, verifyHook, waNumber } from './lib.ts'
+import { hookError, hookPhone, otpMessage, verifyHook, waNumber } from './lib.ts'
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -43,10 +43,10 @@ Deno.serve(async (req) => {
   }, Deno.env.get('SEND_SMS_HOOK_SECRET') || '')
   if (!ok) return json(hookError('Invalid hook signature', 401), 401)
 
-  let payload: { user?: { phone?: string }; sms?: { otp?: string } }
+  let payload: { user?: { phone?: string; new_phone?: string }; sms?: { otp?: string; sms_type?: string } }
   try { payload = JSON.parse(body) } catch { return json(hookError('Bad payload', 400), 400) }
 
-  const to = waNumber(payload.user?.phone)
+  const to = waNumber(hookPhone(payload))
   const otp = String(payload.sms?.otp || '')
   if (!to || !otp) return json(hookError('No phone number or code to send', 400), 400)
 

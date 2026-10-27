@@ -30,7 +30,14 @@ export default function PortalPage() {
             <div className="portal-tab-group" role="tablist" aria-label="Portal sections">
               <button className="portal-tab active" id="ptab-myorder" role="tab" aria-selected="true" onClick={(e) => window.pShowOrderView('myorder', e.currentTarget)}>My Order</button>
               <button className="portal-tab" id="ptab-messages" role="tab" aria-selected="false" onClick={(e) => window.pShowOrderView('messages', e.currentTarget)}>My Case</button>
-              <button className="portal-tab" id="ptab-profile" role="tab" aria-selected="false" onClick={(e) => window.pShowOrderView('profile', e.currentTarget)}>My Profile</button>
+              <button className="portal-tab" id="ptab-profile" role="tab" aria-selected="false" onClick={(e) => window.pShowOrderView('profile', e.currentTarget)} style={css('position:relative;')}>My Profile
+                {/* Floating WhatsApp bubble: shown by pRenderWaNudge() only
+                    while this login has no WhatsApp number, to say that
+                    My Profile is where WhatsApp login is set up. */}
+                <span className="wa-nudge" id="ptab-wa-nudge" aria-label="Set up WhatsApp login here" title="Set up WhatsApp login here" style={css('display:none;')}>
+                  <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="#25D366" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.1l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.8 11.9 11.9 0 0 0 4.6 4c1.7.7 2.3.8 3.2.6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2l-.5-.3Z"/></svg>
+                </span>
+              </button>
             </div>
 
             {/* My Order section — underline sub-tabs + search + list panel.
@@ -75,20 +82,20 @@ export default function PortalPage() {
                   <div style={css('display:grid;grid-template-columns:1fr 1fr;gap:.8rem;')}>
                     <div className="p-field" style={css('grid-column:1/-1;')}><label>Full Name</label><input type="text" id="pf-name2" /></div>
                     <div className="p-field"><label>Email Address</label><input type="email" id="pf-email2" readOnly /></div>
-                    <div className="p-field"><label>Phone Number</label><input type="tel" id="pf-phone2" onInput={() => window.pRenderWaLink()} /></div>
-                  </div>
-                  {/* WhatsApp login link. The phone above is only a profile
-                      field; this ties it to the LOGIN, proved by a WhatsApp
-                      code, so a WhatsApp sign-in reaches this same account.
-                      Driven by pRenderWaLink / pSendWaLink / pVerifyWaLink. */}
-                  <div id="pf-wa-link" style={css('margin-top:.6rem;font-size:12px;color:var(--text-mid);display:none;')}>
-                    <div style={css('display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;')}>
-                      <span id="pf-wa-status"></span>
-                      <button className="p-btn" id="pf-wa-btn" onClick={() => window.pSendWaLink()}>Use this number for WhatsApp login</button>
-                    </div>
-                    <div id="pf-wa-code-row" style={css('display:none;gap:.5rem;margin-top:.5rem;align-items:center;flex-wrap:wrap;')}>
-                      <input type="text" id="pf-wa-code" placeholder="Code from WhatsApp" maxLength="8" inputMode="numeric" autoComplete="one-time-code" style={css('background:var(--cream);border:1px solid var(--green-pale);border-radius:8px;padding:.45rem .7rem;font-size:13px;width:11rem;font-family:inherit;')} />
-                      <button className="p-save-btn" onClick={() => window.pVerifyWaLink()}>Confirm</button>
+                    <div className="p-field"><label>Phone Number <span style={css('text-transform:none;letter-spacing:0;font-weight:500;')}>(60 12-3456789)</span></label><input type="tel" id="pf-phone2" placeholder="60 12-3456789" inputMode="tel" onInput={() => window.pRenderWaLink()} />
+                      {/* WhatsApp login link, right under the phone box. The
+                          phone is only a profile field; this ties it to the
+                          LOGIN, proved by a WhatsApp code, so a WhatsApp
+                          sign-in reaches this same account.
+                          Driven by pRenderWaLink / pSendWaLink / pVerifyWaLink. */}
+                      <div id="pf-wa-link" style={css('margin-top:.45rem;font-size:12px;color:var(--text-mid);display:none;')}>
+                        <span id="pf-wa-status" style={css('display:none;color:var(--green-dark);font-weight:600;')}>✓ Linked for WhatsApp OTP login</span>
+                        <button className="p-btn" id="pf-wa-btn" onClick={() => window.pSendWaLink()}>Link for WhatsApp OTP login</button>
+                        <div id="pf-wa-code-row" style={css('display:none;gap:.5rem;margin-top:.5rem;align-items:center;flex-wrap:wrap;')}>
+                          <input type="text" id="pf-wa-code" placeholder="Code from WhatsApp" maxLength="8" inputMode="numeric" autoComplete="one-time-code" style={css('background:var(--cream);border:1px solid var(--green-pale);border-radius:8px;padding:.45rem .7rem;font-size:13px;width:11rem;font-family:inherit;')} />
+                          <button className="p-save-btn" onClick={() => window.pVerifyWaLink()}>Confirm</button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                   <div style={css('text-align:right;margin-top:.8rem;')}>

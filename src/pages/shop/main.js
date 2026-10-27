@@ -1417,10 +1417,18 @@ export function initShopMain() {
       var uid=sess?.data?.session?.user?.id;
       if(!uid){showPortalToast('Please log in first');return;}
       var name=document.getElementById('pf-name2').value.trim();
-      var phone=document.getElementById('pf-phone2').value.trim();
+      var phoneEl=document.getElementById('pf-phone2');
+      var phone=phoneEl.value.trim();
       var updates={};
       if(name)updates.full_name=name;
-      if(phone)updates.phone=phone;
+      if(phone){
+        // A Malaysian mobile or nothing: 60 12-3456789 (a leading 0 or +60
+        // is accepted and rewritten). Anything else is not saved at all.
+        var e164=pMyMobile(phone);
+        if(!e164){ showPortalToast('Phone must be a Malaysian mobile, e.g. 60 12-3456789'); phoneEl.focus(); return; }
+        updates.phone=e164;
+        phoneEl.value=pFmtPhone(e164);
+      }
       if(Object.keys(updates).length){
         await _sb.from('shared_profiles').update(updates).eq('id',uid);
         // Also update auth metadata for name
@@ -1444,30 +1452,42 @@ export function initShopMain() {
   // account to whoever owns the mistyped number.
   var pWaLinkPhone = '';
   function pDigits(v){ return String(v||'').replace(/\D/g,''); }
+  // '+601…' for a Malaysian mobile (60 1x, 11 or 12 digits), else ''.
+  // Same shape the link-everyone button accepted, so one rule for both.
+  function pMyMobile(raw){
+    var e=clNormalisePhone(String(raw||'').trim());
+    return /^\+601\d{8,9}$/.test(e) ? e : '';
+  }
+  // +60123456789 -> 60 12-3456789 ; +601123456789 -> 60 11-23456789
+  function pFmtPhone(raw){
+    var e=pMyMobile(raw); if(!e) return String(raw||'');
+    var d=e.slice(3);
+    return '60 '+d.slice(0,2)+'-'+d.slice(2);
+  }
+  async function pSessionPhone(){
+    try{ var s=await _sb.auth.getSession(); return (s && s.data && s.data.session && s.data.session.user && s.data.session.user.phone)||''; }catch(e){ return ''; }
+  }
+  // The bubble over My Profile: only while this login has no WhatsApp number.
+  async function pRenderWaNudge(){
+    var n=document.getElementById('ptab-wa-nudge'); if(!n) return;
+    n.style.display = (await pSessionPhone()) ? 'none' : 'flex';
+  }
   async function pRenderWaLink(){
+    pRenderWaNudge();
     var box=document.getElementById('pf-wa-link'); if(!box) return;
-    var want=clNormalisePhone(((document.getElementById('pf-phone2')||{}).value||'').trim());
+    var want=pMyMobile((document.getElementById('pf-phone2')||{}).value);
     if(!want){ box.style.display='none'; return; }
-    var linked='';
-    try{ var s=await _sb.auth.getSession(); linked=(s && s.data && s.data.session && s.data.session.user && s.data.session.user.phone)||''; }catch(e){}
+    var linked=await pSessionPhone();
     var st=document.getElementById('pf-wa-status'), btn=document.getElementById('pf-wa-btn');
     box.style.display='block';
-    if(linked && pDigits(linked)===pDigits(want)){
-      st.textContent='✓ WhatsApp login is linked to this number';
-      st.style.color='var(--green-dark)';
-      btn.style.display='none';
-      document.getElementById('pf-wa-code-row').style.display='none';
-    } else {
-      st.textContent=linked
-        ? 'WhatsApp login uses +'+pDigits(linked)+', not this number.'
-        : 'This number cannot sign in by WhatsApp yet.';
-      st.style.color='';
-      btn.style.display='';
-    }
+    var same = linked && pDigits(linked)===pDigits(want);
+    st.style.display = same ? 'inline' : 'none';
+    btn.style.display = same ? 'none' : '';
+    if(same) document.getElementById('pf-wa-code-row').style.display='none';
   }
   async function pSendWaLink(){
-    var want=clNormalisePhone(((document.getElementById('pf-phone2')||{}).value||'').trim());
-    if(!want){ showPortalToast('Enter your phone number first'); return; }
+    var want=pMyMobile((document.getElementById('pf-phone2')||{}).value);
+    if(!want){ showPortalToast('Phone must be a Malaysian mobile, e.g. 60 12-3456789'); return; }
     var btn=document.getElementById('pf-wa-btn'); btn.disabled=true; btn.textContent='Sending...';
     try{
       var r=await _sb.auth.updateUser({ phone: want });
@@ -1482,7 +1502,7 @@ export function initShopMain() {
         ? 'This number already has its own account. Contact us to combine them.'
         : 'Could not send the code: '+msg);
     }finally{
-      btn.disabled=false; btn.textContent='Use this number for WhatsApp login';
+      btn.disabled=false; btn.textContent='Link for WhatsApp OTP login';
     }
   }
   async function pVerifyWaLink(){
@@ -1493,7 +1513,7 @@ export function initShopMain() {
       if(r.error) throw r.error;
       var uid=r.data && r.data.user && r.data.user.id;
       if(uid) await _sb.from('shared_profiles').update({ phone: pWaLinkPhone }).eq('id',uid);
-      document.getElementById('pf-phone2').value=pWaLinkPhone;
+      document.getElementById('pf-phone2').value=pFmtPhone(pWaLinkPhone);
       document.getElementById('pf-wa-code').value='';
       pWaLinkPhone='';
       showPortalToast('WhatsApp login linked ✅');
@@ -1515,7 +1535,7 @@ export function initShopMain() {
       var uid=sess?.data?.session?.user?.id;
       if(uid){
         var{data:prof}=await _sb.from('shared_profiles').select('phone').eq('id',uid).single();
-        if(prof&&prof.phone){document.getElementById('pf-phone2').value=prof.phone;}
+        if(prof&&prof.phone){document.getElementById('pf-phone2').value=pFmtPhone(prof.phone);}
       }
     }catch(e){console.error('Phone load:',e);}
     pRenderWaLink();

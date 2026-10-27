@@ -1142,6 +1142,8 @@
   .wa-nudge::before,.wa-nudge::after{content:'';position:absolute;background:#fff;border:1px solid #c8eed6;border-radius:50%;}
   .wa-nudge::before{width:7px;height:7px;bottom:-5px;left:-5px;}
   .wa-nudge::after{width:4px;height:4px;bottom:-9px;left:-10px;}
+  /* The same bubble beside the Phone Number label, in the label's flow. */
+  .wa-nudge.wa-nudge-field{position:relative;display:inline-flex;top:auto;right:auto;margin-left:.9rem;vertical-align:middle;}
   @keyframes waFloat{0%,100%{transform:translateY(0);}50%{transform:translateY(-5px);}}
   @media (prefers-reduced-motion:reduce){.wa-nudge{animation:none;}}
   /* Underline-style sub-tabs under "My Order" — borderless buttons

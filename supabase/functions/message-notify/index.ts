@@ -5,7 +5,7 @@
 //             on the Messages tab Settings. Called by the storefront, so it
 //             needs no login, and it CLAIMS the message (notified_at) so a
 //             second call, or an old id, sends nothing.
-//   assigned  "Save & Send" on a case. Tells the PIC they have the case,
+//   assigned  "Assign & Notify" on a case. Tells the PIC they have the case,
 //             unless their "Upon assigned" tick is off, and the customer
 //             who will contact them and from which number.
 //   solved    "Solve Case". Tells the customer the case is solved, and the
@@ -14,8 +14,8 @@
 // assigned and solved need a salesweb staff login, asked as the CALLER.
 // What was sent, and what could not be, is written into the case timeline.
 //
-// WhatsApp copies of these messages are not sent yet. They will go through
-// the WhatsApp tab once the WhatsApp Business number is connected.
+// The customer WhatsApp on Assign & Notify is sent separately, by the
+// whatsapp function, so a WhatsApp problem never holds up the emails.
 //
 // Replaces notify-new-message. Secrets: RESEND_API_KEY, the one already
 // used for order emails. The From address and name are the ones on admin
@@ -211,7 +211,7 @@ Deno.serve(async (req) => {
         if (r.ok) done.push(`${msg.assigned_name} (PIC)`); else failed.push(`${msg.assigned_name} (PIC): ${r.error}`)
       }
 
-      if (!msg.email) failed.push('the customer: gave no email, WhatsApp will be used once it is connected')
+      if (!msg.email) failed.push('the customer: gave no email')
       else {
         const r = await send([msg.email], `Your case ${msg.ref} — ${fromName}`,
           page(fromName, '#2D4A30', 'Your case', `Case ${msg.ref}`,
@@ -229,7 +229,7 @@ Deno.serve(async (req) => {
       const { data: last } = await sb.from('salesweb_message_events').select('body, actor_name')
         .eq('message_id', id).eq('kind', 'note').order('created_at', { ascending: false }).limit(1).maybeSingle()
 
-      if (!msg.email) failed.push('the customer: gave no email, WhatsApp will be used once it is connected')
+      if (!msg.email) failed.push('the customer: gave no email')
       else {
         const r = await send([msg.email], `Your case ${msg.ref} is solved — ${fromName}`,
           page(fromName, '#2D4A30', 'Your case', `Case ${msg.ref} is solved`,

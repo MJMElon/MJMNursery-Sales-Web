@@ -1469,25 +1469,40 @@ export function initShopMain() {
   }
   // The bubble over My Profile: only while this login has no WhatsApp number.
   async function pRenderWaNudge(){
-    var n=document.getElementById('ptab-wa-nudge'); if(!n) return;
-    n.style.display = (await pSessionPhone()) ? 'none' : 'flex';
+    var show = !(await pSessionPhone());
+    ['ptab-wa-nudge','pf-wa-nudge'].forEach(function(id){
+      var n=document.getElementById(id); if(n) n.style.display = show ? '' : 'none';
+    });
+  }
+  // The link error sits under the button, not in a toast that vanishes.
+  function pWaErr(msg){
+    var el=document.getElementById('pf-wa-err'); if(!el) return;
+    el.textContent=msg||''; el.style.display=msg?'block':'none';
+  }
+  // A 5xx from Supabase reaches supabase-js as an error whose message is
+  // the literal text '{}' (it stringifies the Response), so the hook's own
+  // sentence is lost. Say something a customer can act on instead.
+  function pAuthErrText(e){
+    var m=String((e&&e.message)||'').trim();
+    if(!m || m==='{}' || m==='[object Object]') return 'Could not send the WhatsApp code right now. Please try again later.';
+    return m;
   }
   async function pRenderWaLink(){
     pRenderWaNudge();
     var box=document.getElementById('pf-wa-link'); if(!box) return;
+    pWaErr('');
     var want=pMyMobile((document.getElementById('pf-phone2')||{}).value);
-    if(!want){ box.style.display='none'; return; }
     var linked=await pSessionPhone();
     var st=document.getElementById('pf-wa-status'), btn=document.getElementById('pf-wa-btn');
-    box.style.display='block';
-    var same = linked && pDigits(linked)===pDigits(want);
+    var same = !!(want && linked && pDigits(linked)===pDigits(want));
     st.style.display = same ? 'inline' : 'none';
     btn.style.display = same ? 'none' : '';
     if(same) document.getElementById('pf-wa-code-row').style.display='none';
   }
   async function pSendWaLink(){
     var want=pMyMobile((document.getElementById('pf-phone2')||{}).value);
-    if(!want){ showPortalToast('Phone must be a Malaysian mobile, e.g. 60 12-3456789'); return; }
+    if(!want){ pWaErr('Enter a Malaysian mobile number first, e.g. 60 12-3456789'); return; }
+    pWaErr('');
     var btn=document.getElementById('pf-wa-btn'); btn.disabled=true; btn.textContent='Sending...';
     try{
       var r=await _sb.auth.updateUser({ phone: want });
@@ -1498,16 +1513,16 @@ export function initShopMain() {
       showPortalToast('Code sent to your WhatsApp');
     }catch(e){
       var msg=String((e&&e.message)||e);
-      showPortalToast(/already|registered|exists/i.test(msg)
+      pWaErr(/already|registered|exists/i.test(msg)
         ? 'This number already has its own account. Contact us to combine them.'
-        : 'Could not send the code: '+msg);
+        : pAuthErrText(e));
     }finally{
       btn.disabled=false; btn.textContent='Link for WhatsApp OTP login';
     }
   }
   async function pVerifyWaLink(){
     var code=((document.getElementById('pf-wa-code')||{}).value||'').trim();
-    if(!pWaLinkPhone||!code){ showPortalToast('Enter the code from WhatsApp'); return; }
+    if(!pWaLinkPhone||!code){ pWaErr('Enter the code from WhatsApp'); return; }
     try{
       var r=await _sb.auth.verifyOtp({ phone: pWaLinkPhone, token: code, type: 'phone_change' });
       if(r.error) throw r.error;
@@ -1518,7 +1533,7 @@ export function initShopMain() {
       pWaLinkPhone='';
       showPortalToast('WhatsApp login linked ✅');
       pRenderWaLink();
-    }catch(e){ showPortalToast('Could not confirm: '+((e&&e.message)||e)); }
+    }catch(e){ pWaErr('That code did not work. Check it, or press Link again for a new one.'); }
   }
 
   async function initPortal(){

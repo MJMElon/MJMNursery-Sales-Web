@@ -584,6 +584,16 @@ async function printQuotation(id){
 
   var quotationNo = q.quotation_number || '';
 
+  // ── TEMPLATE — the office's own quotation sheet, kept in step with
+  // generatePdf() in mjm-ai-system/operation/operation_quotation.html.
+  // That page is where quotations were printed before this module
+  // existed, and the office asked for this print "back to as previous":
+  // the MJM Nursery wordmark over the Mega Jutamas letterhead, olive
+  // section labels, a light zebra items table with white headings, the
+  // double rule under the total, and Terms & Conditions anchored at the
+  // foot of the sheet. Change the look there, change it here.
+  var tax = Number(q.tax_amount)||0;
+
   var html =
     '<!doctype html><html><head><meta charset="utf-8">'+
     '<title>Quotation '+esc2(quotationNo)+'</title>'+
@@ -595,59 +605,72 @@ async function printQuotation(id){
          via JS template concatenation so the quotation number can vary. */
       '@page {'+
         'size: A4;'+
-        'margin: 16mm 14mm 22mm 14mm;'+
-        '@bottom-left  { content: "MJM NURSERY"; font-family: Helvetica,Arial,sans-serif; font-size:10px; color:#555; padding-top:4px; border-top:1px solid #cbd3c3; }'+
-        '@bottom-center{ content: "\\"This is a computer-generated quotation and no signature is required.\\""; font-family: Georgia,serif; font-style:italic; font-size:10px; color:#666; padding-top:4px; border-top:1px solid #cbd3c3; }'+
-        '@bottom-right { content: "'+esc2(quotationNo).replace(/"/g,'\\"')+' · Page " counter(page) " of " counter(pages); font-family: Helvetica,Arial,sans-serif; font-size:10px; color:#555; padding-top:4px; border-top:1px solid #cbd3c3; }'+
+        'margin: 14mm 13mm 20mm 13mm;'+
+        '@bottom-left  { content: "MJM NURSERY"; font-family: Helvetica,Arial,sans-serif; font-weight:700; font-size:9px; color:#7A8A57; padding-top:4px; border-top:1px solid #DCDCD7; }'+
+        '@bottom-center{ content: "\\"This is a computer-generated quotation and no signature is required.\\""; font-family: "Times New Roman",Georgia,serif; font-style:italic; font-size:10px; color:#8C8C8C; padding-top:4px; border-top:1px solid #DCDCD7; }'+
+        '@bottom-right { content: "'+esc2(quotationNo).replace(/"/g,'\\"')+'   ·   Page " counter(page) " of " counter(pages); font-family: "Times New Roman",Georgia,serif; font-size:10px; color:#8C8C8C; padding-top:4px; border-top:1px solid #DCDCD7; }'+
       '}'+
       '*{box-sizing:border-box;}'+
       'html,body{margin:0;padding:0;}'+
-      'body{font-family:Georgia,"Times New Roman",serif;color:#111;font-size:12px;line-height:1.55;background:#fdfbf5;}'+
+      /* Flex column with a page-tall minimum is what anchors the Terms
+         block at the foot the way the office sheet draws it (its tcY is
+         worked back from the page bottom). A quotation that runs long
+         simply flows on and the push does nothing, which is the same
+         behaviour as the PDF taking a second page. */
+      'body{font-family:"Times New Roman",Georgia,serif;color:#282828;font-size:12px;line-height:1.5;background:#fff;'+
+           'display:flex;flex-direction:column;min-height:250mm;}'+
 
-      /* Header — vendor block left, quotation meta right */
-      '.hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:8px;}'+
-      '.vendor .name{font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:13px;letter-spacing:.02em;color:#111;margin-bottom:4px;}'+
-      '.vendor div{font-size:11px;color:#333;}'+
-      '.meta{text-align:right;font-size:11px;color:#333;}'+
-      '.meta .qlabel{font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:14px;color:#111;margin-bottom:6px;letter-spacing:.02em;}'+
-      '.meta .row{margin-top:2px;}'+
-      '.hr{border:none;border-top:1px solid #cbd3c3;margin:6px 0 14px;}'+
+      /* Header — MJM Nursery wordmark + letterhead left, quotation meta right */
+      '.hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:6px;}'+
+      '.vendor .wordmark{font-weight:700;font-size:28px;color:#282828;line-height:1.1;margin-bottom:10px;}'+
+      '.vendor div{font-size:10.5px;color:#555;line-height:1.45;}'+
+      '.vendor .co{letter-spacing:.01em;}'+
+      '.meta{text-align:right;font-size:10.5px;color:#555;padding-top:4px;}'+
+      '.meta .qlabel{font-weight:700;font-size:14px;color:#282828;margin-bottom:8px;}'+
+      '.meta .row{margin-top:3px;}'+
+      '.hr{border:none;border-top:1px solid #DCDCD7;margin:8px 0 16px;}'+
 
-      /* QUOTATION FOR band */
+      /* QUOTATION FOR band — olive label, the office sheet accent */
       '.qfor{margin-bottom:14px;}'+
-      '.qfor .label{font-family:Helvetica,Arial,sans-serif;font-size:11px;color:#555;letter-spacing:.14em;text-transform:uppercase;margin-bottom:6px;}'+
-      '.qfor .who{font-size:12px;color:#111;line-height:1.6;}'+
-      '.qfor .who strong{font-size:12.5px;}'+
+      '.qfor .label{font-weight:700;font-size:9.5px;color:#7A8A57;letter-spacing:.14em;text-transform:uppercase;margin-bottom:8px;font-family:Helvetica,Arial,sans-serif;}'+
+      '.qfor .who{font-size:11px;color:#555;line-height:1.6;}'+
+      '.qfor .who strong{font-size:12.5px;color:#282828;}'+
       '.qfor .who .sub{color:#555;font-size:11px;}'+
-      '.qfor .who .dash{color:#666;}'+
+      '.qfor .who .dash{color:#8C8C8C;}'+
 
-      /* Line-items table */
-      'table.li{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:6px;}'+
-      'table.li th{background:#f2efe6;border:1px solid #d9d3c4;padding:8px 10px;font-family:Helvetica,Arial,sans-serif;font-weight:700;color:#111;text-align:left;font-size:11px;letter-spacing:.02em;}'+
-      'table.li th.c-no,'+
-      'table.li th.c-qty,'+
-      'table.li th.c-up,'+
-      'table.li th.c-amt{text-align:right;}'+
-      'table.li th .u{display:block;font-weight:400;font-size:10px;color:#666;margin-top:2px;}'+
-      'table.li td{border:1px solid #e2ddce;padding:10px 10px;vertical-align:top;}'+
-      'table.li td.c-no{text-align:center;width:44px;color:#333;}'+
+      /* Line-items table — white headings, soft rules, cream zebra */
+      'table.li{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:4px;}'+
+      'table.li th{background:#fff;border:0.5px solid #DCDCD7;padding:8px 8px;font-weight:700;color:#282828;text-align:center;font-size:10.5px;}'+
+      'table.li th .u{display:block;font-weight:400;font-size:9.5px;color:#8C8C8C;margin-top:2px;}'+
+      'table.li td{border:0.5px solid #DCDCD7;padding:9px 8px;vertical-align:top;}'+
+      'table.li tbody tr:nth-child(even) td{background:#FBFAF6;}'+
+      'table.li td.c-no{text-align:center;width:44px;color:#555;}'+
       'table.li td.c-qty{text-align:right;width:80px;}'+
-      'table.li td.c-up{text-align:right;width:110px;}'+
-      'table.li td.c-amt{text-align:right;width:120px;}'+
+      'table.li td.c-up{text-align:right;width:92px;}'+
+      'table.li td.c-amt{text-align:right;width:104px;font-weight:700;}'+
 
-      /* Subtotal / total block — right-aligned, no borders */
+      /* Subtotal / total — right-aligned, rule then the double rule */
       '.totals{margin-top:14px;display:flex;flex-direction:column;align-items:flex-end;font-size:12px;}'+
-      '.totals .row{display:flex;justify-content:space-between;min-width:280px;padding:6px 4px;}'+
-      '.totals .row.grand{border-top:1px solid #111;font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:14px;color:#111;padding-top:10px;margin-top:4px;}'+
+      '.totals .row{display:flex;justify-content:space-between;min-width:290px;padding:5px 0;color:#555;}'+
+      '.totals .row span:last-child{color:#282828;}'+
+      '.totals .row.sub{border-bottom:1px solid #282828;}'+
+      '.totals .row.grand{font-weight:700;font-size:13px;color:#282828;padding-top:12px;border-bottom:3px double #282828;padding-bottom:7px;}'+
+      '.totals .row.grand span:first-child{letter-spacing:.01em;}'+
 
-      /* Terms & Conditions */
-      '.tc{margin-top:26px;}'+
-      '.tc .label{font-family:Helvetica,Arial,sans-serif;font-size:11px;color:#555;letter-spacing:.14em;text-transform:uppercase;margin-bottom:8px;}'+
-      '.tc ol{margin:0;padding-left:18px;font-size:11.5px;color:#222;line-height:1.65;}'+
-      '.tc ol li{margin-bottom:4px;}'+
-      '.tc ol ul{margin:.15rem 0 .25rem;padding-left:14px;list-style:none;color:#333;font-size:11px;}'+
-      '.tc ol ul li{margin-bottom:2px;}'+
-      '.tc ol ul li strong{font-family:Helvetica,Arial,sans-serif;font-weight:700;}'+
+      /* Optional notes — their own block, above the terms, as the office sheet draws it */
+      '.notes{margin-top:22px;}'+
+      '.notes .label{font-weight:700;font-size:9.5px;color:#8C8C8C;letter-spacing:.12em;font-family:Helvetica,Arial,sans-serif;margin-bottom:6px;}'+
+      '.notes .body{font-size:11px;color:#555;line-height:1.6;}'+
+
+      /* Terms & Conditions — pushed to the foot of the sheet */
+      '.tc{margin-top:auto;padding-top:28px;}'+
+      '.tc .label{font-weight:700;font-size:10px;color:#8C8C8C;letter-spacing:.1em;font-family:Helvetica,Arial,sans-serif;}'+
+      '.tc .accent{width:100px;border-bottom:1.5px solid #7A8A57;margin:4px 0 12px;}'+
+      '.tc ol{margin:0;padding-left:20px;font-size:11.5px;color:#555;line-height:1.6;}'+
+      '.tc ol li{margin-bottom:5px;}'+
+      '.tc ol li::marker{font-weight:700;color:#282828;}'+
+      '.tc .payee{margin:.2rem 0 .1rem;font-weight:700;color:#282828;}'+
+      '.tc .bank{color:#555;}'+
 
       /* Print CTA (hidden on print) */
       '@media print { .noprint{display:none!important;} }'+
@@ -659,10 +682,11 @@ async function printQuotation(id){
       /* HEADER */
       '<div class="hdr">'+
         '<div class="vendor">'+
-          '<div class="name">MEGA JUTAMAS SDN BHD (663951-U)</div>'+
+          '<div class="wordmark">MJM Nursery</div>'+
+          '<div class="co">MEGA JUTAMAS SDN BHD  (663951-U)</div>'+
           '<div>2ND Floor (B), Lot 1180, Bangunan BEI, Lorong Dua, Krokop,</div>'+
           '<div>P.O. Box 163, 98007 Miri, Sarawak.</div>'+
-          '<div>Tel: 085-419907 · Fax: 085-413264</div>'+
+          '<div>Tel: 085-419907  ·  Fax: 085-413264</div>'+
         '</div>'+
         '<div class="meta">'+
           '<div class="qlabel">Quotation</div>'+
@@ -681,13 +705,8 @@ async function printQuotation(id){
             ? '<strong>'+esc2(q.customer_name)+'</strong>'+
               (q.contact_person ? '<div class="sub">Attn: '+esc2(q.contact_person)+'</div>' : '')+
               (q.address        ? '<div class="sub">'+esc2(q.address)+'</div>' : '')+
-              (q.contact_number || q.email
-                ? '<div class="sub">'+
-                    (q.contact_number ? 'Tel: '+esc2(q.contact_number) : '')+
-                    (q.contact_number && q.email ? ' · ' : '')+
-                    (q.email ? esc2(q.email) : '')+
-                  '</div>'
-                : '')
+              (q.contact_number ? '<div class="sub">Tel: '+esc2(q.contact_number)+'</div>' : '')+
+              (q.email          ? '<div class="sub">Email: '+esc2(q.email)+'</div>' : '')
             : '<span class="dash">—</span>')+
         '</div>'+
       '</div>'+
@@ -704,29 +723,32 @@ async function printQuotation(id){
         '<tbody>'+(itemRowsHtml||'<tr><td colspan="5" style="text-align:center;color:#888;padding:20px;">No line items</td></tr>')+'</tbody>'+
       '</table>'+
 
-      /* TOTALS */
+      /* TOTALS — a Tax row only when one was keyed; the office sheet
+         carries none and a 0 would be a line of nothing */
       '<div class="totals">'+
-        '<div class="row"><span>Subtotal (RM)</span><span>'+_fmtQMYR(subtotal)+'</span></div>'+
+        '<div class="row sub"><span>Subtotal (RM)</span><span>'+_fmtQMYR(subtotal)+'</span></div>'+
+        (tax ? '<div class="row"><span>Tax (RM)</span><span>'+_fmtQMYR(tax)+'</span></div>' : '')+
         '<div class="row grand"><span>TOTAL QUOTE (RM)</span><span>'+_fmtQMYR(total)+'</span></div>'+
       '</div>'+
 
-      /* TERMS & CONDITIONS — house standard, matches ops-supplied template */
+      /* NOTES — the office sheet gives a keyed note its own block */
+      (q.notes
+        ? '<div class="notes"><div class="label">NOTES</div><div class="body">'+esc2(q.notes).replace(/\n/g,'<br>')+'</div></div>'
+        : '')+
+
+      /* TERMS & CONDITIONS — house standard, same words as the office sheet */
       '<div class="tc">'+
-        '<div class="label">Terms &amp; Conditions</div>'+
+        '<div class="label">TERMS &amp; CONDITIONS</div>'+
+        '<div class="accent"></div>'+
         '<ol>'+
           '<li>Payment Term: Cash Only.</li>'+
           '<li>All payment should be crossed and made payable to:'+
-            '<ul>'+
-              '<li><strong>MEGA JUTAMAS SDN BHD</strong></li>'+
-              '<li>A/C No : HLBB 027-00-11609-6 · Hong Leong Bank Berhad</li>'+
-            '</ul>'+
+            '<div class="payee">MEGA JUTAMAS SDN BHD</div>'+
+            '<div class="bank">A/C No : HLBB 027-00-11609-6   ·   Hong Leong Bank Berhad</div>'+
           '</li>'+
           '<li>All payment made towards the purchase of oil palm seedlings are non-refundable.</li>'+
           '<li>Collection must be made according to the scheduled collection date.</li>'+
         '</ol>'+
-        (q.notes
-          ? '<div style="margin-top:12px;font-size:11px;color:#333;line-height:1.6;">'+esc2(q.notes).replace(/\n/g,'<br>')+'</div>'
-          : '')+
       '</div>'+
 
       /* Footer lives in the @page bottom-* margin boxes above — that's

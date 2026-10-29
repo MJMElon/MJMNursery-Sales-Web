@@ -40,6 +40,60 @@ function _fmtQMYR(n){
   return (Number(n)||0).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 
+// ── Can this login SAVE a quotation? ────────────────────────────────
+// salesweb_quotations and salesweb_quotation_items are gated by RLS on
+// the database's _sw_is_admin(): shared_profiles.role = 'admin', or the
+// Sales Web module at 'admin' or 'normal'. A login outside that gate
+// gets "new row violates row-level security policy" at the moment of
+// the save — the moment AFTER the form was filled in — and the toast
+// read as a broken page ("SAVE FAILED") rather than as a permission.
+// So the question is asked UP FRONT: the list shows a red bar before
+// anybody keys a quotation, and the save asks again so a permission
+// changed mid-session is still caught.
+//   - The formula below is the database's _sw_is_admin(), copied —
+//     change one, change the other.
+//   - It FAILS OPEN: a profile read that errors proves nothing about
+//     the login, and a check that cannot run must not paint a warning
+//     it cannot disprove. Only a row actually read and failing the
+//     gate answers no — the database's own refusal still decides.
+var _quotGateCache = null;
+async function _quotSaveGate(){
+  if (_quotGateCache) return _quotGateCache;
+  var out = { known:false, ok:true, email:'', signedIn:true };
+  try {
+    var s = await sb.auth.getSession();
+    var user = s && s.data && s.data.session && s.data.session.user;
+    if (!user){ out = { known:true, ok:false, email:'', signedIn:false }; _quotGateCache = out; return out; }
+    out.email = user.email || '';
+    var r = await sb.from('shared_profiles').select('role,permissions').eq('id', user.id).maybeSingle();
+    if (r.error) return out;            // read failed — fail open, and do not cache a non-answer
+    var p = r.data;
+    var mod = (p && p.permissions && p.permissions.modules && p.permissions.modules.salesweb) || 'none';
+    out.known = true;
+    out.ok = !!p && (p.role === 'admin' || mod === 'admin' || mod === 'normal');
+    _quotGateCache = out;
+    return out;
+  } catch(e){ return out; }
+}
+
+function _quotGateBarHtml(gate){
+  if (gate.ok) return '';
+  var who = gate.signedIn
+    ? 'This login ('+esc(gate.email||'unknown')+') cannot save quotations — its profile has neither the admin role nor the Sales Web module, so the database will refuse every Save. An admin can grant Sales Web access under Manage Users.'
+    : 'Your sign-in has expired — sign in again before keying a quotation, or Save will be refused.';
+  return '<div class="quot-gate-bar" style="margin:0 0 .8rem;padding:.6rem .9rem;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;font-size:13px;font-weight:600;">⛔ '+who+'</div>';
+}
+
+// One wording for a refused write: a row-level-security message names
+// the real cause instead of reading as a broken page.
+function _quotSaveErr(prefix, error){
+  var msg = String((error && error.message) || error || '');
+  if (/row-level security/i.test(msg)){
+    msg = 'the database refused this login. It needs the admin role or the Sales Web module — an admin can grant it under Manage Users.';
+  }
+  toast(prefix+': '+msg, 'error');
+}
+
 // ═══════════════════════════════════════
 //  LIST — dashboard table
 // ═══════════════════════════════════════
@@ -64,6 +118,14 @@ async function loadQuotations(){
 
   renderQuotationStats(data||[]);
   renderQuotationsTable(rows);
+
+  // Say BEFORE the work when this login cannot save — the save is the
+  // wrong moment to find out, with a filled-in form on screen.
+  _quotSaveGate().then(function(gate){
+    var bar  = _quotGateBarHtml(gate);
+    var host = document.getElementById('quotations-table');
+    if (bar && host && !host.querySelector('.quot-gate-bar')) host.insertAdjacentHTML('afterbegin', bar);
+  });
 }
 window.loadQuotations = loadQuotations;
 
@@ -388,6 +450,18 @@ async function saveQuotation(){
   if (!QUOT_STATE.header.customer_name.trim()){
     toast('Customer / Company Name is required','error'); return;
   }
+
+  // Asked AGAIN at the write (fresh, not the cached answer): a form
+  // opened before a permission changed is still sitting on the screen.
+  // Refusing here keeps the modal open, so nothing keyed is lost.
+  _quotGateCache = null;
+  var gate = await _quotSaveGate();
+  if (gate.known && !gate.ok){
+    toast(gate.signedIn
+      ? 'Save refused — this login ('+(gate.email||'unknown')+') has no Sales Web access. An admin can grant it under Manage Users. Nothing keyed has been lost.'
+      : 'Your sign-in has expired — sign in again. Nothing keyed has been lost.', 'error');
+    return;
+  }
   var subtotal = QUOT_STATE.items.reduce(function(s,it){ return s + (Number(it.quantity)||0)*(Number(it.unit_price)||0); }, 0);
   var tax      = Number(QUOT_STATE.header.tax_amount)||0;
   var total    = subtotal + tax;
@@ -418,11 +492,11 @@ async function saveQuotation(){
     var num = (nr && nr.data) ? nr.data : ('Q-' + Date.now().toString(36).toUpperCase());
     payload.quotation_number = num;
     var ins = await sb.from('salesweb_quotations').insert([payload]).select().single();
-    if (ins.error){ toast('Save failed: '+ins.error.message,'error'); return; }
+    if (ins.error){ _quotSaveErr('Save failed', ins.error); return; }
     savedId = ins.data.id;
   } else {
     var upd = await sb.from('salesweb_quotations').update(payload).eq('id', savedId);
-    if (upd.error){ toast('Save failed: '+upd.error.message,'error'); return; }
+    if (upd.error){ _quotSaveErr('Save failed', upd.error); return; }
     // Wipe existing items so we can reinsert the freshly-edited set.
     await sb.from('salesweb_quotation_items').delete().eq('quotation_id', savedId);
   }
@@ -441,7 +515,7 @@ async function saveQuotation(){
     });
   if (itemRows.length){
     var ii = await sb.from('salesweb_quotation_items').insert(itemRows);
-    if (ii.error){ toast('Items save failed: '+ii.error.message,'error'); return; }
+    if (ii.error){ _quotSaveErr('Items save failed', ii.error); return; }
   }
 
   toast('Quotation saved');

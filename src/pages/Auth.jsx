@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { checkEmailTypo } from '../lib/emailTypo.js';
+import { WA_LOGIN_READY, WA_LOGIN_SOON_MSG } from '../lib/waLogin.js';
 import '../styles/auth.css';
 
 const LOGO = 'https://cdn.store-assets.com/s/1408881/f/16655641.png';
@@ -156,6 +157,7 @@ export default function Auth() {
     const id = identity.trim();
     if (!id) { showStatus('Please enter your email or phone number.', 'error'); return; }
     if (pendingTypoBlocks(id)) return;
+    if (inputTypeRef.current === 'phone' && !WA_LOGIN_READY) { showStatus(WA_LOGIN_SOON_MSG, 'error'); return; }
 
     setOtpBtn({ disabled: true, label: 'Sending...' });
 
@@ -306,7 +308,7 @@ export default function Auth() {
                 onKeyDown={onEnter(loginWithPassword)}
               />
               <div className="input-hint" style={hint.kind === 'suggest' ? { color: '#fca5a5' } : hint.kind === 'corrected' ? { color: '#86efac' } : undefined}>
-                {hint.kind === 'phone' && <>💬 Phone detected — the code will be sent on WhatsApp</>}
+                {hint.kind === 'phone' && <>{WA_LOGIN_READY ? '💬 Phone detected — the code will be sent on WhatsApp' : '💬 ' + WA_LOGIN_SOON_MSG}</>}
                 {hint.kind === 'email' && <>✉ Email detected — OTP will be sent to your inbox</>}
                 {hint.kind === 'corrected' && <>✅ Email corrected!</>}
                 {hint.kind === 'suggest' && (

@@ -21,6 +21,7 @@
 import { supabase as sharedSupabaseClient, SUPABASE_URL as SHOP_SB_URL, SUPABASE_ANON_KEY as SHOP_SB_KEY } from '../../lib/supabase.js';
 import { createClient as shopCreateClient } from '@supabase/supabase-js';
 import { formatSealRanges, SHOW_SEALS_ON_DO } from '../../lib/sealRanges.js';
+import { WA_LOGIN_READY, WA_LOGIN_SOON_MSG } from '../../lib/waLogin.js';
 
 // Global mobile-menu close helper — inline onclicks in the mobile nav drawer
 // (Log In, My Account, Sign Out) call this. Defining it here, BEFORE the
@@ -1469,7 +1470,7 @@ export function initShopMain() {
   }
   // The bubble over My Profile: only while this login has no WhatsApp number.
   async function pRenderWaNudge(){
-    var show = !(await pSessionPhone());
+    var show = WA_LOGIN_READY && !(await pSessionPhone());
     ['ptab-wa-nudge','pf-wa-nudge'].forEach(function(id){
       var n=document.getElementById(id); if(n) n.style.display = show ? '' : 'none';
     });
@@ -1495,11 +1496,18 @@ export function initShopMain() {
     var linked=await pSessionPhone();
     var st=document.getElementById('pf-wa-status'), btn=document.getElementById('pf-wa-btn');
     var same = !!(want && linked && pDigits(linked)===pDigits(want));
+    if(!WA_LOGIN_READY && !same){
+      st.style.display='none'; btn.style.display=''; btn.disabled=true;
+      btn.textContent='WhatsApp login coming soon';
+      document.getElementById('pf-wa-code-row').style.display='none';
+      return;
+    }
     st.style.display = same ? 'inline' : 'none';
     btn.style.display = same ? 'none' : '';
     if(same) document.getElementById('pf-wa-code-row').style.display='none';
   }
   async function pSendWaLink(){
+    if(!WA_LOGIN_READY){ pWaErr(WA_LOGIN_SOON_MSG); return; }
     var want=pMyMobile((document.getElementById('pf-phone2')||{}).value);
     if(!want){ pWaErr('Enter a Malaysian mobile number first, e.g. 60 12-3456789'); return; }
     pWaErr('');
@@ -3842,6 +3850,14 @@ export function initShopMain() {
     if (paneE) paneE.classList.toggle('active', mode === 'email');
     var statusEl = document.getElementById('cl-status');
     if (statusEl) { statusEl.textContent = ''; statusEl.className = 'cl-status'; }
+    // WhatsApp login not switched on yet (src/lib/waLogin.js): say so on the
+    // tab itself rather than let a customer type a number and get an error.
+    var waBtn = document.getElementById('cl-btn-wa');
+    if (!WA_LOGIN_READY && waBtn) {
+      waBtn.disabled = true;
+      waBtn.textContent = 'Coming soon';
+      if (mode === 'phone') clShowStatus(WA_LOGIN_SOON_MSG, 'success');
+    }
   }
   function clToggleSignup(pane) {
     clIsSignUp = !clIsSignUp;
@@ -3967,6 +3983,7 @@ export function initShopMain() {
   //   channel: 'sms' | 'whatsapp' | 'email'
   async function clSendOTP(channel) {
     channel = channel || (clInputType === 'phone' ? 'whatsapp' : 'email');
+    if (channel !== 'email' && !WA_LOGIN_READY) { clShowStatus(WA_LOGIN_SOON_MSG, 'success'); return; }
     clOtpChannel = channel;
     var isPhone = channel === 'sms' || channel === 'whatsapp';
 

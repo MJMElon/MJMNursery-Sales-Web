@@ -1215,6 +1215,10 @@ async function viewOrder(id){
   html+='<div id="mo-timeline"><div style="font-size:12px;color:var(--ink4);">Loading...</div></div></div>';
 
   document.getElementById('mo-body').innerHTML=html;
+  // What the Print button prints — the SAME figures this modal just drew,
+  // never a second read, so the paper cannot disagree with the screen.
+  window._moPrint = { order: order, items: items, parsed: _parsed, payments: paymentRows,
+                      subtotal: subtotal, paid: paidNow, balance: balanceNow, titleId: titleId };
   // Footer: archive / unarchive / delete-or-restore actions + Close.
   var archiveBtn = order.archived_at
     ? '<button class="btn btn-outline" onclick="unarchiveOrder(\''+id+'\')">Unarchive</button>'
@@ -1223,6 +1227,7 @@ async function viewOrder(id){
     ? '<button class="btn btn-outline" style="color:var(--green);border-color:var(--green);" onclick="restoreOrder(\''+id+'\')">Restore</button>'
     : '<button class="btn btn-outline" style="color:var(--red);border-color:var(--red);" onclick="deleteOrder(\''+id+'\')">Delete</button>';
   document.getElementById('mo-foot').innerHTML=
+    '<button class="btn btn-primary" onclick="printOrderSheet()" style="margin-right:auto;">🖨 Print</button>' +
     archiveBtn + deleteBtn +
     '<button class="btn btn-outline" onclick="closeModal(\'modal-order\');loadOrders();">Close</button>';
   openModal('modal-order');
@@ -1232,6 +1237,96 @@ async function viewOrder(id){
   loadTimeline(id);
   if(typeof loadOrderSeals==='function')loadOrderSeals(order.order_number);
 }
+
+// ═══════════════════════════════════════
+//  PRINT ORDER — the office: "create a print button for order, meaning if
+//  I click print, I can print out the order details." One A4 sheet built
+//  from what viewOrder() drew (window._moPrint), printed through a hidden
+//  iframe — a new tab is a popup a blocker can eat, and a button that
+//  prints nothing reads as broken. The admin controls (Edit, Remove,
+//  Upload…) are not on it: a printed order is read, not operated.
+// ═══════════════════════════════════════
+function printOrderSheet(){
+  var P = window._moPrint;
+  if(!P || !P.order){ toast('Open an order first','error'); return; }
+  var o = P.order, pr = P.parsed || {};
+  var row = function(label, value){ return value ? '<tr><th>'+esc(label)+'</th><td>'+esc(value)+'</td></tr>' : ''; };
+  var money = function(n){ return 'RM '+fmtMYR(n); };
+  var terms = o.payment_terms==='credit' ? 'Credit' : 'Cash';
+
+  var itemsHtml = (P.items||[]).length
+    ? (P.items||[]).map(function(it){
+        return '<tr><td>'+esc(it.product_name||'—')+'</td><td class="r">'+money(it.unit_price)+'</td>'
+             + '<td class="r">'+Number(it.quantity||0).toLocaleString('en-MY')+'</td><td class="r b">'+money(it.subtotal)+'</td></tr>';
+      }).join('')
+    : '<tr><td colspan="4" class="muted">No items</td></tr>';
+  var qtyTotal = (P.items||[]).reduce(function(s,it){ return s+(Number(it.quantity)||0); }, 0);
+
+  var less = '';
+  if(o.coupon_code || Number(o.coupon_discount||0) > 0)
+    less += '<tr><td>Voucher'+(o.coupon_code?' ('+esc(o.coupon_code)+')':'')+'</td><td class="r">-'+money(o.coupon_discount||0)+'</td></tr>';
+  if(Number(o.discount_amount||0) > 0)
+    less += '<tr><td>Discount'+(o.discount_note?' ('+esc(o.discount_note)+')':'')+'</td><td class="r">-'+money(o.discount_amount)+'</td></tr>';
+  if(Number(o.points_discount_rm||0) > 0)
+    less += '<tr><td>Points'+(o.points_redeemed?' ('+Number(o.points_redeemed).toLocaleString()+' pts)':'')+'</td><td class="r">-'+money(o.points_discount_rm)+'</td></tr>';
+
+  var payHtml = (P.payments||[]).length
+    ? '<h2>Payments received</h2><table class="grid"><thead><tr><th>Date</th><th>Note</th><th class="r">Amount</th></tr></thead><tbody>'
+      + (P.payments||[]).map(function(p){
+          return '<tr><td>'+esc(fmtDateTime(p.paid_at))+'</td><td>'+esc(p.note||'')+'</td><td class="r">'+money(p.amount)+'</td></tr>';
+        }).join('')
+      + '</tbody></table>'
+    : '';
+
+  var doc = '<!doctype html><html><head><meta charset="utf-8"><title>Order '+esc(P.titleId)+'</title><style>'
+    + '@page{size:A4;margin:14mm}'
+    + 'body{font-family:Arial,Helvetica,sans-serif;color:#111;font-size:12px;margin:0}'
+    + 'h1{font-size:20px;margin:0}h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;margin:18px 0 6px;color:#333}'
+    + '.head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:8px;margin-bottom:12px}'
+    + '.brand{font-weight:700;font-size:14px}.muted{color:#666}'
+    + '.cols{display:flex;gap:24px}.cols>div{flex:1}'
+    + 'table{width:100%;border-collapse:collapse}'
+    + 'table.kv th{text-align:left;font-weight:600;color:#555;width:38%;padding:2px 0;vertical-align:top}table.kv td{padding:2px 0}'
+    + 'table.grid th,table.grid td{border-bottom:1px solid #ddd;padding:6px 4px;text-align:left}'
+    + 'table.grid thead th{border-bottom:1.5px solid #111;font-size:11px;text-transform:uppercase;letter-spacing:.05em}'
+    + '.r{text-align:right!important}.b{font-weight:700}'
+    + 'table.tot{width:45%;margin-left:auto;margin-top:8px}table.tot td{padding:3px 4px}'
+    + 'table.tot tr.grand td{border-top:1.5px solid #111;font-weight:700;font-size:14px}'
+    + '.remark{border:1px solid #ddd;border-radius:6px;padding:8px;white-space:pre-wrap}'
+    + '</style></head><body>'
+    + '<div class="head"><div><div class="brand">MJM Nursery</div><h1>Order '+esc(P.titleId)+'</h1>'
+    + '<div class="muted">Placed '+esc(fmtDateTime(o.created_at))+'</div></div>'
+    + '<div class="r"><div><b>Status:</b> '+esc(o.status||'—')+'</div><div><b>Payment terms:</b> '+terms+'</div>'
+    + '<div class="muted">Printed '+esc(fmtDateTime(new Date().toISOString()))+'</div></div></div>'
+    + '<div class="cols"><div><h2>Customer</h2><table class="kv">'
+    + row('Name', o.customer_name||'—') + row('Email', o.customer_email) + row('Phone', pr.phone)
+    + '</table></div><div><h2>Billing / E-Invoice</h2><table class="kv">'
+    + row('Bill to', o.billing_name||o.customer_name) + row('Reg No', pr.billReg) + row('IC No', pr.billIc)
+    + row('MPOB licence', pr.billMpob) + row('Address', pr.billAddr)
+    + '</table></div></div>'
+    + '<h2>Order items</h2><table class="grid"><thead><tr><th>Product</th><th class="r">Price</th><th class="r">Qty</th><th class="r">Subtotal</th></tr></thead><tbody>'
+    + itemsHtml + '</tbody></table>'
+    + '<table class="tot"><tr><td>Total quantity</td><td class="r">'+qtyTotal.toLocaleString('en-MY')+'</td></tr>'
+    + '<tr><td>Subtotal</td><td class="r">'+money(P.subtotal)+'</td></tr>' + less
+    + '<tr class="grand"><td>Total</td><td class="r">'+money(o.total)+'</td></tr>'
+    + '<tr><td>Paid</td><td class="r">'+money(P.paid)+'</td></tr>'
+    + '<tr><td><b>Balance</b></td><td class="r b">'+money(P.balance)+'</td></tr></table>'
+    + payHtml
+    + (pr.userRemark ? '<h2>Customer remark</h2><div class="remark">'+esc(pr.userRemark)+'</div>' : '')
+    + '</body></html>';
+
+  var old = document.getElementById('mo-print-frame');
+  if(old) old.remove();
+  var f = document.createElement('iframe');
+  f.id = 'mo-print-frame';
+  f.setAttribute('aria-hidden','true');
+  f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+  document.body.appendChild(f);
+  var d = f.contentWindow.document;
+  d.open(); d.write(doc); d.close();
+  setTimeout(function(){ try{ f.contentWindow.focus(); f.contentWindow.print(); }catch(e){ toast('Could not open the print dialog','error'); } }, 250);
+}
+window.printOrderSheet = printOrderSheet;
 
 // ═══════════════════════════════════════
 //  ARCHIVE / DELETE (soft) — wired to the Archived / Deleted filter

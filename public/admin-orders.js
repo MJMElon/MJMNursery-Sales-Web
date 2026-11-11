@@ -1422,6 +1422,55 @@ async function updateOrderStatus(orderId){
 }
 
 async function executeCancelOrStatusUpdate(orderId,oldStatus,newStatus,order){
+  // Reactivating a cancelled order: re-reserve the stock that was
+  // released when it was cancelled. Without this, flipping a cancelled
+  // order back to Pending Payment (or any active status) leaves the
+  // order "open" with no inventory held against it — a double-sell
+  // waiting to happen if another customer snaps up the same product.
+  //
+  // hold_product_stock is the same SECURITY DEFINER RPC the storefront
+  // calls at checkout; it clamps at zero and writes an inventory
+  // history row per product so the ledger explains why stock dropped.
+  // Done BEFORE the status change so a reserve failure (missing
+  // product, RPC absent) is surfaced to the admin rather than leaving
+  // a half-reactivated order on the books.
+  if (oldStatus === 'Cancelled' && newStatus !== 'Cancelled') {
+    try {
+      var{data:_reItems} = await sb.from('salesweb_order_items')
+        .select('product_id, product_name, quantity').eq('order_id', orderId);
+      var _held = [];
+      var _unmatched = [];
+      for (var _i = 0; _i < (_reItems||[]).length; _i++) {
+        var _row = _reItems[_i];
+        var _qty = Number(_row.quantity) || 0;
+        if (!_row.product_id || _qty <= 0) {
+          if (_qty > 0) _unmatched.push((_row.product_name||'item') + ' × ' + _qty);
+          continue;
+        }
+        var _rpc = await sb.rpc('hold_product_stock', { p_product_id: _row.product_id, p_qty: _qty });
+        if (_rpc.error) {
+          toast('Could not re-reserve stock: ' + _rpc.error.message, 'error');
+          return;
+        }
+        _held.push((_row.product_name || 'item') + ' × ' + _qty);
+      }
+      // Timeline row so the ledger explains why stock dropped on reactivation.
+      try {
+        var _s = await sb.auth.getSession();
+        var _u = _s?.data?.session?.user?.email || 'admin';
+        var _note = 'Stock re-reserved on reactivation (' + oldStatus + ' → ' + newStatus + ')';
+        if (_held.length)       _note += ': ' + _held.join('; ');
+        if (_unmatched.length)  _note += ' · Custom items (no product_id) skipped: ' + _unmatched.join('; ');
+        await sb.from('salesweb_order_timeline').insert([{
+          order_id: orderId, status: newStatus, note: _note, changed_by: _u
+        }]);
+      } catch(_logErr){ /* timeline write is non-fatal */ }
+    } catch (e) {
+      toast('Stock re-reserve failed: ' + (e && e.message || e), 'error');
+      return;
+    }
+  }
+
   // Primary: change the status. This must succeed before any side effects,
   // and its error is surfaced (a silent failure here previously made
   // "Update" appear to do nothing).
@@ -1488,6 +1537,8 @@ async function executeCancelOrStatusUpdate(orderId,oldStatus,newStatus,order){
       .catch(function(err){ console.error('[email] invoke threw:', err); });
 
     toast('Points issued + AL created + confirmation email sent');
+  } else if (oldStatus === 'Cancelled' && newStatus !== 'Cancelled') {
+    toast('Order reactivated — stock re-reserved');
   } else {
     toast('Status updated to '+newStatus);
   }

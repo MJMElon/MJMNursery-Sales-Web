@@ -583,27 +583,44 @@ async function syncCustomerLoginEmail(customerId, email){
       return { ok:false, error:msg };
     }
     var d = r.data || {};
-    if(d.ok) return { ok:true, email:d.email || email };
+    if(d.ok) return { ok:true, email:d.email || email, previous:d.previous || '', unchanged:!!d.unchanged };
     return { ok:false, error:d.error || 'failed' };
   }catch(e){
     return { ok:false, error:(e && e.message) || String(e) };
   }
 }
 
+// What the login ACTUALLY says (auth.users), asked through the same
+// function. Resolves to the address, or null when it cannot be known
+// (function not deployed, no login account, not allowed).
+async function lookupCustomerLoginEmail(customerId){
+  try{
+    var r = await sb.functions.invoke('update-customer-email', { body: { customer_id: customerId, lookup: true } });
+    if(r.error) return null;
+    var d = r.data || {};
+    return d.ok ? (d.login_email || '') : null;
+  }catch(e){ return null; }
+}
+
 // "Change Login Email" on the Customer Profile. Asks for the new address,
 // changes the login + profile, then redraws the profile and the list.
-async function changeCustomerLoginEmail(id, currentEmail){
-  var cur = currentEmail && !/@admin\.mjmnursery\.local$/i.test(currentEmail) ? currentEmail : '';
-  var next = prompt('New login email for this customer:\n\nThe customer will sign in (and receive password-reset emails) at this address from now on.', cur);
+async function changeCustomerLoginEmail(id, profileEmail){
+  // The profile row (what the list shows) and the login can disagree, so
+  // ask the login itself. Prefill with the profile email: that is usually
+  // the corrected address the admin wants the login to match.
+  var login = await lookupCustomerLoginEmail(id);
+  var loginShown = login && !/@admin\.mjmnursery\.local$/i.test(login) ? login : '';
+  var pre = profileEmail && !/@admin\.mjmnursery\.local$/i.test(profileEmail) ? profileEmail : loginShown;
+  var next = prompt('New login email for this customer:\n\nLogin email now: '+(login===null?'(unknown)':(loginShown||'(walk-in, none)'))+'\n\nThe customer will sign in (and receive password-reset emails) at this address from now on.', pre);
   if(next == null) return;
   next = next.trim();
   if(!next){ toast('Email is required','error'); return; }
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(next)){ toast('Please enter a valid email address','error'); return; }
-  if(cur && next.toLowerCase() === cur.toLowerCase()){ toast('That is already the login email'); return; }
-  if(!confirm('Change login email'+(cur?' from '+cur:'')+' to '+next+'?')) return;
+  if(loginShown && next.toLowerCase() === loginShown.toLowerCase()){ toast('The login is already '+loginShown); return; }
+  if(!confirm('Change login email'+(loginShown?' from '+loginShown:'')+' to '+next+'?')) return;
   var r = await syncCustomerLoginEmail(id, next);
   if(!r.ok){ toast('Login email not changed: '+r.error,'error',6000); return; }
-  toast('Login email changed to '+r.email);
+  toast(r.unchanged ? 'The login is already '+r.email : 'Login email changed'+(r.previous?' from '+r.previous:'')+' to '+r.email, undefined, 5000);
   viewCustomer(id);
   loadCustomers();
 }
@@ -1101,6 +1118,7 @@ async function viewCustomer(id){
   html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem .8rem;font-size:13px;">';
   html+='<div style="color:var(--ink4);">Full Name</div><div style="font-weight:600;">'+esc(c.full_name||'—')+'</div>';
   html+='<div style="color:var(--ink4);">Email</div><div style="font-weight:600;">'+esc(custDisplayEmail(c))+'</div>';
+  html+='<div style="color:var(--ink4);" title="The address the customer signs in with (Supabase Auth). Can differ from the profile email above.">Login Email</div><div style="font-weight:600;" id="mcu-login-email"><span style="color:var(--ink4);font-weight:400;">checking…</span></div>';
   html+='<div style="color:var(--ink4);">Phone</div><div style="font-weight:600;">'+esc(c.phone||'—')+'</div>';
   html+='<div style="color:var(--ink4);">Role</div><div><span class="badge '+(c.role==='admin'?'badge-green':'badge-grey')+'">'+esc(c.role||'customer')+'</span></div>';
   html+='</div></div>';
@@ -1187,7 +1205,22 @@ async function viewCustomer(id){
   html+='</div>'; // end grid
 
   document.getElementById('mcu-body').innerHTML=html;
+  fillCustomerLoginEmail(id, c.email);
   openModal('modal-customer');
+}
+
+// Fills the "Login Email" line of the profile once the function answers.
+// Flags it when it differs from the profile email — that is exactly the
+// case where the customer never gets the reset email.
+async function fillCustomerLoginEmail(id, profileEmail){
+  var login = await lookupCustomerLoginEmail(id);
+  var el = document.getElementById('mcu-login-email');
+  if(!el) return;   // modal closed or another customer opened meanwhile
+  if(login === null){ el.innerHTML='<span style="color:var(--ink4);font-weight:400;">unknown (update-customer-email function not deployed, or no login)</span>'; return; }
+  if(!login || /@admin\.mjmnursery\.local$/i.test(login)){ el.innerHTML='<span style="color:var(--ink4);font-weight:400;">— (walk-in, no email login)</span>'; return; }
+  var prof = (profileEmail||'').toLowerCase();
+  var same = prof && prof === login.toLowerCase();
+  el.innerHTML = esc(login) + (same ? '' : ' <span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;" title="The login still uses this address. Click Change Login Email to make it match.">differs from profile</span>');
 }
 
 function viewOrderFromProfile(orderId){

@@ -2903,7 +2903,18 @@ async function saveOrderItems(orderId){
       var{error:iErr}=await sb.from('salesweb_order_items').insert([{order_id:orderId,product_id:it.product_id||null,product_name:it.product_name,unit_price:Number(it.unit_price)||0,quantity:Number(it.quantity)||0,subtotal:sub}]);
       if(iErr){toast('Insert failed: '+iErr.message,'error');return;}
     } else if(it._action==='update'&&it.id){
-      var{error:uErr}=await sb.from('salesweb_order_items').update({product_name:it.product_name,unit_price:Number(it.unit_price)||0,quantity:Number(it.quantity)||0,subtotal:sub}).eq('id',it.id);
+      // product_id is written on update too — admins can now swap a row
+      // to a different catalogue product (or to Custom → product_id null)
+      // via the Edit Items picker, and the DB must follow the picker.
+      // Without this, stock accounting and FK joins keep pointing at
+      // the old product even though the row's visible name moved.
+      var{error:uErr}=await sb.from('salesweb_order_items').update({
+        product_id: it.product_id || null,
+        product_name: it.product_name,
+        unit_price: Number(it.unit_price)||0,
+        quantity: Number(it.quantity)||0,
+        subtotal: sub
+      }).eq('id',it.id);
       if(uErr){toast('Update failed: '+uErr.message,'error');return;}
     }
   }

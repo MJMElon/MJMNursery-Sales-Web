@@ -506,10 +506,12 @@ async function submitAddCustomer(){
 //  with shared_profiles.email = NULL (the auth user keeps its placeholder).
 // ═══════════════════════════════════════
 var _editCustomerId = null;
+var _editCustomerEmail = '';   // what the profile had when the form opened
 async function openEditCustomer(id){
   _editCustomerId = id;
   var{data:c, error}=await sb.from('shared_profiles').select('*').eq('id',id).maybeSingle();
   if(error || !c){ toast('Customer not found','error'); return; }
+  _editCustomerEmail = custDisplayEmail(c) === '—' ? '' : (c.email||'');
   document.getElementById('ec-name').value = c.full_name || '';
   // Hide the walk-in placeholder so the admin sees a true blank.
   document.getElementById('ec-email').value = custDisplayEmail(c) === '—' ? '' : (c.email||'');
@@ -526,16 +528,83 @@ async function submitEditCustomer(){
   var terms=document.getElementById('ec-terms').value;
   if(!name){ toast('Name is required','error'); return; }
   var btn=document.getElementById('ec-submit'); btn.disabled=true; btn.textContent='Saving…';
-  var{error}=await sb.from('shared_profiles').update({
-    full_name: name,
-    email: email || null,
-    phone: phone || null,
-    payment_terms: terms
-  }).eq('id', _editCustomerId);
+
+  // A NEW email is the customer's login too. The profile row alone used to
+  // be changed here, which left the login (auth.users) on the old, wrong
+  // address — so the customer never received the reset email. Change the
+  // login first through the update-customer-email function; it writes the
+  // profile email as well. Blank (walk-in) keeps the old profile-only path.
+  var loginNote = '';
+  var emailChanged = !!email && email.toLowerCase() !== (_editCustomerEmail||'').toLowerCase();
+  if(emailChanged){
+    var r = await syncCustomerLoginEmail(_editCustomerId, email);
+    if(!r.ok && !r.profileOnly){
+      btn.disabled=false; btn.textContent='Save Changes';
+      toast('Email not changed: '+r.error,'error');
+      return;
+    }
+    if(r.profileOnly) loginNote = ' — ' + r.error;
+  }
+  var upd = { full_name: name, phone: phone || null, payment_terms: terms };
+  // The function has already written the email; only touch it here when it
+  // did not run (blank / unchanged / no login to change).
+  if(!emailChanged || loginNote) upd.email = email || null;
+  var{error}=await sb.from('shared_profiles').update(upd).eq('id', _editCustomerId);
   btn.disabled=false; btn.textContent='Save Changes';
   if(error){ toast('Error: '+error.message,'error'); return; }
-  toast('Customer updated');
+  toast(emailChanged && !loginNote ? 'Customer updated. Login email is now '+email : 'Customer updated'+loginNote, loginNote?'error':undefined, loginNote?6000:undefined);
   closeModal('modal-edit-customer');
+  loadCustomers();
+}
+
+// Change the email a customer LOGS IN with (auth.users) and the profile
+// email together, through the update-customer-email edge function — the
+// browser cannot touch auth.users itself. Resolves to:
+//   { ok:true, email }                      changed
+//   { ok:false, error }                     refused / failed, nothing saved
+//   { ok:false, profileOnly:true, error }   login could not be changed but the
+//                                           profile email may still be saved
+//                                           (function not deployed yet, or the
+//                                           profile has no login account)
+async function syncCustomerLoginEmail(customerId, email){
+  try{
+    var r = await sb.functions.invoke('update-customer-email', { body: { customer_id: customerId, email: email } });
+    if(r.error){
+      var ctx = r.error.context;
+      if(ctx && ctx.status === 404){
+        var j404 = null;
+        if(typeof ctx.json === 'function'){ try{ j404 = await ctx.json(); }catch(e){} }
+        if(j404 && j404.code === 'no_login') return { ok:false, profileOnly:true, error:'this customer has no login account, so only the profile email was saved' };
+        if(j404 && j404.error) return { ok:false, error:j404.error };
+        return { ok:false, profileOnly:true, error:'login email NOT changed: the update-customer-email function is not in Supabase yet' };
+      }
+      var msg = r.error.message || 'failed';
+      if(ctx && typeof ctx.json === 'function'){ try{ var j = await ctx.json(); if(j && j.error) msg = j.error; }catch(e){} }
+      return { ok:false, error:msg };
+    }
+    var d = r.data || {};
+    if(d.ok) return { ok:true, email:d.email || email };
+    return { ok:false, error:d.error || 'failed' };
+  }catch(e){
+    return { ok:false, error:(e && e.message) || String(e) };
+  }
+}
+
+// "Change Login Email" on the Customer Profile. Asks for the new address,
+// changes the login + profile, then redraws the profile and the list.
+async function changeCustomerLoginEmail(id, currentEmail){
+  var cur = currentEmail && !/@admin\.mjmnursery\.local$/i.test(currentEmail) ? currentEmail : '';
+  var next = prompt('New login email for this customer:\n\nThe customer will sign in (and receive password-reset emails) at this address from now on.', cur);
+  if(next == null) return;
+  next = next.trim();
+  if(!next){ toast('Email is required','error'); return; }
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(next)){ toast('Please enter a valid email address','error'); return; }
+  if(cur && next.toLowerCase() === cur.toLowerCase()){ toast('That is already the login email'); return; }
+  if(!confirm('Change login email'+(cur?' from '+cur:'')+' to '+next+'?')) return;
+  var r = await syncCustomerLoginEmail(id, next);
+  if(!r.ok){ toast('Login email not changed: '+r.error,'error',6000); return; }
+  toast('Login email changed to '+r.email);
+  viewCustomer(id);
   loadCustomers();
 }
 
@@ -1017,7 +1086,7 @@ async function viewCustomer(id){
   var blackBtn=c.blacklisted_at
     ? '<button class="btn btn-outline btn-sm" style="color:var(--green);border-color:var(--green);" onclick="unblacklistCustomer(\''+id+'\')">Un-blacklist</button>'
     : '<button class="btn btn-outline btn-sm" style="color:#92400e;border-color:#fde68a;" onclick="blacklistCustomer(\''+id+'\')">Blacklist</button>';
-  html+='<div style="display:flex;gap:.4rem;"><button class="btn btn-outline btn-sm" onclick="resetCustomerPassword('+jsArg(c.email)+')">Reset Password</button>'+blackBtn+'<button class="btn btn-outline btn-sm" onclick="deleteCustomer(\''+id+'\')" style="color:var(--red);">Delete</button></div>';
+  html+='<div style="display:flex;gap:.4rem;flex-wrap:wrap;justify-content:flex-end;"><button class="btn btn-outline btn-sm" onclick="changeCustomerLoginEmail(\''+id+'\','+jsArg(c.email)+')" title="Change the email this customer signs in with">Change Login Email</button><button class="btn btn-outline btn-sm" onclick="resetCustomerPassword('+jsArg(c.email)+')">Reset Password</button>'+blackBtn+'<button class="btn btn-outline btn-sm" onclick="deleteCustomer(\''+id+'\')" style="color:var(--red);">Delete</button></div>';
   html+='</div>';
 
   // Stats row

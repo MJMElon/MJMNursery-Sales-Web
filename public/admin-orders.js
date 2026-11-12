@@ -1449,7 +1449,34 @@ async function executeCancelOrStatusUpdate(orderId,oldStatus,newStatus,order){
         }
         var _rpc = await sb.rpc('hold_product_stock', { p_product_id: _row.product_id, p_qty: _qty });
         if (_rpc.error) {
-          toast('Could not re-reserve stock: ' + _rpc.error.message, 'error');
+          // Fallback: the SECURITY DEFINER RPC isn't callable on this
+          // instance (missing GRANT EXECUTE, or the inventory_history
+          // migration never ran). Admins DO have direct write access
+          // to salesweb_products via RLS, so deduct stock_qty with a
+          // plain UPDATE and keep the reactivation going. Log the
+          // fallback so the inventory-history gap is visible in the
+          // timeline instead of silently diverging.
+          var _msg = String(_rpc.error.message || '');
+          var _missingGrant = /permission denied|not.*authoriz|does not exist/i.test(_msg);
+          if (_missingGrant) {
+            var{data:_p, error:_pErr} = await sb.from('salesweb_products')
+              .select('stock_qty, name').eq('id', _row.product_id).maybeSingle();
+            if (_pErr || !_p) {
+              toast('Could not re-reserve stock (fallback failed): ' + (_pErr && _pErr.message || 'product not found'), 'error');
+              return;
+            }
+            var _newQty = Math.max(0, (Number(_p.stock_qty) || 0) - _qty);
+            var{error:_uErr} = await sb.from('salesweb_products')
+              .update({ stock_qty: _newQty, updated_at: new Date().toISOString() })
+              .eq('id', _row.product_id);
+            if (_uErr) {
+              toast('Could not re-reserve stock (fallback failed): ' + _uErr.message, 'error');
+              return;
+            }
+            _held.push((_row.product_name || _p.name || 'item') + ' × ' + _qty + ' (fallback)');
+            continue;
+          }
+          toast('Could not re-reserve stock: ' + _msg, 'error');
           return;
         }
         _held.push((_row.product_name || 'item') + ' × ' + _qty);

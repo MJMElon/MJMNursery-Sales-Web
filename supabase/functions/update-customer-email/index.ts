@@ -17,8 +17,11 @@
 //   4. Writes the same email on shared_profiles so the list, the profile view
 //      and the Reset Password button all agree.
 //
-// Request body:  { customer_id: string, email: string }
-// Response:      { ok: true, email }   or   { error: string, code?: string }
+// Request body:  { customer_id: string, email: string }      change it
+//                { customer_id: string, lookup: true }       just read it
+// Response:      { ok: true, email, previous }               changed
+//                { ok: true, login_email }                   lookup
+//                { error: string, code?: string }
 //
 // Deploy: Supabase → Edge Functions → Deploy a new function → Via editor,
 // name it exactly  update-customer-email , paste this file, Deploy.
@@ -76,8 +79,9 @@ Deno.serve(async (req) => {
     const input = await req.json().catch(() => ({}))
     const customerId = String(input.customer_id || '').trim()
     const email = String(input.email || '').trim().toLowerCase()
+    const lookup = input.lookup === true
     if (!customerId) return json({ error: 'customer_id is required' }, 400)
-    if (!email || !EMAIL_RE.test(email)) return json({ error: 'Please enter a valid email address' }, 400)
+    if (!lookup && (!email || !EMAIL_RE.test(email))) return json({ error: 'Please enter a valid email address' }, 400)
     if (/@admin\.mjmnursery\.local$/i.test(email)) return json({ error: 'That is a walk-in placeholder address, not a real email' }, 400)
 
     const sb = createClient(URL_, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
@@ -95,6 +99,14 @@ Deno.serve(async (req) => {
       && (!profile.role || profile.role === 'customer')
       && !isOperationStaff(profile.permissions)
     if (!isCustomer) return json({ error: 'That account is a staff account, not a customer. Change it in User Access instead.' }, 403)
+
+    // What the login actually says today — the profile row can disagree with
+    // it (the old Edit form changed only the profile), so the page asks here.
+    const { data: cur, error: cErr } = await sb.auth.admin.getUserById(customerId)
+    if (cErr || !cur?.user) return json({ error: 'This customer has no login account to change', code: 'no_login' }, 404)
+    const previous = cur.user.email || ''
+    if (lookup) return json({ ok: true, login_email: previous })
+    if (previous.toLowerCase() === email) return json({ ok: true, email, previous, unchanged: true })
 
     // Nobody else may already hold the new address.
     const { data: clash } = await sb
@@ -123,8 +135,8 @@ Deno.serve(async (req) => {
       return json({ error: 'Login email changed, but the customer list could not be updated: ' + sErr.message }, 500)
     }
 
-    console.log('[update-customer-email]', caller.email || caller.id, 'changed', customerId, 'from', profile.email || '(none)', 'to', upd?.user?.email || email)
-    return json({ ok: true, email: upd?.user?.email || email })
+    console.log('[update-customer-email]', caller.email || caller.id, 'changed', customerId, 'from', previous || '(none)', 'to', upd?.user?.email || email)
+    return json({ ok: true, email: upd?.user?.email || email, previous })
   } catch (e) {
     console.error('[update-customer-email] error', e)
     return json({ error: (e as Error).message || 'unexpected error' }, 500)

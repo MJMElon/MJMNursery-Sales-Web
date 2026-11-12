@@ -26,6 +26,14 @@
 -- work on any Supabase instance regardless of whether the split-columns
 -- backfill has run.
 --
+-- Age reference: GREATEST(created_at, updated_at) — a manual admin
+-- reactivation (Cancelled → Pending Payment through the status
+-- dropdown) bumps updated_at, so the auto-release clock RESETS on
+-- reactivation. Without this, flipping an old cancelled order back to
+-- Pending Payment would be instantly re-cancelled on the next
+-- loadOrders() call because its created_at is way past the cutoff,
+-- which is what the admin was literally undoing a second ago.
+--
 -- Emits RAISE NOTICE lines so runs are visible in Supabase logs even
 -- when the caller ignores the return value.
 --
@@ -71,7 +79,8 @@ BEGIN
   END IF;
 
   FOR r IN
-    SELECT o.id, o.created_at
+    SELECT o.id,
+           GREATEST(o.created_at, COALESCE(o.updated_at, o.created_at)) AS effective_at
     FROM   salesweb_customer_orders o
     WHERE  o.status = 'Pending Payment'
       -- Belt-and-braces: an order that has received any payment (deposit,
@@ -109,7 +118,7 @@ BEGIN
       IF v_hours IS NULL OR v_hours <= 0 THEN
         CONTINUE;   -- flat cutoff is disabled → skip this order
       END IF;
-      IF r.created_at >= now() - (v_hours * interval '1 hour') THEN
+      IF r.effective_at >= now() - (v_hours * interval '1 hour') THEN
         CONTINUE;   -- still within the flat window
       END IF;
       v_note := 'Auto-cancelled — cash order unpaid for ' || v_hours || 'h; stock returned';
@@ -117,7 +126,7 @@ BEGIN
       IF v_days IS NULL OR v_days <= 0 THEN
         CONTINUE;   -- tier explicitly says 'never cancel'
       END IF;
-      IF r.created_at >= now() - (v_days * interval '1 day') THEN
+      IF r.effective_at >= now() - (v_days * interval '1 day') THEN
         CONTINUE;   -- still within the tier window
       END IF;
       v_note := 'Auto-cancelled — cash order (qty ' || v_qty || ') unpaid for ' || v_days || ' days; stock returned';

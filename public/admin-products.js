@@ -6,10 +6,11 @@
   STOCK SOURCE COLUMNS:
   Batch | Plot | Original Stock | Sold (from DO) | Transferred | Remaining
 
-  Original Stock = transplanted - 10% culling
-  Sold = sum of DO qty_1..qty_5 where plot matches
-  Transferred = qty moved to/from other products
-  Remaining = Original - Sold - TransferredOut + TransferredIn
+  Every figure is the office's Monthly Maturity Allocation
+  (public/month-maturity.js): Original = transplanted - 10% culling,
+  Sold = DO lines matching the BATCH and the plot, Reserved = the
+  customer allocations, Remaining = After Deduct Reserve, less what was
+  moved to another product.
 
   TABLES: salesweb_products, shared_inventory_logs, shared_do_records, salesweb_stock_transfers
 ═══════════════════════════════════════════════════
@@ -78,42 +79,60 @@ async function loadProducts(){
 // ═══════════════════════════════════════
 //  COMPUTE STOCK — FULL LEDGER
 // ═══════════════════════════════════════
-async function computeProductStock(productId, sellMonth, sellYear){
-  var{data:transplants}=await sb.from('shared_inventory_logs').select('batch_name, breed_name, plot_name, quantity_change, created_at, remark')
-    .eq('transaction_type','Transplanted').order('created_at',{ascending:true});
-  if(!transplants)transplants=[];
-
-  var sources=[];
-  transplants.forEach(function(t){
-    var pl=(t.plot_name||'').toLowerCase();
-    if(pl.includes('premium')||pl.includes('double')||pl.includes('tray'))return;
-    var tDate=null;
-    if(t.remark){var m=t.remark.match(/Date:\s*(\d{4}-\d{2}-\d{2})/);if(m)tDate=new Date(m[1]);}
-    if(!tDate)tDate=new Date(t.created_at);
-    var sd=new Date(tDate);sd.setMonth(sd.getMonth()+9);
-    if(sd.toLocaleDateString('en-MY',{month:'long'})===sellMonth&&sd.getFullYear()===sellYear){
-      var qty=t.quantity_change||0;
-      var culled=Math.round(qty*CULL_RATE);
-      sources.push({batch:t.batch_name,breed:t.breed_name,plot:t.plot_name,transplanted:qty,culled:culled,originalStock:qty-culled,sold:0,transferredOut:0,transferredIn:0,remaining:qty-culled,date:tDate.toISOString().split('T')[0]});
-    }
-  });
-
-  var{data:dos}=await sb.from('shared_do_records').select('*').neq('status','Cancelled');
-  if(dos&&dos.length){
-    dos.forEach(function(d){
-      for(var i=1;i<=5;i++){
-        var doPlot=d['plot_'+i];var doQty=parseInt(d['qty_'+i])||0;
-        if(!doPlot||!doQty)continue;
-        sources.forEach(function(src){
-          if(src.plot===doPlot&&src.sold<src.originalStock){
-            var deduct=Math.min(doQty,src.originalStock-src.sold);
-            src.sold+=deduct;
-            doQty-=deduct;
-          }
-        });
-      }
-    });
+/* THE MONTH'S STOCK IS THE OFFICE'S MONTHLY MATURITY ALLOCATION.
+   It used to be worked out here by a rule of its own: dated without the
+   keyed transaction_date, a DO taken off every crop ever standing in its
+   PLOT (so last year's U3 sales came off February's U3), and the
+   customer reservation read off a column nothing writes any more. So
+   February 2027 read 29,042 on the office table and "2,938 available"
+   here. public/month-maturity.js is the office rule, a copy of
+   mjm-ai-system/shared/shared_month_maturity.js word for word. */
+var _maturityLedger=null;
+async function _pageAll(build){
+  var all=[];
+  for(var from=0;;from+=1000){
+    var r=await build().range(from,from+999);
+    if(r.error)return{data:null,error:r.error};
+    all=all.concat(r.data||[]);
+    if(!r.data||r.data.length<1000)break;
   }
+  return{data:all,error:null};
+}
+async function loadMaturityLedger(fresh){
+  if(_maturityLedger&&!fresh)return _maturityLedger;
+  var soft=function(p){return p.then(function(r){return r;},function(e){return{data:null,error:e};});};
+  var res=await Promise.all([
+    _pageAll(function(){return sb.from('shared_inventory_logs').select('batch_name,plot_name,breed_name,quantity_change,created_at,transaction_date,remark').eq('transaction_type','Transplanted').order('id',{ascending:true});}),
+    soft(_pageAll(function(){return sb.from('shared_inventory_logs').select('batch_name,plot_name,quantity_change,remark').eq('transaction_type','Cull3_Transfer').order('id',{ascending:true});})),
+    soft(_pageAll(function(){return sb.from('shared_inventory_logs').select('batch_name,plot_name,quantity_change,remark').eq('transaction_type','3rd_Culling').order('id',{ascending:true});})),
+    soft(_pageAll(function(){return sb.from('shared_inventory_logs').select('batch_name,plot_name').eq('transaction_type','Row_Verification').order('id',{ascending:true});})),
+    soft(sb.from('operation_batch_verifications').select('batch_name,stage')),
+    soft(_pageAll(function(){return sb.from('shared_do_records').select('do_number,al_number,total_qty,status,remark,plot_1,qty_1,batch_1,plot_2,qty_2,batch_2,plot_3,qty_3,batch_3,plot_4,qty_4,batch_4,plot_5,qty_5,batch_5').order('id',{ascending:true});})),
+    soft(sb.from('shared_batch_customer_allocations').select('*')),
+    soft(sb.from('salesweb_customer_orders').select('id,order_number,created_at,collected_qty,collected_at')),
+    soft(sb.from('salesweb_order_items').select('order_id,quantity')),
+    soft(sb.from('salesweb_order_collections').select('order_id,collected_qty,collected_at')),
+    soft(sb.from('shared_al_orders').select('al_number,order_number,quantity_ordered,balance_quantity,status,remark'))
+  ]);
+  if(res[0].error)throw res[0].error;
+  var dos=(res[5]&&res[5].data)||[];
+  var src={transplants:res[0].data,transfers:(res[1]&&res[1].data)||[],cull3:(res[2]&&res[2].data)||[],
+    rowVer:(res[3]&&res[3].data)||[],rowVerOk:!(res[3]&&res[3].error),tabVer:(res[4]&&res[4].data)||[],
+    dos:dos,alDos:dos,allocations:(res[6]&&res[6].data)||[],orders:(res[7]&&res[7].data)||[],
+    items:(res[8]&&res[8].data)||[],collections:res[9]&&res[9].data,alRows:(res[10]&&res[10].data)||[]};
+  _maturityLedger=MJMMonthMaturity.build(src);
+  return _maturityLedger;
+}
+
+async function computeProductStock(productId, sellMonth, sellYear){
+  var L=await loadMaturityLedger();
+  var mk=MJMMonthMaturity.keyOf(sellMonth,sellYear);
+  var sources=L.rows.filter(function(r){return r.month===mk;}).sort(function(a,b){return a.matureDate-b.matureDate||String(a.plot).localeCompare(String(b.plot));}).map(function(r){
+    var f=r.figures;
+    return{batch:r.batch,plot:r.plot,transplanted:r.qty,culled:r.qty-r.afterCulling,originalStock:r.afterCulling,
+      sold:f.collected,reserved:r.reserved,transferredOut:0,transferredIn:0,
+      remaining:r.afterDeductReserve,date:r.transplantDate.toISOString().split('T')[0]};
+  });
 
   var{data:tOut}=await sb.from('salesweb_stock_transfers').select('quantity,reason,created_at,to_product').eq('from_product',productId).order('created_at',{ascending:true});
   var{data:tIn}=await sb.from('salesweb_stock_transfers').select('quantity,reason,created_at,from_product').eq('to_product',productId).order('created_at',{ascending:true});
@@ -131,9 +150,9 @@ async function computeProductStock(productId, sellMonth, sellYear){
     var remain=tr.quantity;totalTransferOut+=remain;
     transferOutDetails.push({qty:tr.quantity,to:tNames[tr.to_product]||'—',reason:tr.reason||'',date:tr.created_at});
     for(var i=0;i<sources.length&&remain>0;i++){
-      var avail=sources[i].originalStock-sources[i].sold-sources[i].transferredOut;
+      var avail=Math.max(0,sources[i].remaining);
       var deduct=Math.min(avail,remain);
-      sources[i].transferredOut+=deduct;remain-=deduct;
+      sources[i].transferredOut+=deduct;sources[i].remaining-=deduct;remain-=deduct;
     }
   });
 
@@ -144,12 +163,14 @@ async function computeProductStock(productId, sellMonth, sellYear){
     transferInDetails.push({qty:tr.quantity,from:tNames[tr.from_product]||'—',reason:tr.reason||'',date:tr.created_at});
   });
 
-  sources.forEach(function(src){src.remaining=Math.max(0,src.originalStock-src.sold-src.transferredOut);});
-  var baseStock=sources.reduce(function(s,src){return s+src.remaining;},0);
-  var totalSold=sources.reduce(function(s,src){return s+src.sold;},0);
-  var finalStock=baseStock+totalTransferIn;
+  /* After Deduct Reserve, summed signed the way the office foot sums it,
+     less what was moved to another product, plus what was moved in. */
+  var t=L.months[mk]||{afterCulling:0,doDeducted:0,reserved:0,afterDeductReserve:0};
+  var baseStock=t.afterDeductReserve-totalTransferOut;
+  var finalStock=Math.max(0,baseStock+totalTransferIn);
 
-  return {sources:sources,baseStock:baseStock,totalSold:totalSold,transferOut:totalTransferOut,transferOutDetails:transferOutDetails,transferIn:totalTransferIn,transferInDetails:transferInDetails,finalStock:finalStock};
+  return {sources:sources,baseStock:baseStock,totalSold:t.doDeducted,reserved:t.reserved,maturity:t.afterCulling,
+    transferOut:totalTransferOut,transferOutDetails:transferOutDetails,transferIn:totalTransferIn,transferInDetails:transferInDetails,finalStock:finalStock};
 }
 
 // ═══════════════════════════════════════
@@ -162,7 +183,7 @@ function renderStockSource(d){
   html+='<div onclick="var n=this.nextElementSibling;n.style.display=n.style.display===\'none\'?\'block\':\'none\';this.querySelector(\'span\').textContent=n.style.display===\'none\'?\'▶\':\'▼\'" style="cursor:pointer;display:flex;align-items:center;gap:.4rem;padding:.5rem 0;font-size:13px;font-weight:600;color:var(--ink);user-select:none;"><span>▶</span> Stock Sources</div>';
   html+='<div style="display:none;">';
 
-  html+='<table style="width:100%;font-size:12px;border-collapse:collapse;"><thead><tr style="border-bottom:1.5px solid var(--border);"><th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink3);">Maturity</th><th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink3);">Batch</th><th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink3);">Plot</th><th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--ink3);">Original</th><th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--ink3);">Sold</th><th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--ink3);">Remaining</th></tr></thead><tbody>';
+  html+='<table style="width:100%;font-size:12px;border-collapse:collapse;"><thead><tr style="border-bottom:1.5px solid var(--border);"><th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink3);">Maturity</th><th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink3);">Batch</th><th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink3);">Plot</th><th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--ink3);">Original</th><th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--ink3);">Sold</th><th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--ink3);">Reserved</th><th style="text-align:right;padding:6px 8px;font-weight:600;color:var(--ink3);">Remaining</th></tr></thead><tbody>';
   d.sources.forEach(function(s){
     var matStr='—',tpStr='';
     if(s.date){
@@ -177,6 +198,7 @@ function renderStockSource(d){
       '<td style="padding:6px 8px;font-weight:400;">'+esc(s.plot||'—')+'</td>'+
       '<td style="padding:6px 8px;text-align:right;font-weight:500;">'+s.originalStock+'</td>'+
       '<td style="padding:6px 8px;text-align:right;color:'+(s.sold>0?'var(--amber)':'var(--ink4)')+';font-weight:500;">'+(s.sold>0?'-'+s.sold:'0')+'</td>'+
+      '<td style="padding:6px 8px;text-align:right;color:'+(s.reserved>0?'var(--amber)':'var(--ink4)')+';font-weight:500;">'+(s.reserved>0?'-'+s.reserved:'0')+'</td>'+
       '<td style="padding:6px 8px;text-align:right;font-weight:600;color:'+(s.remaining>0?'var(--green)':'var(--red)')+';">'+s.remaining+'</td></tr>';
   });
   html+='</tbody></table>';
@@ -184,6 +206,7 @@ function renderStockSource(d){
   html+='<div style="margin-top:.5rem;padding:.6rem .8rem;background:#f8faf8;border-radius:8px;font-size:12px;">';
   html+='<div style="display:flex;justify-content:space-between;padding:.15rem 0;"><span style="color:var(--ink3);font-weight:400;">Original stock (after 10% culling)</span><span style="font-weight:600;">'+d.sources.reduce(function(s,x){return s+x.originalStock;},0)+'</span></div>';
   if(d.totalSold>0)html+='<div style="display:flex;justify-content:space-between;padding:.15rem 0;"><span style="color:var(--amber);font-weight:400;">Sold (DO issued)</span><span style="font-weight:600;color:var(--amber);">-'+d.totalSold+'</span></div>';
+  if(d.reserved>0)html+='<div style="display:flex;justify-content:space-between;padding:.15rem 0;"><span style="color:var(--amber);font-weight:400;">Reserved for customers (Monthly Maturity Allocation)</span><span style="font-weight:600;color:var(--amber);">-'+d.reserved+'</span></div>';
   if(d.transferOut>0)html+='<div style="display:flex;justify-content:space-between;padding:.15rem 0;"><span style="color:var(--red);font-weight:400;">Transferred out</span><span style="font-weight:600;color:var(--red);">-'+d.transferOut+'</span></div>';
   if(d.transferIn>0)html+='<div style="display:flex;justify-content:space-between;padding:.15rem 0;"><span style="color:var(--green);font-weight:400;">Transferred in</span><span style="font-weight:600;color:var(--green);">+'+d.transferIn+'</span></div>';
   html+='<div style="display:flex;justify-content:space-between;padding:.4rem 0;border-top:1px solid var(--border);margin-top:.3rem;"><span style="font-weight:600;color:var(--ink);">Available Stock</span><span style="font-weight:700;font-size:14px;color:var(--green);">'+d.finalStock+'</span></div>';
@@ -221,20 +244,16 @@ function renderStockSource(d){
 // ═══════════════════════════════════════
 async function syncProductsFromBatches(){
   toast('Syncing...');
-  var{data:transplants}=await sb.from('shared_inventory_logs').select('quantity_change, created_at, remark, plot_name')
-    .eq('transaction_type','Transplanted').order('created_at',{ascending:true});
-  if(!transplants||!transplants.length){toast('No transplant data','error');return;}
+  /* One product per month the office table has, at its After Deduct
+     Reserve — the same ledger computeProductStock reads. */
+  var L;try{L=await loadMaturityLedger(true);}catch(e){toast('Could not read the batch ledger','error');return;}
+  var NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
   var mq={};
-  transplants.forEach(function(t){
-    var pl=(t.plot_name||'').toLowerCase();
-    if(pl.includes('premium')||pl.includes('double')||pl.includes('tray'))return;
-    var tDate=null;if(t.remark){var m=t.remark.match(/Date:\s*(\d{4}-\d{2}-\d{2})/);if(m)tDate=new Date(m[1]);}
-    if(!tDate)tDate=new Date(t.created_at);
-    var sd=new Date(tDate);sd.setMonth(sd.getMonth()+9);
-    var sm=sd.toLocaleDateString('en-MY',{month:'long'});var sy=sd.getFullYear();
-    var key=sm+'|'+sy;var qty=t.quantity_change||0;
-    mq[key]=(mq[key]||0)+Math.max(0,qty-Math.round(qty*CULL_RATE));
+  Object.keys(L.months).forEach(function(mk){
+    var y=parseInt(mk.slice(0,4),10),mo=parseInt(mk.slice(5,7),10);
+    mq[NAMES[mo-1]+'|'+y]=Math.max(0,L.months[mk].afterDeductReserve);
   });
+  if(!Object.keys(mq).length){toast('No transplant data','error');return;}
   var created=0,updated=0;
   for(var k of Object.keys(mq)){
     var parts=k.split('|');var sm=parts[0];var sy=parseInt(parts[1]);
@@ -256,6 +275,7 @@ async function syncProductsFromBatches(){
 }
 
 async function refreshProductStock(pid){
+  _maturityLedger=null;
   var{data:p}=await sb.from('salesweb_products').select('*').eq('id',pid).single();
   if(!p){toast('Not found','error');return;}
   if(p.stock_source==='manual'){toast('Manual stock');return;}
@@ -564,6 +584,7 @@ async function togglePublish(id,pub,inputEl){
 var _publishCtx=null;
 
 async function openPublishModal(productId){
+  _maturityLedger=null; // read the ledger as it is now, every time the dialog opens
   document.getElementById('mpb-product-id').value=productId;
   document.getElementById('mpb-loading').style.display='block';
   document.getElementById('mpb-loading').textContent='Computing quantities…';
@@ -600,13 +621,14 @@ async function openPublishModal(productId){
     var suitable  = Number(results[2])||0;
     var estimate  = Number(results[3])||0;
     var raw=(stockData.sources||[]).reduce(function(s,x){return s+(Number(x.originalStock)||0);},0);
-    _publishCtx={product:p,raw:raw,alloc:alloc,suitable:suitable,estimate:estimate,stockData:stockData};
+    var afterReserve=Math.max(0,Number(stockData.finalStock)||0);
+    _publishCtx={product:p,raw:raw,alloc:alloc,suitable:suitable,estimate:estimate,stockData:stockData,afterReserve:afterReserve};
     document.getElementById('mpb-raw').textContent=raw.toLocaleString();
     document.getElementById('mpb-alloc').textContent='− '+alloc.toLocaleString();
     document.getElementById('mpb-suitable').textContent='+ '+suitable.toLocaleString();
     document.getElementById('mpb-estimate').textContent='− '+estimate.toLocaleString();
     document.getElementById('mpb-opt-raw').textContent=raw.toLocaleString();
-    document.getElementById('mpb-opt-minus').textContent=Math.max(0,raw-alloc).toLocaleString();
+    document.getElementById('mpb-opt-minus').textContent=afterReserve.toLocaleString();
     document.getElementById('mpb-opt-mse').textContent=Math.max(0,raw+suitable-estimate).toLocaleString();
     document.getElementById('mpb-loading').style.display='none';
     document.getElementById('mpb-content').style.display='block';
@@ -634,7 +656,7 @@ function getPublishChosenQty(){
   var sel=document.querySelector('input[name=mpb-strat]:checked');
   if(!sel)return null;
   if(sel.value==='raw')return _publishCtx.raw;
-  if(sel.value==='minus_alloc')return Math.max(0,_publishCtx.raw-_publishCtx.alloc);
+  if(sel.value==='minus_alloc')return _publishCtx.afterReserve;
   if(sel.value==='maturity_plus_suitable_minus_estimate')return Math.max(0,_publishCtx.raw+_publishCtx.suitable-_publishCtx.estimate);
   if(sel.value==='manual')return parseInt(document.getElementById('mpb-manual-qty').value)||0;
   return null;
@@ -710,30 +732,13 @@ window.updatePublishPreview = updatePublishPreview;
 // ═══════════════════════════════════════
 //  PUBLISH HELPERS
 // ═══════════════════════════════════════
+/* The month's reserved customers, off the office table (see
+   computeProductStock). Asked of the same ledger, so the two agree. */
 async function computeCustomerAllocation(sellMonth,sellYear){
   if(!sellMonth||!sellYear)return 0;
-  var{data:transplants}=await sb.from('shared_inventory_logs').select('batch_name,plot_name,created_at,remark').eq('transaction_type','Transplanted');
-  var batchPlot=[];
-  (transplants||[]).forEach(function(t){
-    var pl=(t.plot_name||'').toLowerCase();
-    if(pl.includes('premium')||pl.includes('double')||pl.includes('tray'))return;
-    var tDate=null;
-    if(t.remark){var m=t.remark.match(/Date:\s*(\d{4}-\d{2}-\d{2})/);if(m)tDate=new Date(m[1]);}
-    if(!tDate)tDate=new Date(t.created_at);
-    var sd=new Date(tDate);sd.setMonth(sd.getMonth()+9);
-    if(sd.toLocaleDateString('en-MY',{month:'long'})===sellMonth&&sd.getFullYear()===sellYear){
-      batchPlot.push({batch:t.batch_name,plot:t.plot_name});
-    }
-  });
-  if(!batchPlot.length)return 0;
-  var batchNames=Array.from(new Set(batchPlot.map(function(x){return x.batch;}).filter(Boolean)));
-  if(!batchNames.length)return 0;
-  try{
-    var{data:allocs}=await sb.from('shared_plot_allocations').select('batch_name,plot_name,reserved_qty').in('batch_name',batchNames);
-    if(!allocs)return 0;
-    var keyset=new Set(batchPlot.map(function(x){return x.batch+'||'+x.plot;}));
-    return allocs.reduce(function(s,a){if(!keyset.has(a.batch_name+'||'+a.plot_name))return s;return s+(a.reserved_qty||0);},0);
-  }catch(e){return 0;}
+  var L=await loadMaturityLedger();
+  var t=L.months[MJMMonthMaturity.keyOf(sellMonth,sellYear)];
+  return t?t.reserved:0;
 }
 
 async function computeSuitableForSales(sellMonth,sellYear,excludeProductId){
@@ -748,36 +753,17 @@ async function computeSuitableForSales(sellMonth,sellYear,excludeProductId){
     if(max>150)suitablePlots.add(key);
   });
   if(!suitablePlots.size)return 0;
-  var{data:transplants}=await sb.from('shared_inventory_logs').select('batch_name,plot_name,quantity_change,created_at,remark').eq('transaction_type','Transplanted');
-  if(!transplants)return 0;
-  var monthIdx=function(m){var L=['January','February','March','April','May','June','July','August','September','October','November','December'];var i=L.indexOf(m||'');return i<0?-1:i;};
-  var targetIdx=monthIdx(sellMonth);if(targetIdx<0)return 0;
-  var bucket=[];
-  transplants.forEach(function(t){
-    var pl=(t.plot_name||'').toLowerCase();
-    if(pl.includes('premium')||pl.includes('double')||pl.includes('tray'))return;
-    if(!suitablePlots.has((t.batch_name||'')+'||'+(t.plot_name||'')))return;
-    var tDate=null;
-    if(t.remark){var m=t.remark.match(/Date:\s*(\d{4}-\d{2}-\d{2})/);if(m)tDate=new Date(m[1]);}
-    if(!tDate)tDate=new Date(t.created_at);
-    var sd=new Date(tDate);sd.setMonth(sd.getMonth()+9);
-    var sy=sd.getFullYear();var sm=sd.toLocaleDateString('en-MY',{month:'long'});
-    var smI=monthIdx(sm);if(smI<0)return;
-    if(sy<sellYear||(sy===sellYear&&smI<=targetIdx)){
-      if(sy===sellYear&&smI===targetIdx)return;
-      var qty=t.quantity_change||0;
-      bucket.push({batch:t.batch_name,plot:t.plot_name,raw:qty-Math.round(qty*CULL_RATE)});
-    }
-  });
-  if(!bucket.length)return 0;
-  var{data:dos}=await sb.from('shared_do_records').select('plot_1,qty_1,plot_2,qty_2,plot_3,qty_3,plot_4,qty_4,plot_5,qty_5').neq('status','Cancelled');
-  var soldByPlot={};
-  (dos||[]).forEach(function(d){for(var i=1;i<=5;i++){var p=d['plot_'+i];var q=parseInt(d['qty_'+i])||0;if(!p||!q)continue;soldByPlot[p]=(soldByPlot[p]||0)+q;}});
-  var rawByPlot={};
-  bucket.forEach(function(b){rawByPlot[b.plot]=(rawByPlot[b.plot]||0)+b.raw;});
-  var remaining=0;
-  Object.keys(rawByPlot).forEach(function(plot){remaining+=Math.max(0,rawByPlot[plot]-(soldByPlot[plot]||0));});
-  return remaining;
+  /* Plots that matured in an EARLIER month and are audited tall enough,
+     at what the office table still has unsold and unreserved on them
+     (After Deduct Reserve) — off the same ledger, so a DO comes off its
+     own batch and plot rather than off every crop that stood there. */
+  var L=await loadMaturityLedger();
+  var mk=MJMMonthMaturity.keyOf(sellMonth,sellYear);if(!mk)return 0;
+  return L.rows.reduce(function(sum,r){
+    if(!(r.month<mk))return sum;
+    if(!suitablePlots.has((r.batch||'')+'||'+(r.plot||'')))return sum;
+    return sum+Math.max(0,r.afterDeductReserve);
+  },0);
 }
 
 async function fetchEstimateCollection(sellMonth,sellYear){

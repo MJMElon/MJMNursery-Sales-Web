@@ -539,10 +539,11 @@ Object.assign(window, {
 // public/ (still frozen in legacy_urls.txt, still minified by
 // scripts/clean_static.mjs) until each is migrated in its own PR.
 var MODULE_SRCS = [
-  '/admin-orders.js?v=2026-11-11-print-order',
+  '/admin-orders.js?v=2026-11-12-rehold-stock-fallback',
   '/admin-reports.js?v=2026-06-15-charts',
-  '/admin-customers.js?v=2026-10-27-no-link-phones',
-  '/admin-products.js?v=2026-09-29-invhist-collapse',
+  '/admin-customers.js?v=2026-11-12-show-login-email',
+  '/month-maturity.js?v=1',
+  '/admin-products.js?v=2026-11-19-office-maturity',
   '/admin-payments.js?v=2026-10-25-escape-quotes',
   '/admin-quotations.js?v=2026-10-30-align-as-previous',
   '/admin-users.js?v=2026-10-24-whatsapp-tab',

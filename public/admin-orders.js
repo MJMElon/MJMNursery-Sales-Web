@@ -1422,6 +1422,82 @@ async function updateOrderStatus(orderId){
 }
 
 async function executeCancelOrStatusUpdate(orderId,oldStatus,newStatus,order){
+  // Reactivating a cancelled order: re-reserve the stock that was
+  // released when it was cancelled. Without this, flipping a cancelled
+  // order back to Pending Payment (or any active status) leaves the
+  // order "open" with no inventory held against it — a double-sell
+  // waiting to happen if another customer snaps up the same product.
+  //
+  // hold_product_stock is the same SECURITY DEFINER RPC the storefront
+  // calls at checkout; it clamps at zero and writes an inventory
+  // history row per product so the ledger explains why stock dropped.
+  // Done BEFORE the status change so a reserve failure (missing
+  // product, RPC absent) is surfaced to the admin rather than leaving
+  // a half-reactivated order on the books.
+  if (oldStatus === 'Cancelled' && newStatus !== 'Cancelled') {
+    try {
+      var{data:_reItems} = await sb.from('salesweb_order_items')
+        .select('product_id, product_name, quantity').eq('order_id', orderId);
+      var _held = [];
+      var _unmatched = [];
+      for (var _i = 0; _i < (_reItems||[]).length; _i++) {
+        var _row = _reItems[_i];
+        var _qty = Number(_row.quantity) || 0;
+        if (!_row.product_id || _qty <= 0) {
+          if (_qty > 0) _unmatched.push((_row.product_name||'item') + ' × ' + _qty);
+          continue;
+        }
+        var _rpc = await sb.rpc('hold_product_stock', { p_product_id: _row.product_id, p_qty: _qty });
+        if (_rpc.error) {
+          // Fallback: the SECURITY DEFINER RPC isn't callable on this
+          // instance (missing GRANT EXECUTE, or the inventory_history
+          // migration never ran). Admins DO have direct write access
+          // to salesweb_products via RLS, so deduct stock_qty with a
+          // plain UPDATE and keep the reactivation going. Log the
+          // fallback so the inventory-history gap is visible in the
+          // timeline instead of silently diverging.
+          var _msg = String(_rpc.error.message || '');
+          var _missingGrant = /permission denied|not.*authoriz|does not exist/i.test(_msg);
+          if (_missingGrant) {
+            var{data:_p, error:_pErr} = await sb.from('salesweb_products')
+              .select('stock_qty, name').eq('id', _row.product_id).maybeSingle();
+            if (_pErr || !_p) {
+              toast('Could not re-reserve stock (fallback failed): ' + (_pErr && _pErr.message || 'product not found'), 'error');
+              return;
+            }
+            var _newQty = Math.max(0, (Number(_p.stock_qty) || 0) - _qty);
+            var{error:_uErr} = await sb.from('salesweb_products')
+              .update({ stock_qty: _newQty, updated_at: new Date().toISOString() })
+              .eq('id', _row.product_id);
+            if (_uErr) {
+              toast('Could not re-reserve stock (fallback failed): ' + _uErr.message, 'error');
+              return;
+            }
+            _held.push((_row.product_name || _p.name || 'item') + ' × ' + _qty + ' (fallback)');
+            continue;
+          }
+          toast('Could not re-reserve stock: ' + _msg, 'error');
+          return;
+        }
+        _held.push((_row.product_name || 'item') + ' × ' + _qty);
+      }
+      // Timeline row so the ledger explains why stock dropped on reactivation.
+      try {
+        var _s = await sb.auth.getSession();
+        var _u = _s?.data?.session?.user?.email || 'admin';
+        var _note = 'Stock re-reserved on reactivation (' + oldStatus + ' → ' + newStatus + ')';
+        if (_held.length)       _note += ': ' + _held.join('; ');
+        if (_unmatched.length)  _note += ' · Custom items (no product_id) skipped: ' + _unmatched.join('; ');
+        await sb.from('salesweb_order_timeline').insert([{
+          order_id: orderId, status: newStatus, note: _note, changed_by: _u
+        }]);
+      } catch(_logErr){ /* timeline write is non-fatal */ }
+    } catch (e) {
+      toast('Stock re-reserve failed: ' + (e && e.message || e), 'error');
+      return;
+    }
+  }
+
   // Primary: change the status. This must succeed before any side effects,
   // and its error is surfaced (a silent failure here previously made
   // "Update" appear to do nothing).
@@ -1488,6 +1564,8 @@ async function executeCancelOrStatusUpdate(orderId,oldStatus,newStatus,order){
       .catch(function(err){ console.error('[email] invoke threw:', err); });
 
     toast('Points issued + AL created + confirmation email sent');
+  } else if (oldStatus === 'Cancelled' && newStatus !== 'Cancelled') {
+    toast('Order reactivated — stock re-reserved');
   } else {
     toast('Status updated to '+newStatus);
   }
@@ -2852,7 +2930,18 @@ async function saveOrderItems(orderId){
       var{error:iErr}=await sb.from('salesweb_order_items').insert([{order_id:orderId,product_id:it.product_id||null,product_name:it.product_name,unit_price:Number(it.unit_price)||0,quantity:Number(it.quantity)||0,subtotal:sub}]);
       if(iErr){toast('Insert failed: '+iErr.message,'error');return;}
     } else if(it._action==='update'&&it.id){
-      var{error:uErr}=await sb.from('salesweb_order_items').update({product_name:it.product_name,unit_price:Number(it.unit_price)||0,quantity:Number(it.quantity)||0,subtotal:sub}).eq('id',it.id);
+      // product_id is written on update too — admins can now swap a row
+      // to a different catalogue product (or to Custom → product_id null)
+      // via the Edit Items picker, and the DB must follow the picker.
+      // Without this, stock accounting and FK joins keep pointing at
+      // the old product even though the row's visible name moved.
+      var{error:uErr}=await sb.from('salesweb_order_items').update({
+        product_id: it.product_id || null,
+        product_name: it.product_name,
+        unit_price: Number(it.unit_price)||0,
+        quantity: Number(it.quantity)||0,
+        subtotal: sub
+      }).eq('id',it.id);
       if(uErr){toast('Update failed: '+uErr.message,'error');return;}
     }
   }

@@ -2200,6 +2200,33 @@ export function initShopMain() {
   var _BE_MAX_LOAD = 600;
   var _BE_HRS_WD  = [8,9,10,11,12,13,14,15,16];
   var _BE_HRS_SAT = [8,9,10,11];
+  // The hours above are only what is used when the office setting cannot
+  // be read. Seedling Stock Management -> System Settings -> Collection
+  // Time Slot (shared_collection_slot_settings) is the real answer, LUNCH
+  // included: lunch hours are never offered and a booking may not run into
+  // them. Copy of mjm-ai-system shared/shared_collection_slots.js.
+  var _BE_SLOTS = { wd_close: 17, sat_close: 12, lunch_start: null, lunch_end: null };
+  var _BE_SLOTS_LOADED = false;
+  function _beInt(v, lo, hi){ var n=Number(v); return (v!==null&&v!==''&&isFinite(n)&&Math.floor(n)===n&&n>=lo&&n<=hi)?n:null; }
+  async function _beFetchSlotSettings(){
+    if(_BE_SLOTS_LOADED) return;
+    try{
+      var r=await _sb.from('shared_collection_slot_settings').select('*').eq('id',1).maybeSingle();
+      var row=r&&r.data; if(!row) return;
+      var wo=_beInt(row.weekday_open,0,23), wc=_beInt(row.weekday_close,1,24), so=_beInt(row.sat_open,0,23), sc=_beInt(row.sat_close,1,24);
+      if(wo===null||wc===null||wc<=wo||so===null||sc===null||sc<=so) return;
+      _BE_HRS_WD.length=0; for(var h=wo;h<wc;h++) _BE_HRS_WD.push(h);
+      _BE_HRS_SAT.length=0; for(var k=so;k<sc;k++) _BE_HRS_SAT.push(k);
+      _BE_SLOTS.wd_close=wc; _BE_SLOTS.sat_close=sc;
+      var ls=_beInt(row.lunch_start,0,23), le=_beInt(row.lunch_end,1,24);
+      if(ls!==null&&le!==null&&le>ls){ _BE_SLOTS.lunch_start=ls; _BE_SLOTS.lunch_end=le; }
+      if(Number(row.rate_per_hour)>0) _BE_RATE=Number(row.rate_per_hour);
+      if(Number(row.max_load_per_hour)>0) _BE_MAX_LOAD=Number(row.max_load_per_hour);
+      _BE_SLOTS_LOADED=true;
+    }catch(e){ console.warn('slot settings fetch failed:',e); }
+  }
+  function _beIsLunch(h){ return _BE_SLOTS.lunch_start!==null && h>=_BE_SLOTS.lunch_start && h<_BE_SLOTS.lunch_end; }
+  function _beCrossesLunch(a,b){ return _BE_SLOTS.lunch_start!==null && a<_BE_SLOTS.lunch_end && b>_BE_SLOTS.lunch_start; }
   var _BE_HOLIDAYS = {'2026-01-01':'New Year','2026-01-14':'Nuzul Al-Quran','2026-01-29':'Thaipusam','2026-02-01':'FT Day','2026-02-17':'CNY','2026-02-18':'CNY','2026-03-28':'Hari Raya Aidilfitri','2026-03-29':'Hari Raya Aidilfitri','2026-05-01':'Labour Day','2026-05-11':'Vesak Day','2026-06-01':'Agong Birthday','2026-06-04':'Hari Raya Haji','2026-06-05':'Hari Raya Haji','2026-06-25':'Awal Muharram','2026-08-31':'Merdeka Day','2026-09-03':'Maulidur Rasul','2026-09-16':'Malaysia Day','2026-10-20':'Deepavali','2026-12-25':'Christmas'};
 
   // Lazy-loaded caches scoped to the edit modal:
@@ -2241,16 +2268,16 @@ export function initShopMain() {
     if(ovr){
       if(!ovr.is_open) return [];
       var arr=[]; for(var h=ovr.open_hour;h<ovr.close_hour;h++) arr.push(h);
-      return arr;
+      return arr.filter(function(x){ return !_beIsLunch(x); });
     }
     var d=new Date(ds+'T00:00:00'),dow=d.getDay();
     if(dow===0||_BE_HOLIDAYS[ds]) return [];
-    return dow===6?_BE_HRS_SAT:_BE_HRS_WD;
+    return (dow===6?_BE_HRS_SAT:_BE_HRS_WD).filter(function(x){ return !_beIsLunch(x); });
   }
   function _beClosing(ds){
     var ovr=_BE_OVERRIDES&&_BE_OVERRIDES[ds];
     if(ovr && ovr.is_open && ovr.close_hour) return ovr.close_hour;
-    return new Date(ds+'T00:00:00').getDay()===6?12:17;
+    return new Date(ds+'T00:00:00').getDay()===6?_BE_SLOTS.sat_close:_BE_SLOTS.wd_close;
   }
   function _beHourLoad(ds, h, excludeId){
     var bks=_BE_BOOKINGS_BY_DATE[ds]||[];
@@ -2268,7 +2295,7 @@ export function initShopMain() {
   function _beCanFit(ds, startH, qty, excludeId){
     var cl=_beClosing(ds);
     var hrs=_beHrsNeeded(qty), endH=startH+hrs;
-    if(endH>cl) return false;
+    if(endH>cl || _beCrossesLunch(startH, endH)) return false;
     var ld=_beHrLoad(qty);
     for(var h=startH; h<endH; h++){
       if(_beHourLoad(ds, h, excludeId) + ld > _BE_MAX_LOAD) return false;
@@ -2276,6 +2303,7 @@ export function initShopMain() {
     return true;
   }
   async function _beFetchOverrides(){
+    await _beFetchSlotSettings();
     if(_BE_OVERRIDES) return _BE_OVERRIDES;
     _BE_OVERRIDES={};
     try{

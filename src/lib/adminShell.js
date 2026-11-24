@@ -146,7 +146,7 @@ export function switchTab(tab,el){
   if(tab==='quotations')window.loadQuotations();
   if(tab==='promos')window.loadPromos();
   if(tab==='coupons')window.loadCoupons();
-  if(tab==='webdesign')window.loadWebDesign();
+  if(tab==='webdesign'){ window.loadWebDesign(); if (typeof window.loadPagesPolicies === 'function') window.loadPagesPolicies(); }
   if(tab==='users')window.loadUsers();
   if(tab==='settings')loadSettings();
 }
@@ -186,6 +186,19 @@ export function showSettingsSubTab(tab){
     if(panel) panel.style.display = (t===tab)?'':'none';
     if(btn) btn.className='btn btn-'+(t===tab?'primary':'outline')+' btn-sm';
   });
+}
+
+// Website Design sub-tab switcher — Our Passion vs Pages & Policies.
+// Mirrors showSettingsSubTab so the toggle button style and the panel
+// show/hide stay consistent across the admin portal.
+export function showWebDesignSubTab(tab){
+  ['passion','pages'].forEach(function(t){
+    var panel=document.getElementById('wd-panel-'+t);
+    var btn=document.getElementById('wd-subtab-'+t);
+    if(panel) panel.style.display = (t===tab)?'':'none';
+    if(btn) btn.className='btn btn-'+(t===tab?'primary':'outline')+' btn-sm';
+  });
+  if (tab === 'pages' && typeof window.loadPagesPolicies === 'function') window.loadPagesPolicies();
 }
 
 export async function loadSettings(){
@@ -523,7 +536,7 @@ Object.assign(window, {
   openModal, closeModal, toast, esc, jsArg, safeUrl, fmtDate, statusBadge,
   // settings tab (adminSettings / notificationConfig / paymentDetails
   // are already window-owned above)
-  showSettingsSubTab, loadSettings,
+  showSettingsSubTab, showWebDesignSubTab, loadSettings,
   loadAutoReleaseConfig, saveAutoReleaseConfig,
   loadNotificationConfig, saveNotificationConfig,
   loadPaymentDetails, renderPaymentQrPreview, savePaymentDetails,
@@ -550,6 +563,7 @@ var MODULE_SRCS = [
   '/admin-promotions.js?v=2026-05-18-points-ledger',
   '/admin-coupons.js?v=2026-05-28-coupon-groups',
   '/admin-web-design.js?v=2026-05-20-port-from-umbrella',
+  '/admin-pages-policies.js?v=2026-11-24-pages-policies-editor',
   '/admin-messages.js?v=2026-10-26-whatsapp',
   '/admin-whatsapp.js?v=2026-10-26-whatsapp',
   '/admin-seal.js?v=1',

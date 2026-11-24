@@ -485,9 +485,19 @@ export default function Admin() {
                   </div>
                 {/* WEBSITE DESIGN */}
                 <div className="tab-content" id="tab-webdesign">
-                  <div className="main-header"><div className="main-title">Website Design — Our Passion Section</div></div>
-                  <p style={{ color: '#64748b', fontSize: '13px', marginBottom: '1rem' }}>Upload images and edit text for the "Our Passion" ecosystem flow on the storefront. Changes appear instantly on the live site.</p>
-                  <div className="card" id="webdesign-passion-list"><div className="loading">Loading...</div></div>
+                  <div className="main-header"><div className="main-title">Website Design</div></div>
+                  <div style={{ display: 'flex', gap: '.4rem', marginBottom: '1rem' }}>
+                    <button className="btn btn-primary btn-sm" id="wd-subtab-passion" onClick={(e) => { window.showWebDesignSubTab('passion'); }} style={{ fontSize: '11px' }}>Our Passion</button>
+                    <button className="btn btn-outline btn-sm" id="wd-subtab-pages" onClick={(e) => { window.showWebDesignSubTab('pages'); }} style={{ fontSize: '11px' }}>Pages &amp; Policies</button>
+                  </div>
+                  <div id="wd-panel-passion">
+                    <p style={{ color: '#64748b', fontSize: '13px', marginBottom: '1rem' }}>Upload images and edit text for the "Our Passion" ecosystem flow on the storefront. Changes appear instantly on the live site.</p>
+                    <div className="card" id="webdesign-passion-list"><div className="loading">Loading...</div></div>
+                  </div>
+                  <div id="wd-panel-pages" style={{ display: 'none' }}>
+                    <p style={{ color: '#64748b', fontSize: '13px', marginBottom: '1rem' }}>Add, rename, reorder and edit the <strong>About MJM</strong> dropdown sections and the <strong>Our Policies</strong> tabs shown on the storefront.</p>
+                    <div id="webdesign-pages-list"><div className="loading">Loading...</div></div>
+                  </div>
                   </div>
                 {/* USER ACCESS — admin-only */}
                 <div className="tab-content" id="tab-users">

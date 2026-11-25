@@ -495,115 +495,6 @@ export function initShopMain() {
     return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/\n/g,'<br>');
   }
 
-  // ── Storefront pages config (admin-editable) ────────────────────────
-  // One row in salesweb_app_settings holds the About-MJM dropdown and
-  // the Our-Policies tab list. If the row is missing (fresh install or
-  // the migration hasn't run), bail quietly — Nav.jsx / InformationPage
-  // already baked the previous hard-coded defaults into the DOM.
-  async function applyStorefrontPagesConfig(){
-    var cfg = null;
-    try {
-      var rows = await sbFetch('salesweb_app_settings', {
-        'select': 'value',
-        'key': 'eq.storefront_pages_config',
-        'limit': '1'
-      });
-      if (rows && rows.length){
-        var raw = rows[0].value;
-        try { cfg = typeof raw === 'string' ? JSON.parse(raw) : raw; }
-        catch(e) { cfg = null; }
-      }
-    } catch(e){ /* ignore — fall back to baked defaults */ }
-    if (!cfg || typeof cfg !== 'object') return;
-    if (Array.isArray(cfg.about_sections)) _rebuildAboutMjmDropdown(cfg.about_sections);
-    if (Array.isArray(cfg.policies))       _rebuildPolicyPage(cfg.policies);
-  }
-
-  function _routeNavAction(action){
-    var a = String(action || '').trim();
-    if (!a) return;
-    if (a === 'policies'){
-      showPage('information');
-      setTimeout(function(){
-        var first = document.querySelector('.policy-tab');
-        if (first) first.click();
-      }, 40);
-      return;
-    }
-    if (a.indexOf('policies:') === 0){
-      var slug = a.substring(9);
-      showPage('information');
-      setTimeout(function(){ switchPolicyTab(slug); }, 40);
-      return;
-    }
-    if (a.indexOf('page:') === 0){ showPage(a.substring(5)); return; }
-    if (a.indexOf('url:') === 0){ window.location.href = a.substring(4); return; }
-    // Fallback: treat as a page id so a bare "contact" also works.
-    showPage(a);
-  }
-
-  function _rebuildAboutMjmDropdown(sections){
-    var menu = document.querySelector('.nav-dropdown-menu');
-    if (!menu) return;
-    // Build fresh. We keep the SAME container so the existing
-    // open-on-hover CSS still targets it.
-    var frag = document.createDocumentFragment();
-    sections.forEach(function(sec){
-      if (!sec || typeof sec !== 'object') return;
-      var h = document.createElement('div');
-      h.className = 'nav-dropdown-section';
-      h.textContent = String(sec.title || '');
-      frag.appendChild(h);
-      (sec.links||[]).forEach(function(lnk){
-        if (!lnk || typeof lnk !== 'object') return;
-        var a = document.createElement('a');
-        a.textContent = String(lnk.label || '');
-        a.style.cursor = 'pointer';
-        (function(action){
-          a.addEventListener('click', function(ev){
-            ev.preventDefault();
-            _routeNavAction(action);
-          });
-        })(lnk.action);
-        frag.appendChild(a);
-      });
-    });
-    menu.innerHTML = '';
-    menu.appendChild(frag);
-  }
-
-  function _rebuildPolicyPage(policies){
-    var tabsHost = document.querySelector('.policy-tabs');
-    var infoBlock = document.querySelector('.info-policies');
-    if (!tabsHost || !infoBlock || !policies.length) return;
-    // Clear old tabs + content cards.
-    tabsHost.innerHTML = '';
-    infoBlock.querySelectorAll('.policy-content').forEach(function(n){ n.remove(); });
-
-    policies.forEach(function(p, i){
-      var slug = String(p.slug || '').trim() ||
-                 (String(p.label||'tab').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'') || ('tab-'+i));
-      var btn = document.createElement('button');
-      btn.className = 'policy-tab' + (i === 0 ? ' active' : '');
-      btn.textContent = String(p.label || '');
-      (function(s){
-        btn.addEventListener('click', function(ev){ switchPolicyTab(s, ev.currentTarget); });
-      })(slug);
-      tabsHost.appendChild(btn);
-
-      var card = document.createElement('div');
-      card.className = 'policy-content' + (i === 0 ? ' active' : '');
-      card.id = 'pol-' + slug;
-      var inner = document.createElement('div');
-      inner.style.cssText = 'background:#fff;border-radius:16px;padding:2.5rem;border:1px solid rgba(0,0,0,.06);line-height:1.8;color:var(--text-mid);font-size:14px;';
-      // Admin-supplied HTML. Content comes from staff-authenticated
-      // writes only; the editor has no customer-facing input path.
-      inner.innerHTML = String(p.body_html || '');
-      card.appendChild(inner);
-      infoBlock.appendChild(card);
-    });
-  }
-
   // ── POLICY TABS ──
   // Callers pass either a button element (from the click) or nothing at
   // all (when we're auto-selecting from a URL query param). Falls back
@@ -1347,11 +1238,6 @@ export function initShopMain() {
   fetchProducts();
   updateCartUI();
   loadPassionSection();
-  // Fetch the admin-editable About-MJM dropdown + Our-Policies tabs and
-  // rebuild those DOM regions. Falls back to whatever Nav.jsx /
-  // InformationPage.jsx already rendered if the setting is missing or
-  // the fetch errors, so the site never blanks on a bad config row.
-  applyStorefrontPagesConfig();
 
   // Preload the supabase SDK in the background (non-blocking). By the time
   // the user clicks Login or My Account, it's usually already loaded. If the

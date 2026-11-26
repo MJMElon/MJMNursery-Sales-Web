@@ -5,6 +5,7 @@ import Nav from './Nav.jsx';
 import LogoFly from './LogoFly.jsx';
 import HomePage from './HomePage.jsx';
 import InformationPage from './InformationPage.jsx';
+import FaqPage from './FaqPage.jsx';
 import ContactPage from './ContactPage.jsx';
 import JoinPage from './JoinPage.jsx';
 import CalculatorPage from './CalculatorPage.jsx';
@@ -29,6 +30,7 @@ export default function Shop() {
       <LogoFly />
       <HomePage />
       <InformationPage />
+      <FaqPage />
       <ContactPage />
       <JoinPage />
       <CalculatorPage />

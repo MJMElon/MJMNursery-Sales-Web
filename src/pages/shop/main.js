@@ -163,7 +163,7 @@ export function initShopMain() {
     document.getElementById('page-' + page).classList.add('active');
     // Update active nav link
     document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
-    const navMap = { home: 'nav-shop', information: 'nav-information', contact: 'nav-contact', join: 'nav-join', portal: 'nav-myaccount', calculator: 'nav-information', quotation: 'nav-information', 'checkout-login': null };
+    const navMap = { home: 'nav-shop', information: 'nav-information', faq: 'nav-information', contact: 'nav-contact', join: 'nav-join', portal: 'nav-myaccount', calculator: 'nav-information', quotation: 'nav-information', 'checkout-login': null };
     if (page === 'portal') { setTimeout(function(){ try { initPortal(); } catch(e) { console.error('Portal init error:', e); } }, 50); }
     // Calculator + Quotation forms: clear on every visit so each entry
     // starts fresh — DOM-toggled pages otherwise keep stale typed values.

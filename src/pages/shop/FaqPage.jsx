@@ -275,10 +275,14 @@ function jumpToFaq(id, e){
   setTimeout(function(){ el.style.backgroundColor = ''; }, 1600);
   try {
     var url = new URL(window.location.href);
+    url.searchParams.delete('policy');
+    url.searchParams.set('page', 'faq');
     url.hash = id;
     window.history.replaceState(null, '', url.toString());
   } catch(_){}
 }
+
+window.jumpToFaq = jumpToFaq;
 
 export default function FaqPage() {
   return (

@@ -27,12 +27,12 @@ export default function JoinPage() {
             <h3>Ready to Apply?</h3>
             <div className="join-email">
               <svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" /></svg>
-              <a href="mailto:recuit@puigroups.com">recuit@puigroups.com</a>
+              <a href="mailto:contact@puigroups.com">contact@puigroups.com</a>
             </div>
             <p className="join-note">Send your resume to the email above. Shortlisted candidates will be contacted. We review applications on a rolling basis.</p>
             <div style={css('margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid rgba(255,255,255,.1)')}>
               <a
-                href="mailto:recuit@puigroups.com"
+                href="mailto:contact@puigroups.com"
                 style={css('display:inline-flex;align-items:center;gap:.5rem;background:var(--gold);color:var(--green-dark);font-weight:500;font-size:14px;padding:.8rem 1.75rem;border-radius:8px;text-decoration:none;transition:background .2s;')}
                 onMouseOver={(e) => { e.currentTarget.style.background = '#E8D49A'; }}
                 onMouseOut={(e) => { e.currentTarget.style.background = '#C9A84C'; }}
@@ -84,7 +84,7 @@ export default function JoinPage() {
           <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" /></svg>
           <div>
             <h4>Your Resume Should Include</h4>
-            <p>Position of interest · Preferred work location · Contact details (phone & email). Send to <a href="mailto:recuit@puigroups.com" style={css('color:var(--green-mid);font-weight:500;')}>recuit@puigroups.com</a></p>
+            <p>Position of interest · Preferred work location · Contact details (phone & email). Send to <a href="mailto:contact@puigroups.com" style={css('color:var(--green-mid);font-weight:500;')}>contact@puigroups.com</a></p>
           </div>
         </div>
       </div>

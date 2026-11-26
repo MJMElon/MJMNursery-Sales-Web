@@ -27,6 +27,7 @@ export default function Nav() {
           <div className="nav-dropdown-menu">
             <div className="nav-dropdown-section">About MJM</div>
             <a href="/?policy=terms" onClick={(e) => { e.preventDefault(); window.showPage('information'); setTimeout(function(){ window.switchPolicyTab && window.switchPolicyTab('terms'); }, 40); }}>Our Policies</a>
+            <a onClick={() => window.showPage('faq')}>FAQ</a>
             <a onClick={() => window.showPage('contact')}>Contact Us</a>
             <a onClick={() => window.showPage('join')}>Join Our Team</a>
             <div className="nav-dropdown-section">Plan Your Purchase</div>

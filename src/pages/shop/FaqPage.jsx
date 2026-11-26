@@ -47,7 +47,7 @@ const SECTIONS = [
       },
       {
         id: 'q5',
-        q: 'Q5. How old are your matured seedlings? / 你们的 Matured Seedlings 是几个月？',
+        q: 'Q5. How old are your matured seedlings? / 你们的成熟油棕苗是几个月？',
         en: 'Our matured oil palm seedlings are generally around 10–12 months old or above, depending on the available stock.',
         zh: '我们的成熟油棕苗一般为 10–12 个月或以上，具体苗龄视现有库存而定。',
       },
@@ -143,7 +143,7 @@ const SECTIONS = [
       },
       {
         id: 'q18',
-        q: 'Q18. Can I collect from different plots? / 可以去不同的 Plot 领取吗？',
+        q: 'Q18. Can I collect from different plots? / 可以去不同的苗区领取吗？',
         en: 'Collection locations may vary depending on the variety and stock availability. Customers must follow the collection location and other collection arrangements as instructed by the nursery.',
         zh: '领取地点可能会根据品种及库存情况而有所不同。客户须遵从苗场指定的领取地点及其他相关领取安排。',
       },
@@ -205,7 +205,7 @@ const SECTIONS = [
         id: 'q26',
         q: 'Q26. How do I submit my payment proof? / 如何提交付款凭证？',
         en: 'You may upload your payment proof during checkout or later under My Order on our website.',
-        zh: '您可在结账时上传付款凭证，或稍后前往网站 My Order（我的订单） 上传。',
+        zh: '您可在结账时上传付款凭证，或稍后前往网站的「我的订单」页面上传。',
       },
       {
         id: 'q27',
@@ -214,14 +214,14 @@ const SECTIONS = [
           <>Please refer to our <a href="/?policy=einvoice" onClick={(e) => { e.preventDefault(); window.showPage('information'); setTimeout(function(){ window.switchPolicyTab && window.switchPolicyTab('einvoice'); }, 40); }} style={css('color:var(--green-mid);font-weight:500;cursor:pointer;')}>E-Invoice Guidelines</a> for the request procedures and requirements.</>
         ),
         zh: (
-          <>如需申请 E-Invoice（电子发票），请参阅我们的 <a href="/?policy=einvoice" onClick={(e) => { e.preventDefault(); window.showPage('information'); setTimeout(function(){ window.switchPolicyTab && window.switchPolicyTab('einvoice'); }, 40); }} style={css('color:var(--green-mid);font-weight:500;cursor:pointer;')}>E-Invoice 申请指引</a>，了解申请流程及所需资料。</>
+          <>如需申请电子发票，请参阅我们的 <a href="/?policy=einvoice" onClick={(e) => { e.preventDefault(); window.showPage('information'); setTimeout(function(){ window.switchPolicyTab && window.switchPolicyTab('einvoice'); }, 40); }} style={css('color:var(--green-mid);font-weight:500;cursor:pointer;')}>电子发票申请指引</a>，了解申请流程及所需资料。</>
         ),
       },
       {
         id: 'q28',
         q: 'Q28. How can I request a regular Invoice (INV)? / 如何申请普通发票？',
         en: 'Kindly contact us through our official communication channels and provide your order number and billing details for processing.',
-        zh: '如需申请普通 Invoice（发票），请通过我们的官方联系渠道联系我们，并提供订单编号及相关开票资料，以便处理。',
+        zh: '如需申请普通发票，请通过我们的官方联系渠道联系我们，并提供订单编号及相关开票资料，以便处理。',
       },
       {
         id: 'q29',
@@ -233,7 +233,7 @@ const SECTIONS = [
         id: 'q30',
         q: 'Q30. How can I request a Delivery Order (DO)? / 如何申请交货单（DO）？',
         en: 'All Delivery Orders (DO) are available electronically through our website. If you require a hardcopy, kindly visit our office and request assistance from our nursery staff.',
-        zh: '所有 交货单（DO）均可通过我们的网站获取。如需纸本，请到办公室向苗场工作人员寻求协助，我们将为您准备。',
+        zh: '所有交货单（DO）均可通过我们的网站获取。如需纸本，请到办公室向苗场工作人员寻求协助，我们将为您准备。',
       },
       {
         id: 'q31',
@@ -248,7 +248,7 @@ const SECTIONS = [
           <>To request a Statement of Account, kindly email us at <a href="mailto:megajutamassb@outlook.com" style={css('color:var(--green-mid);font-weight:500;')}>megajutamassb@outlook.com</a> and indicate your company name and the relevant period.</>
         ),
         zh: (
-          <>如需申请 Statement of Account（账单对账单），请电邮至：<a href="mailto:megajutamassb@outlook.com" style={css('color:var(--green-mid);font-weight:500;')}>megajutamassb@outlook.com</a>，并注明公司名称及所需账单期间。</>
+          <>如需申请账单对账单，请电邮至：<a href="mailto:megajutamassb@outlook.com" style={css('color:var(--green-mid);font-weight:500;')}>megajutamassb@outlook.com</a>，并注明公司名称及所需账单期间。</>
         ),
       },
       {

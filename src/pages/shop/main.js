@@ -203,6 +203,17 @@ export function initShopMain() {
     document.getElementById('navLinks').classList.remove('open');
     // Save last page for refresh persistence (skip transient pages)
     if (page !== 'checkout-login') sessionStorage.setItem('mjm_last_page', page);
+    // Keep the address bar in step: FAQ shows ?page=faq, and a leftover
+    // ?policy= or #qN from a previous page is dropped.
+    try {
+      var u = new URL(window.location.href);
+      var before = u.toString();
+      if (page === 'faq') u.searchParams.set('page', 'faq');
+      else u.searchParams.delete('page');
+      if (page !== 'information') u.searchParams.delete('policy');
+      if (page !== 'faq' && /^#q\d+$/.test(u.hash)) u.hash = '';
+      if (u.toString() !== before) window.history.replaceState({ page: page }, '', u.toString());
+    } catch(_){}
     // Scroll to top
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -534,9 +545,22 @@ export function initShopMain() {
   // Information page and opens the requested tab. Used by the checkout
   // E-Invoice modal's "E-Invoice Policy" link so customers land on the
   // right section, not a generic policies page.
+  // Snapshot the landing URL now: the refresh-restore below calls
+  // showPage(), which may rewrite the address bar before this runs.
+  var _landingSearch = window.location.search;
+  var _landingHash = window.location.hash;
   function applyPolicyDeepLink(){
     try{
-      var params = new URLSearchParams(window.location.search);
+      var params = new URLSearchParams(_landingSearch);
+      if (params.get('page') === 'faq') {
+        showPage('faq');
+        var q = /^#q\d+$/.test(_landingHash) ? _landingHash.substring(1) : '';
+        if (q) {
+          try { history.replaceState({ page: 'faq' }, '', location.pathname + '?page=faq#' + q); } catch(_){}
+          setTimeout(function(){ if (window.jumpToFaq) window.jumpToFaq(q); }, 450);
+        }
+        return;
+      }
       var policy = params.get('policy');
       if(!policy) return;
       showPage('information');
@@ -553,6 +577,7 @@ export function initShopMain() {
       var params = new URLSearchParams(window.location.search);
       var policy = params.get('policy');
       if (policy){ showPage('information'); setTimeout(function(){ switchPolicyTab(policy); }, 40); }
+      else if (params.get('page') === 'faq'){ showPage('faq'); }
     } catch(_){}
   });
 

@@ -41,6 +41,11 @@ await page.evaluate(() => {
   window.toasts = []; window.toast = (m, t) => window.toasts.push([m, t]);
   window.sb = { from() { return {}; }, rpc() { return Promise.resolve({}); } };
 });
+// The shell defines the payment terms helpers before it loads this module,
+// so the harness does too, lifted from the shipped shell.
+const shellSrc = readFileSync(path.join(here, '..', 'src', 'lib', 'adminShell.js'), 'utf8');
+const ti = shellSrc.indexOf('// ── Payment terms ─'), tj = shellSrc.indexOf('// ── Classic module loading', ti);
+if (ti >= 0 && tj > ti) await page.addScriptTag({ content: shellSrc.slice(ti, tj) });
 await page.addScriptTag({ content: src });
 
 console.log('1. The button exists');

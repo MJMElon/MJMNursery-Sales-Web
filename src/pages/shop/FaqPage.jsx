@@ -12,7 +12,7 @@ const sectionHeadingStyle = 'color:var(--text-dark);font-size:17px;font-weight:6
 const sectionHeadingFirstStyle = sectionHeadingStyle.replace('margin:2rem 0 .75rem', 'margin:0 0 .75rem');
 const tocLinkStyle = 'display:block;padding:.4rem .2rem;color:var(--text-mid);font-size:13.5px;line-height:1.55;text-decoration:none;cursor:pointer;border-bottom:1px dashed rgba(0,0,0,.06);transition:color .15s,background .15s;';
 const qHeadingStyle = 'color:var(--text-dark);font-size:14.5px;font-weight:600;margin:0 0 .6rem;';
-const qAnchorOffset = 'scroll-margin-top:110px;';
+const qAnchorOffset = 'scroll-margin-top:170px;border-radius:10px;padding-left:.5rem;padding-right:.5rem;margin-left:-.5rem;margin-right:-.5rem;';
 const answerEnStyle = 'margin:0 0 .75rem;';
 const answerZhStyle = 'margin:0;color:var(--text-mid);';
 
@@ -265,7 +265,14 @@ function jumpToFaq(id, e){
   if (e && e.preventDefault) e.preventDefault();
   var el = document.getElementById(id);
   if (!el) return;
-  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // Offset by the fixed nav's real height so the question heading isn't hidden under it.
+  var nav = document.getElementById('navbar');
+  var navH = nav ? nav.getBoundingClientRect().height : 144;
+  var top = el.getBoundingClientRect().top + window.pageYOffset - navH - 20;
+  window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+  el.style.transition = 'background-color .3s';
+  el.style.backgroundColor = 'var(--green-pale)';
+  setTimeout(function(){ el.style.backgroundColor = ''; }, 1600);
   try {
     var url = new URL(window.location.href);
     url.hash = id;

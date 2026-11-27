@@ -10,9 +10,9 @@ export default function ProductPopup() {
         <div className="pp-img" id="ppImg"></div>
         <div className="pp-body">
           <div className="pp-name" id="ppName"></div>
-          <div className="pp-desc" id="ppDesc" style={css('white-space:pre-wrap;line-height:1.55;')}></div>
           <div className="pp-price" id="ppPrice"></div>
           <div className="pp-stock" id="ppStock"></div>
+          <div className="pp-desc" id="ppDesc" style={css('white-space:pre-wrap;line-height:1.55;')}></div>
           <div className="pp-actions" style={css('margin-top:1rem;')}>
             <button className="pp-close-btn" onClick={() => window.closeProductPopup()} style={css('width:100%;')}>Close</button>
           </div>

@@ -822,7 +822,9 @@ export function initShopMain() {
     // ppDesc now shows the REAL product description (or a graceful fallback).
     var descEl = document.getElementById('ppDesc');
     if (p.description) {
-      descEl.textContent = p.description;
+      var html = buildDescAccordion(p.description);
+      if (html) { descEl.innerHTML = html; descEl.style.whiteSpace = 'normal'; }
+      else { descEl.textContent = p.description; descEl.style.whiteSpace = 'pre-wrap'; }
       descEl.style.display = '';
     } else {
       descEl.textContent = '';
@@ -831,6 +833,41 @@ export function initShopMain() {
     document.getElementById('ppPrice').textContent = fmtRM(p.priceNum || 0);
     document.getElementById('ppStock').textContent = p.stock > 0 ? p.stock.toLocaleString() + ' available' : 'Out of stock';
     document.getElementById('productPopup').classList.add('open');
+  }
+
+  // Turns a description written as "Label – text" paragraphs into an open
+  // Details block (age / height / size) plus collapsed rows for the rest.
+  // Returns '' when the text doesn't follow that pattern, so the caller
+  // falls back to showing it as plain text.
+  function buildDescAccordion(desc) {
+    var text = String(desc).replace(/\r\n?/g, '\n').trim();
+    var paras = text.split(/\n\s*\n/);
+    if (paras.length <= 1) paras = text.split('\n');
+    paras = paras.map(function(s){ return s.trim(); }).filter(Boolean);
+    var labelRe = /^([^\n:–—]{2,40}?)\s*(?:[–—]|\s-\s|:)\s*([\s\S]+)$/;
+    var intro = [], sections = [], notes = [];
+    paras.forEach(function(para){
+      var m = para.match(labelRe);
+      if (m) sections.push({ label: m[1].trim(), body: m[2].trim() });
+      else if (sections.length) notes.push(para);
+      else intro.push(para);
+    });
+    if (sections.length < 2) return '';
+    var keyRe = /\b(age|height|size)\b/i;
+    var key = sections.filter(function(s){ return keyRe.test(s.label); });
+    var rest = sections.filter(function(s){ return !keyRe.test(s.label); });
+    if (!key.length) { key = [sections[0]]; rest = sections.slice(1); }
+    var nl = function(s){ return esc(s).replace(/\n/g, '<br>'); };
+    var out = '';
+    intro.forEach(function(s){ out += '<p class="pp-intro">' + nl(s) + '</p>'; });
+    out += '<details class="pp-acc" open><summary>Details</summary><div class="pp-acc-body"><dl class="pp-kv">';
+    key.forEach(function(s){ out += '<dt>' + esc(s.label) + '</dt><dd>' + nl(s.body) + '</dd>'; });
+    out += '</dl></div></details>';
+    rest.forEach(function(s){
+      out += '<details class="pp-acc"><summary>' + esc(s.label) + '</summary><div class="pp-acc-body">' + nl(s.body) + '</div></details>';
+    });
+    notes.forEach(function(s){ out += '<p class="pp-note">' + nl(s) + '</p>'; });
+    return out;
   }
 
   function closeProductPopup() {

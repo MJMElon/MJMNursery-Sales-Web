@@ -1820,13 +1820,18 @@ export function initShopMain() {
   function pMsgEsc(s){ var d=document.createElement('div'); d.textContent=s==null?'':String(s); return d.innerHTML; }
   async function pClaimMessage(){
     var ref=(document.getElementById('pc-ref').value||'').trim();
+    var phone=((document.getElementById('pc-phone')||{}).value||'').trim();
     var msg=document.getElementById('pc-msg'), btn=document.getElementById('pc-btn');
     var say=function(text, ok){ msg.textContent=text; msg.style.color=ok?'#15803d':'#b91c1c'; msg.style.display='block'; };
-    if(!ref) return say('Please enter the reference number, e.g. MSG-00001.');
+    if(!ref) return say('Please enter the reference number, e.g. MSG-00001-AB2C.');
+    // The database matches the phone on the message before linking it
+    // (salesweb_claim_message), so a reference alone can no longer take
+    // somebody else's message.
+    if(phone.replace(/\D/g,'').length<9) return say('Please enter the phone number you gave when you sent the message.');
     btn.disabled=true; btn.textContent='Adding…';
     try{
       await loadSupabaseSdk();
-      var r=await _sb.rpc('salesweb_claim_message',{p_ref:ref});
+      var r=await _sb.rpc('salesweb_claim_message',{p_ref:ref, p_phone:phone});
       if(r.error) throw r.error;
       var row=Array.isArray(r.data)?r.data[0]:r.data;
       await pRenderMessages();
@@ -1844,8 +1849,8 @@ export function initShopMain() {
       // links it here by its reference number (salesweb_claim_message).
       // One already linked to an account cannot be taken by another.
       '<div class="p-card p-claim" style="margin-bottom:1rem;"><div style="font-weight:700;font-size:13px;color:var(--text-dark);margin-bottom:.25rem;">Add a Case</div>'+
-      '<div style="font-size:12px;color:var(--text-light);line-height:1.5;margin-bottom:.7rem;">Sent us a message before signing in? Enter its reference number and it will appear here.</div>'+
-      '<div class="p-claim-row"><input id="pc-ref" placeholder="Reference, e.g. MSG-00001" autocomplete="off" onkeydown="if(event.key===\'Enter\')pClaimMessage()"><button class="p-save-btn" id="pc-btn" onclick="pClaimMessage()">Add</button></div>'+
+      '<div style="font-size:12px;color:var(--text-light);line-height:1.5;margin-bottom:.7rem;">Sent us a message before signing in? Enter its reference number and the phone number you gave, and it will appear here.</div>'+
+      '<div class="p-claim-row"><input id="pc-ref" placeholder="Reference, e.g. MSG-00001-AB2C" autocomplete="off" onkeydown="if(event.key===\'Enter\')pClaimMessage()"><input id="pc-phone" type="tel" inputmode="tel" placeholder="Phone number" autocomplete="tel" onkeydown="if(event.key===\'Enter\')pClaimMessage()"><button class="p-save-btn" id="pc-btn" onclick="pClaimMessage()">Add</button></div>'+
       '<div id="pc-msg" style="font-size:12px;margin-top:.5rem;display:none;"></div></div>';
     host.innerHTML=newBtn+'<div class="p-card" style="text-align:center;padding:1.5rem;font-size:13px;color:var(--text-light);">Loading your messages…</div>';
     try{
@@ -3554,18 +3559,26 @@ export function initShopMain() {
         return;
       }
 
-      var { error } = await _sb.from('salesweb_customer_orders')
-          .update({ status: 'Cancelled', updated_at: new Date().toISOString() })
-          .eq('id', fullId);
-      if (error) { showPortalToast('Cancel failed: ' + error.message); return; }
-      // Return the held stock now that the order is cancelled.
-      await pRestoreOrderStock(ord);
-      await _sb.from('salesweb_order_timeline').insert([{
-        order_id: fullId,
-        status: 'Cancelled',
-        note: 'Order cancelled by customer via portal — stock returned',
-        changed_by: email
-      }]);
+      // One database call cancels the order AND returns its stock, once
+      // (salesweb_cancel_my_order). Calling the stock return on its own is
+      // staff-only now, because it could be repeated to inflate stock.
+      var cx = await _sb.rpc('salesweb_cancel_my_order', { p_order_id: fullId });
+      var cxMissing = cx.error && (cx.error.code === 'PGRST202' || cx.error.code === '42883');
+      if (cx.error && !cxMissing) { showPortalToast('Cancel failed: ' + (cx.error.message || cx.error)); return; }
+      if (cxMissing) {
+        // Database not yet updated: the previous path, unchanged.
+        var { error } = await _sb.from('salesweb_customer_orders')
+            .update({ status: 'Cancelled', updated_at: new Date().toISOString() })
+            .eq('id', fullId);
+        if (error) { showPortalToast('Cancel failed: ' + error.message); return; }
+        await pRestoreOrderStock(ord);
+        await _sb.from('salesweb_order_timeline').insert([{
+          order_id: fullId,
+          status: 'Cancelled',
+          note: 'Order cancelled by customer via portal — stock returned',
+          changed_by: email
+        }]);
+      }
       showPortalToast('Order cancelled — items returned to stock');
       document.getElementById('p-order-detail-modal').classList.remove('open');
       // Refresh portal data so the order moves into the Cancelled state instantly.

@@ -271,12 +271,12 @@ async function loadOrders(){
       return ok;
     });
   }
-  // ── Terms filter ── ('cash' | 'credit'). null / missing payment_terms is
+  // ── Terms filter ── ('cash' | 'credit' | 'prepaid'). null / missing payment_terms is
   // treated as 'cash' since the checkout defaults to cash when nothing is
   // set explicitly.
   if(f.terms && f.terms.length){
     orders = orders.filter(function(o){
-      var t = (o.payment_terms === 'credit') ? 'credit' : 'cash';
+      var t = termsOf(o);
       return f.terms.indexOf(t) !== -1;
     });
   }
@@ -362,7 +362,7 @@ async function loadOrders(){
       var billed=o.credit_billed_at?' · billed':' · unbilled';
       termsBadge='<span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;" title="'+esc(o.credit_billing_period||'')+billed+'">💳 Credit</span>';
     } else {
-      termsBadge='<span class="badge badge-grey">💵 Cash</span>';
+      termsBadge=window.termsBadge(o);
     }
     var totalRM = Number(o.total||0);
     var paidRM = Number(o.amount_paid||0);
@@ -672,7 +672,7 @@ async function viewOrder(id){
   html+='</div>';
 
   // ── 1. Status + Payment Terms (top, side-by-side) ──
-  var currentTerms=order.payment_terms==='credit'?'credit':'cash';
+  var currentTerms=termsOf(order);
   var creditPeriod=order.credit_billing_period||'';
   var billedAt=order.credit_billed_at||'';
 
@@ -709,12 +709,13 @@ async function viewOrder(id){
   html+='<div style="background:var(--bg);border-radius:10px;padding:1rem;">';
   html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">';
   html+='<div style="font-size:13px;font-weight:600;">Payment Terms</div>';
-  html+='<span class="badge" style="font-size:11px;padding:4px 10px;'+(currentTerms==='credit'?'background:#fef3c7;color:#92400e;border:1px solid #fde68a;':'background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;')+'">'+(currentTerms==='credit'?'💳 Credit':'💵 Cash')+'</span>';
+  html+='<span class="badge" style="font-size:11px;padding:4px 10px;'+(currentTerms==='credit'?'background:#fef3c7;color:#92400e;border:1px solid #fde68a;':currentTerms==='prepaid'?'background:#e0f2fe;color:#075985;border:1px solid #bae6fd;':'background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;')+'">'+(currentTerms==='credit'?'💳 Credit':currentTerms==='prepaid'?'🔒 Prepaid':'💵 Cash')+'</span>';
   html+='</div>';
   html+='<div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;">';
   html+='<select id="mo-terms-select" class="form-input" style="flex:1;min-width:120px;font-size:12px;padding:6px 10px;">';
   html+='<option value="cash"'+(currentTerms==='cash'?' selected':'')+'>💵 Cash</option>';
   html+='<option value="credit"'+(currentTerms==='credit'?' selected':'')+'>💳 Credit</option>';
+  html+='<option value="prepaid"'+(currentTerms==='prepaid'?' selected':'')+'>🔒 Prepaid</option>';
   html+='</select>';
   html+='<button class="btn btn-primary btn-sm" onclick="updateOrderPaymentTerms(\''+id+'\')">Update</button>';
   html+='</div>';
@@ -1252,7 +1253,7 @@ function printOrderSheet(){
   var o = P.order, pr = P.parsed || {};
   var row = function(label, value){ return value ? '<tr><th>'+esc(label)+'</th><td>'+esc(value)+'</td></tr>' : ''; };
   var money = function(n){ return 'RM '+fmtMYR(n); };
-  var terms = o.payment_terms==='credit' ? 'Credit' : 'Cash';
+  var terms = termsLabel(o);
 
   var itemsHtml = (P.items||[]).length
     ? (P.items||[]).map(function(it){
@@ -2096,7 +2097,7 @@ async function updateOrderPaymentTerms(orderId){
   // ledger under Credit — Monthly Invoice Breakdown supersedes it.
   var{data:order}=await sb.from('salesweb_customer_orders').select('payment_terms,credit_billing_period,status').eq('id',orderId).single();
   if(!order){toast('Order not found','error');return;}
-  var oldTerms=order.payment_terms==='credit'?'credit':'cash';
+  var oldTerms=termsOf(order);
   if(newTerms===oldTerms){toast('No changes');return;}
   if(newTerms==='credit'&&oldTerms!=='credit'){
     if(!confirm('Switch this order to CREDIT terms?\n\nThe total will count toward credit outstanding until billed.'))return;
@@ -4095,7 +4096,7 @@ async function openProformaInvoice(orderId){
   if(order.customer_email) html+='<div style="margin-top:.2rem;color:#555;">'+esc(order.customer_email)+'</div>';
   html+='</div>';
   html+='<div style="text-align:right;"><div style="font-weight:700;margin-bottom:.2rem;">Payment</div>';
-  html+='<div>Terms: '+(order.payment_terms==='credit'?'Credit':'Cash on Collection')+'</div>';
+  html+='<div>Terms: '+(termsOf(order)==='credit'?'Credit':termsOf(order)==='prepaid'?'Prepaid':'Cash on Collection')+'</div>';
   html+='<div style="color:#555;">This is a proforma quote &mdash; payment is requested before delivery / collection.</div>';
   html+='</div></div>';
 

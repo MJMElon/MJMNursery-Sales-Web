@@ -319,7 +319,7 @@ function rptViewMoreCategory(kind){
   ];
   var bucketFn = {
     channel:        function(o){ return _rptChannelLabel(o.channel); },
-    terms:          function(o){ return o.payment_terms==='credit' ? 'Credit' : 'Cash'; },
+    terms:          function(o){ return termsLabel(o); },
     status:         function(o){ return o.status || '—'; },
     customer_type:  function(o){
       if(!o.customer_id) return 'Guest';
@@ -424,7 +424,7 @@ function _rptRender(){
   };
 
   var channelRows = _rptCategoryRows(orders, function(o){return _rptChannelLabel(o.channel);});
-  var termsRows   = _rptCategoryRows(orders, function(o){return o.payment_terms==='credit' ? 'Credit' : 'Cash';});
+  var termsRows   = _rptCategoryRows(orders, function(o){ return termsLabel(o); });
   var statusRows  = _rptCategoryRows(orders, function(o){return o.status || '—';});
   var custTypeRows = _rptCustomerTypeRows(orders);
 

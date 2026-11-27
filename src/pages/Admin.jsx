@@ -177,6 +177,7 @@ export default function Admin() {
                       <div className="fd-title">Terms</div>
                       <label className="fd-check"><input type="checkbox" className="fd-term" defaultValue="cash" /> Cash</label>
                       <label className="fd-check"><input type="checkbox" className="fd-term" defaultValue="credit" /> Credit</label>
+                      <label className="fd-check"><input type="checkbox" className="fd-term" defaultValue="prepaid" /> Prepaid</label>
                       </div>
                     <div className="fd-section">
                       <div className="fd-title">Channel</div>
@@ -230,6 +231,7 @@ export default function Admin() {
                       <div className="fd-title">Payment Terms</div>
                       <label className="fd-check"><input type="checkbox" className="cf-term" defaultValue="cash" /> Cash</label>
                       <label className="fd-check"><input type="checkbox" className="cf-term" defaultValue="credit" /> Credit</label>
+                      <label className="fd-check"><input type="checkbox" className="cf-term" defaultValue="prepaid" /> Prepaid</label>
                       </div>
                     <div className="fd-section">
                       <div className="fd-title">Has Paid Order</div>
@@ -606,36 +608,51 @@ export default function Admin() {
                     </div>{/* /notifications */}
                   {/* ORDERS */}
                   <div id="set-panel-orders" style={{ display: 'none' }}>
-                    {/* ─── Stock Auto-Release (unpaid cash orders) ─── */}
+                    {/* ─── Stock Auto-Release: CASH and PREPAID, one row of salesweb_app_settings ─── */}
                     <div className="card">
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '.5rem' }}>
-                        <h3 style={{ margin: '0' }}>Stock Auto-Release (Unpaid Cash Orders)</h3>
+                        <h3 style={{ margin: '0' }}>Stock Auto-Release (Unpaid Orders)</h3>
                         <button className="btn btn-primary btn-sm" id="autorel-save-btn" onClick={(e) => { saveAutoReleaseConfig(); }}>Save</button>
                         </div>
-                      <p style={{ fontSize: '11px', color: 'var(--ink4)', marginBottom: '.8rem' }}>A <b>cash-term</b> order left unpaid (Pending Payment) for longer than the window below is automatically cancelled and its held stock returned. <b>Credit-term orders and Partially Paid orders are never auto-released</b> — once a customer has paid any amount, their stock is held indefinitely.</p>
-                      <p id="autorel-debug" style={{ fontSize: '11px', fontWeight: '600', marginBottom: '.8rem' }}>Loading saved values…</p>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem', flexWrap: 'wrap' }}>
+                      <p style={{ fontSize: '11px', color: 'var(--ink4)', marginBottom: '.6rem' }}>An order left unpaid (Pending Payment) for longer than its window is cancelled and its stock returned. <b>Credit orders and orders with any payment are never released.</b> A quantity tier, where one matches, replaces the hours.</p>
+                      <p id="autorel-debug" style={{ fontSize: '11px', fontWeight: '600', marginBottom: '.2rem' }}>Loading saved values…</p>
+                      <div style={{ marginTop: '1.1rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+                        <div style={{ fontSize: '14px', fontWeight: '700', color: 'var(--ink1)', marginBottom: '.5rem' }}>Cash</div>
                         <label style={{ display: 'flex', alignItems: 'center', gap: '.5rem', fontSize: '13px', fontWeight: '600', color: 'var(--ink2)', cursor: 'pointer' }}>
-                          <input type="checkbox" id="autorel-enabled" style={{ width: '16px', height: '16px', accentColor: 'var(--green)' }} /> Enable auto-release
-                </label>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
-                          <label style={{ fontSize: '11px', fontWeight: '600', color: 'var(--ink3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Release after</label>
-                          <input className="form-input" id="autorel-hours" type="number" min="1" step="1" defaultValue="48" style={{ width: '90px', fontSize: '13px', textAlign: 'right' }} />
-                          <span style={{ fontSize: '12px', color: 'var(--ink3)' }}>hours unpaid</span>
+                          <input type="checkbox" id="autorel-enabled" onChange={(e) => { window.autorelToggle && window.autorelToggle('autorel'); }} style={{ width: '16px', height: '16px', accentColor: 'var(--green)' }} /> Auto-release unpaid cash orders
+                        </label>
+                        <div style={{ fontSize: '10.5px', color: 'var(--ink4)', margin: '.25rem 0 .7rem 1.6rem' }}>Off: a cash order keeps its stock until it is paid or cancelled by hand.</div>
+                        <div id="autorel-rules">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
+                            <label style={{ fontSize: '11px', fontWeight: '600', color: 'var(--ink3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Release after</label>
+                            <input className="form-input" id="autorel-hours" type="number" min="1" step="1" defaultValue="48" style={{ width: '90px', fontSize: '13px', textAlign: 'right' }} />
+                            <span style={{ fontSize: '12px', color: 'var(--ink3)' }}>hours unpaid</span>
                           </div>
-                        </div>
-                      <div style={{ fontSize: '10.5px', color: 'var(--ink4)', marginTop: '.6rem' }}>e.g. 48 = release after 2 days, 24 = after 1 day, 72 = after 3 days. Cleanup runs whenever this Orders page is opened, and on the optional pg_cron schedule.</div>
-
-                      {/* ─── Tiered auto-release by order qty ─── */}
-                      <div style={{ marginTop: '1.4rem', paddingTop: '1rem', borderTop: '1px dashed var(--border)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '.6rem', gap: '1rem' }}>
-                          <div>
-                            <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--ink2)', marginBottom: '.2rem' }}>Cancel-window by order quantity</div>
-                            <div style={{ fontSize: '11px', color: 'var(--ink4)', lineHeight: '1.5' }}>Add tiers to give large orders a longer window before auto-cancel. Small orders (e.g. 1 – 1,000 seedlings) can cancel after 7 days, larger orders after 14, and so on. When an order matches a tier, that tier's day-count is used instead of the flat hours above. Orders that don't match any tier fall back to the flat setting.</div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '.9rem 0 .5rem', gap: '1rem' }}>
+                            <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--ink2)' }}>Cancel-window by order quantity</div>
+                            <button className="btn btn-outline btn-sm" onClick={(e) => { addAutorelTier('autorel'); }} style={{ whiteSpace: 'nowrap' }}>+ Add Tier</button>
                           </div>
-                          <button className="btn btn-outline btn-sm" onClick={(e) => { addAutorelTier(); }} style={{ whiteSpace: 'nowrap' }}>+ Add Tier</button>
+                          <div id="autorel-tiers-body" />
                         </div>
-                        <div id="autorel-tiers-body" />
+                      </div>
+                      <div style={{ marginTop: '1.1rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+                        <div style={{ fontSize: '14px', fontWeight: '700', color: 'var(--ink1)', marginBottom: '.5rem' }}>Prepaid</div>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '.5rem', fontSize: '13px', fontWeight: '600', color: 'var(--ink2)', cursor: 'pointer' }}>
+                          <input type="checkbox" id="autorelpp-enabled" onChange={(e) => { window.autorelToggle && window.autorelToggle('autorelpp'); }} style={{ width: '16px', height: '16px', accentColor: 'var(--green)' }} /> Auto-release unpaid prepaid orders
+                        </label>
+                        <div style={{ fontSize: '10.5px', color: 'var(--ink4)', margin: '.25rem 0 .7rem 1.6rem' }}>Off: a prepaid customer order keeps its stock reserved for them until it is paid or cancelled by hand.</div>
+                        <div id="autorelpp-rules">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
+                            <label style={{ fontSize: '11px', fontWeight: '600', color: 'var(--ink3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Release after</label>
+                            <input className="form-input" id="autorelpp-hours" type="number" min="1" step="1" defaultValue="72" style={{ width: '90px', fontSize: '13px', textAlign: 'right' }} />
+                            <span style={{ fontSize: '12px', color: 'var(--ink3)' }}>hours unpaid</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '.9rem 0 .5rem', gap: '1rem' }}>
+                            <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--ink2)' }}>Cancel-window by order quantity</div>
+                            <button className="btn btn-outline btn-sm" onClick={(e) => { addAutorelTier('autorelpp'); }} style={{ whiteSpace: 'nowrap' }}>+ Add Tier</button>
+                          </div>
+                          <div id="autorelpp-tiers-body" />
+                        </div>
                       </div>
                       </div>
                     </div>{/* /orders */}
@@ -770,7 +787,7 @@ export default function Admin() {
                       <div style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--ink4)', letterSpacing: '.05em', marginBottom: '.5rem' }}>Order Details</div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.6rem' }}>
                         <div><label style={{ fontSize: '11px', color: 'var(--ink3)' }}>Status</label><select className="form-input" id="no-status" style={{ fontSize: '12px', padding: '6px 10px' }}><option>Pending Payment</option><option>Paid</option><option>Ready for Collection</option><option>Completed</option></select></div>
-                        <div><label style={{ fontSize: '11px', color: 'var(--ink3)' }}>Payment terms</label><select className="form-input" id="no-terms" style={{ fontSize: '12px', padding: '6px 10px' }}><option value="cash">💵 Cash</option><option value="credit">💳 Credit</option></select></div>
+                        <div><label style={{ fontSize: '11px', color: 'var(--ink3)' }}>Payment terms</label><select className="form-input" id="no-terms" style={{ fontSize: '12px', padding: '6px 10px' }}><option value="cash">💵 Cash</option><option value="credit">💳 Credit</option><option value="prepaid">🔒 Prepaid</option></select></div>
                         <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: '11px', color: 'var(--ink3)' }}>Internal notes (admin-only)</label><textarea className="form-input" id="no-internal-note" rows="2" style={{ fontSize: '12px', padding: '6px 10px', resize: 'vertical' }} /></div>
                         </div>
                       </div>
@@ -1043,7 +1060,7 @@ export default function Admin() {
                       </div>
                     <div>
                       <label style={{ fontSize: '11px', color: 'var(--ink3)' }}>Payment terms</label>
-                      <select className="form-input" id="ac-terms" style={{ fontSize: '13px', padding: '8px 12px' }}><option value="cash">💵 Cash</option><option value="credit">💳 Credit</option></select>
+                      <select className="form-input" id="ac-terms" style={{ fontSize: '13px', padding: '8px 12px' }}><option value="cash">💵 Cash</option><option value="credit">💳 Credit</option><option value="prepaid">🔒 Prepaid</option></select>
                       </div>
                     <div id="ac-status" style={{ fontSize: '11px', display: 'none' }} />
                     </div>
@@ -1072,7 +1089,7 @@ export default function Admin() {
                       </div>
                     <div>
                       <label style={{ fontSize: '11px', color: 'var(--ink3)' }}>Payment terms</label>
-                      <select className="form-input" id="ec-terms" style={{ fontSize: '13px', padding: '8px 12px' }}><option value="cash">💵 Cash</option><option value="credit">💳 Credit</option></select>
+                      <select className="form-input" id="ec-terms" style={{ fontSize: '13px', padding: '8px 12px' }}><option value="cash">💵 Cash</option><option value="credit">💳 Credit</option><option value="prepaid">🔒 Prepaid</option></select>
                       </div>
                     </div>
                   </div>

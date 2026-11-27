@@ -210,7 +210,7 @@ async function loadCustomers(){
   var f = CUSTOMER_FILTERS || {};
   if(f.joinedFrom) custs=custs.filter(function(c){ return c.created_at && c.created_at >= f.joinedFrom+'T00:00:00'; });
   if(f.joinedTo)   custs=custs.filter(function(c){ return c.created_at && c.created_at <= f.joinedTo+'T23:59:59'; });
-  if(f.terms && f.terms.length) custs=custs.filter(function(c){ return f.terms.indexOf(c.payment_terms==='credit'?'credit':'cash') !== -1; });
+  if(f.terms && f.terms.length) custs=custs.filter(function(c){ return f.terms.indexOf(termsOf(c)) !== -1; });
   if(f.paid==='yes') custs=custs.filter(function(c){ return paidIds[c.id]; });
   if(f.paid==='no')  custs=custs.filter(function(c){ return !paidIds[c.id]; });
   if(f.tiers && f.tiers.length) custs=custs.filter(function(c){ return f.tiers.indexOf(custTierName(ptsByCust[c.id]||0,tiers)) !== -1; });
@@ -273,10 +273,8 @@ async function loadCustomers(){
   var pageCusts = custs.slice((window._customersPage - 1) * pageSize, window._customersPage * pageSize);
   var html='<table class="data-table"><thead><tr><th></th><th>Name</th><th>Email</th><th>Phone</th><th>Membership</th><th style="text-align:right;">Total Spent</th><th>Terms</th><th>Joined</th><th>Action</th></tr></thead><tbody>';
   pageCusts.forEach(function(c){
-    var terms=c.payment_terms==='credit'?'credit':'cash';
-    var termsBadge=terms==='credit'
-      ? '<span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;">💳 Credit</span>'
-      : '<span class="badge badge-grey">💵 Cash</span>';
+    var terms=termsOf(c);
+    var termsBadge=window.termsBadge(c);
     var tierName=custTierName(ptsByCust[c.id]||0,tiers);
     var tierColor=custTierColor(tierName,tiers);
     var tierBadge='<span class="badge" style="background:'+tierColor+'22;color:'+tierColor+';border:1px solid '+tierColor+'55;">'+esc(tierName)+'</span>';
@@ -516,7 +514,7 @@ async function openEditCustomer(id){
   // Hide the walk-in placeholder so the admin sees a true blank.
   document.getElementById('ec-email').value = custDisplayEmail(c) === '—' ? '' : (c.email||'');
   document.getElementById('ec-phone').value = c.phone || '';
-  document.getElementById('ec-terms').value = c.payment_terms==='credit' ? 'credit' : 'cash';
+  document.getElementById('ec-terms').value = termsOf(c);
   var btn=document.getElementById('ec-submit'); btn.disabled=false; btn.textContent='Save Changes';
   openModal('modal-edit-customer');
 }
@@ -1124,16 +1122,17 @@ async function viewCustomer(id){
   html+='</div></div>';
 
   // Payment terms — admin-toggleable
-  var terms=c.payment_terms==='credit'?'credit':'cash';
+  var terms=termsOf(c);
   var creditLimit=c.credit_limit==null?'':String(c.credit_limit);
   html+='<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:1rem;margin-bottom:1.2rem;">';
   html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem;">';
   html+='<div style="font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;">Payment Terms</div>';
-  html+='<div style="font-size:10px;color:var(--ink4);">Default · Cash &nbsp;|&nbsp; Credit = monthly billed</div>';
+  html+='<div style="font-size:10px;color:var(--ink4);">Default · Cash &nbsp;|&nbsp; Credit = monthly billed &nbsp;|&nbsp; Prepaid = pays first, own stock release rule</div>';
   html+='</div>';
   html+='<div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">';
   html+='<button class="btn btn-sm '+(terms==='cash'?'btn-primary':'btn-outline')+'" onclick="setCustomerTerms(\''+id+'\',\'cash\')" style="font-size:11px;">💵 Cash (pay before collect)</button>';
   html+='<button class="btn btn-sm '+(terms==='credit'?'btn-primary':'btn-outline')+'" onclick="setCustomerTerms(\''+id+'\',\'credit\')" style="font-size:11px;">💳 Credit (monthly bill)</button>';
+  html+='<button class="btn btn-sm '+(terms==='prepaid'?'btn-primary':'btn-outline')+'" onclick="setCustomerTerms(\''+id+'\',\'prepaid\')" style="font-size:11px;">🔒 Prepaid (pay first)</button>';
   html+='</div>';
   if(terms==='credit'){
     html+='<div style="margin-top:.8rem;display:flex;gap:.4rem;align-items:center;font-size:12px;">';
@@ -1258,10 +1257,10 @@ async function hideAsStaff(id){
 }
 
 // ═══════════════════════════════════════
-//  PAYMENT TERMS (cash / credit)
+//  PAYMENT TERMS (cash / credit / prepaid)
 // ═══════════════════════════════════════
 async function setCustomerTerms(id,terms){
-  if(terms!=='cash'&&terms!=='credit')return;
+  if(terms!=='cash'&&terms!=='credit'&&terms!=='prepaid')return;
   if(terms==='credit'){
     if(!confirm('Switch this customer to CREDIT terms?\n\nCredit customers can place orders without paying upfront. Their orders are reserved immediately and billed monthly. Make sure you trust this customer before enabling credit.'))return;
   }
